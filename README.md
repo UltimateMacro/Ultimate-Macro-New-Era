@@ -1,47 +1,85 @@
-(DOWNLOAD MACRO FROM THE RELEASES, NOT FROM REPO)
-# Ultimate Macro - Macro for the Tower Defense Simulator 
-Started on March 30, 2026. My friend bet me that I wouldn't make a macro for TDS, but I did, lol.
+# Ultimate Macro: The New Era 🚀
 
-Ultimate Macro is an advanced, fully-featured automation tool for Roblox Tower Defense Simulator. 
-## Features
-* **Record & Play Custom Strategies** - Record your exact tower placements, upgrades, abilities, and actions, then replay them flawlessly.
-* **Community Strategies** - Browse and download community-made `.strat` files directly within the macro.
-* **Smart Game Handling** - Automatically detects game ends, checks the map, and uses the "Restart" or "Play Again" buttons to loop seamlessly.
-* **Strategy Rotation** - Automatically swap between two different strategies after a set amount of runs or minutes.
-* **Auto-Equip Towers** - The macro can automatically equip the required towers for your strategy before joining the match.
-* **Timescale Support** - support for 1.5x and 2x Timescale tickets to speed up your grinds.
-* **Playtime Rewards** - Automatically navigates to the lobby and collects daily/playtime rewards when available.
-* **Advanced Discord Webhook** - Get real-time updates, currency stats, debug logs, and screenshots sent straight to your Discord server.
-* **Multiple Upgrade Paths** - Full support for split-path towers and special towers (Pursuit, Hacker, etc.).
-* **VIP Server Support** - Paste your private server link code to macro in your own server.
-* And much more!
+> **⚠️ DOWNLOAD ULTIMATE MACRO FROM [RELEASES](../../releases), NOT FROM THE REPOSITORY SOURCE FILES.**
 
-## Requirements
+**Ultimate Macro: The New Era** is the continuation of Ultimate Macro, a free and open-source automation tool for **Roblox Tower Defense Simulator**.
 
-* **Windows** 10/11
-* **AutoHotkey:** [AutoHotkey v2.0](https://www.autohotkey.com/) (Required. Do not use v1.1)
-* **Windows Settings:**
-  * Recommended Screen Resolution: **1920x1080**
-  * Windows Scaling: **100%** (strictly required)
-  * **OCR Language:** The English (US) Windows Language Pack must be installed for screen text recognition (OCR) to function properly.
-* **Roblox & TDS Settings:**
-  * UI Scale: **Large**
-  * Screen Shake: **Disabled**
-  * Prefer Vertical Upgrades: **Enabled**
-  * No custom fonts
+Ultimate Macro was originally created by **Darksen** on March 30, 2026. After his retirement from active development, a new team is continuing the project with updates, fixes, and new features.
 
-## Installation
-1. Download the latest release `.zip`.
-2. Extract **all files** to a folder (do not run the script directly from the ZIP file).
-3. Install [AutoHotkey v2.0](https://www.autohotkey.com/).
-4. Run `Main.ahk`.
-5. Enjoy the grind!
+**ULT will remain free and open source. ❤️**
 
-## Links & Support
+## ✨ Features
 
-* **Discord Server:** [Join for help, strategies, and updates!](https://discord.gg/DQnc2JDJtr)
-* **Darksenn YouTube Channel:** [@darksenn](https://www.youtube.com/@darksenn)
-* * ** ULT YouTube Channel:** [@UltimateMacro](https://www.youtube.com/@UltimateMacro)
-* **GitHub Repository:** [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
+- Record and replay complete TDS strategies
+- Tower placement, upgrades, selling, abilities, repositioning, and target changes
+- Strategy Rotation and community `.strat` support
+- Auto Equip towers
+- Auto Skip with recorded wave skips
+- Adjustable upgrade delay
+- Party and VIP server support
+- Cloning, Necromancer, Brawler repositioning, and split upgrade paths
+- Advanced reconnection and automatic game re-entry
+- Automatic daily and playtime rewards
+- Universal resolution support with improved image detection and OCR
+- Potato Mode and Legacy Mode
+- 1.5x and 2x Timescale support
+- Discord webhooks with stats, screenshots, and logs
+- Discord Bot remote control
+- And much more
 
-*If you truly enjoy the macro and want to support Darksenns work, you can donate [here](https://www.donationalerts.com/r/darksen1). Any support is massively appreciated! :sparkling_heart:*
+## 💻 Requirements
+
+- **Windows 10/11**
+- **AutoHotkey v2.0**
+- Recommended resolution: **1920x1080**
+- Roblox UI Scale: **Large**
+- Screen Shake: **Disabled**
+- Prefer Vertical Upgrades: **Enabled**
+
+## 📥 Installation
+
+1. Download the latest `.zip` from **Releases**
+2. Extract all files
+3. Install **AutoHotkey v2.0**
+4. Run `Main.ahk`
+5. Configure your strategy and start
+
+## 👨‍💻 Development Team
+
+**Lead Developer**
+- pizzaroles24
+
+**Developers**
+- ziadod
+- kronoxxv
+- banana.dev
+
+**Development Contributor**
+- 4riff
+
+**QA**
+- hetzel401
+- tristanm1ce
+- frostzzz
+
+## ❤️ Credits
+
+Ultimate Macro was originally created and developed by **Darksen**.
+
+If you truly enjoy the macro and want to support darksenn's free work, you can donate [here](https://www.donationalerts.com/r/darksen1). Any support is massively appreciated! 💖
+
+The New Era continues his original project and would not exist without his work.
+
+**Original Repository:** [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
+
+## 📜 License
+
+Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+
+You may use, modify, fork, and redistribute Ultimate Macro under the terms of the license while preserving applicable copyright, license, and attribution notices.
+
+---
+
+**This isn't the end of Ultimate Macro.**
+
+# This is The New Era. 🚀
