@@ -66,6 +66,8 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 Ultimate Macro was originally created and developed by **Darksen**.
 
+If you truly enjoy the macro and want to support my free work, you can donate [here](https://www.donationalerts.com/r/darksen1). Any support is massively appreciated! 💖
+
 The New Era continues his original project and would not exist without his work.
 
 **Original Repository:** [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
