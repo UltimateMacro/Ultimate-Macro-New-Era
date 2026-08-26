@@ -43,4 +43,4 @@ Ultimate Macro is an advanced, fully-featured automation tool for Roblox Tower D
 * **YouTube Channel:** [@darksenn](https://www.youtube.com/@darksenn)
 * **GitHub Repository:** [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
 
-*If you truly enjoy the macro and want to support my free work, you can donate [here](https://www.donationalerts.com/r/darksen1). Any support is massively appreciated! :sparkling_heart:*
+*If you truly enjoy the macro and want to support darksenn, you can donate [here](https://www.donationalerts.com/r/darksen1). Any support is massively appreciated! :sparkling_heart:*
