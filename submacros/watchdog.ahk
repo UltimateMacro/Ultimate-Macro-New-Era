@@ -86,7 +86,11 @@ loop {
 
     if WinExist("Roblox Crash") {
         if (WebhookEnabled && WebhookLink != "") {
-            SendScreenshot(, "Roblox has crashed!")
+            pBitmap := Gdip_BitmapFromScreen()
+            if (pBitmap) {
+                SendScreenshot(pBitmap, "Roblox has crashed!")
+                Gdip_DisposeImage(pBitmap)
+            }
         }
         RestartMain()
         return
@@ -94,7 +98,11 @@ loop {
 
     if !WinExist("Roblox ahk_exe RobloxPlayerBeta.exe") && !WinExist("Roblox ahk_exe ApplicationFrameHost.exe") {
         if (WebhookEnabled && WebhookLink != "") {
-            SendScreenshot(, "Roblox is not running!")
+            pBitmap := Gdip_BitmapFromScreen()
+            if (pBitmap) {
+                SendScreenshot(pBitmap, "Roblox is not running!")
+                Gdip_DisposeImage(pBitmap)
+            }
         }
         RestartMain()
         return
@@ -110,14 +118,22 @@ loop {
             if ImageSearch(&FoundX, &FoundY, 0, 0, sw, sh, "*26 Resources/Disconnected.png") {
                 CoordMode("Pixel", "Client")
                 if (WebhookEnabled && WebhookLink != "") {
-                    SendScreenshot(, "Disconnected, rejoining")
+                    pBitmap := Gdip_BitmapFromScreen()
+                    if (pBitmap) {
+                        SendScreenshot(pBitmap, "Disconnected, rejoining")
+                        Gdip_DisposeImage(pBitmap)
+                    }
                 }
                 RestartMain()
                 ExitApp()
             } else if ImageSearch(&FoundX, &FoundY, 0, 0, sw, sh, "*26 Resources/disconnected2.png") {
                 CoordMode("Pixel", "Client")
                 if (WebhookEnabled && WebhookLink != "") {
-                    SendScreenshot(, "Disconnected, rejoining")
+                    pBitmap := Gdip_BitmapFromScreen()
+                    if (pBitmap) {
+                        SendScreenshot(pBitmap, "Disconnected, rejoining")
+                        Gdip_DisposeImage(pBitmap)
+                    }
                 }
                 RestartMain()
                 ExitApp()
