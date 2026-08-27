@@ -153,7 +153,7 @@ global OverlayX := 1400
 global OverlayY := 820
 
 global StrategyWidth := 1920
-global StrategyHeight := 1090
+global StrategyHeight := 1080
 
 global Slots := [
     ScaleX(800) ", " ScaleY(960),
