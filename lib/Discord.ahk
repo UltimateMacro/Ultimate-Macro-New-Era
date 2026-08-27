@@ -1,4 +1,4 @@
-﻿/********************************************
+/********************************************
 * @Author SP
 * @Description Class to interact with Discord
 *********************************************/
@@ -55,9 +55,6 @@ class Discord
 		
 		this.CreateFormData(&postdata, &contentType, fields)
 		
-		if pBitmap
-			Gdip_DisposeImage(pBitmap)
-
 		return this.SendMessageAPI(postdata, contentType, channel)
 	}
 
