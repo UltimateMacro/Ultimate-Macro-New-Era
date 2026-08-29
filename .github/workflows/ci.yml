@@ -1,0 +1,45 @@
+name: Ultimate Macro CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Synchronize pinned source dependencies
+        shell: pwsh
+        run: ./tools/sync_dependencies.ps1
+
+      - name: Compile Python validators
+        shell: pwsh
+        run: python -m py_compile tests/validate_repo.py tests/lint_strategies.py
+
+      - name: Repository integrity
+        shell: pwsh
+        run: python tests/validate_repo.py .
+
+      - name: Strategy grammar lint
+        shell: pwsh
+        run: python tests/lint_strategies.py .
+
+      - name: Validate AutoHotkey source load
+        shell: pwsh
+        run: ./tools/validate_ahk.ps1
