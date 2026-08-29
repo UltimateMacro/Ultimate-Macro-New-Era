@@ -30,7 +30,11 @@ jobs:
 
       - name: Compile Python validators
         shell: pwsh
-        run: python -m py_compile tests/validate_repo.py tests/lint_strategies.py
+        run: python -m py_compile tests/test_source_contracts.py tests/validate_repo.py tests/lint_strategies.py
+
+      - name: Source regression contracts
+        shell: pwsh
+        run: python tests/test_source_contracts.py .
 
       - name: Repository integrity
         shell: pwsh
