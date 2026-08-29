@@ -44,6 +44,18 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 4. Run `Main.ahk`
 5. Configure your strategy and start
 
+## 🧪 Development and QA
+
+Repository checkouts need two pinned source dependencies before `Main.ahk` can
+be validated. Run `pwsh ./tools/sync_dependencies.ps1`, then follow the
+automated and manual gates in [TESTING.md](TESTING.md) and
+[QA_CHECKLIST.md](QA_CHECKLIST.md).
+
+Dependency provenance, integrity hashes, licenses, and the optional native
+image-search status are documented in [DEPENDENCIES.md](DEPENDENCIES.md).
+Please review [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change and
+report sensitive issues according to [SECURITY.md](SECURITY.md).
+
 ## 👨‍💻 Development Team
 
 **Lead Developer**

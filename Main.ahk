@@ -752,7 +752,7 @@ if (lastUpdate != "0") {
 
 if (needUpdate) {
     try {
-        apiURL := "https://api.github.com/repos/DarksenDev/tds-macro/contents/Strategies"
+        apiURL := "https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main"
 
         whr := ComObject("WinHttp.WinHttpRequest.5.1")
         whr.Open("GET", apiURL, true)
@@ -774,15 +774,24 @@ if (needUpdate) {
             DirDelete(tempDir, true)
         DirCreate(tempDir)
 
-        pos := 1
-        fileCount := 0
+        strategyFiles := []
+        for entry in JSON.parse(responseText) {
+            if !entry.Has("type") || entry["type"] != "file"
+                continue
+            if !entry.Has("name") || !RegExMatch(entry["name"], 'i)^[^\\/:*?"<>|]+\.strat$')
+                continue
+            if !entry.Has("download_url") || !RegExMatch(entry["download_url"],
+                "i)^https://raw\.githubusercontent\.com/UltimateMacro/Ultimate-Macro-New-Era/")
+                continue
+            strategyFiles.Push(entry)
+        }
+
+        fileCount := strategyFiles.Length
         successCount := 0
 
-        while (pos := RegExMatch(responseText, '\{[^}]*"name":"([^"]+\.strat)"[^}]*"download_url":"([^"]+)"[^}]*\}', &
-            match, pos)) {
-            fileName := match[1]
-            downloadURL := match[2]
-            fileCount++
+        for entry in strategyFiles {
+            fileName := entry["name"]
+            downloadURL := entry["download_url"]
 
             try {
                 fileWhr := ComObject("WinHttp.WinHttpRequest.5.1")
@@ -808,13 +817,18 @@ if (needUpdate) {
                     0x1000 : 0)
             }
 
-            pos += match.Len
             Sleep(30)
         }
 
-        if (fileCount > 0 && successCount == 0) {
+        if (fileCount == 0) {
             DirDelete(tempDir, true)
-            throw Error("All strategy downloads failed. Aborting update to protect existing files.")
+            throw Error("No strategy files were returned. Aborting update to protect existing files.")
+        }
+
+        if (successCount != fileCount) {
+            DirDelete(tempDir, true)
+            throw Error("Only " successCount " of " fileCount
+                " strategy files downloaded. Aborting update to protect existing files.")
         }
 
         if !DirExist(StratsDir)
@@ -5932,32 +5946,53 @@ ApplyModifiers() {
     LogToConsole("All modifiers configured")
 }
 
+FindReadyButton(&foundX, &foundY) {
+    getRobloxPos(, , &w, &h)
+    result := AdvancedImageSearch("Resources/ready_gs.png", Round(w * 0.4), Round(h * 0.05), Round(w * 0.3), Round(
+        h * 0.3))
+
+    if (result.status = "success" && result.score > 0.7) {
+        foundX := result.x
+        foundY := result.y
+        return true
+    }
+
+    foundX := 0
+    foundY := 0
+    return false
+}
+
 ClickReady() {
     global readyX, readyY
 
-    loop {
+    loop 5 {
+        if !FindReadyButton(&readyX, &readyY) {
+            LogToConsole("Ready button image not found, retrying...")
+            Sleep(200)
+            continue
+        }
+
         MouseMove(readyX, readyY)
         Sleep 50
         MouseClick()
-        Sleep 200
+        Sleep 250
 
-        getRobloxPos(, , &w, &h)
-        readyc := AdvancedImageSearch("Resources/ready_gs.png", Round(w * 0.25), Round(h * 0.08), Round(w * 0.5), Round(
-            h * 0.34))
-        if !(readyc.score > 0.7) {
-            LogToConsole("Successfully started the match by clicking the ready button.")
-            break
-        } else {
-            LogToConsole("Failed to press the ready button, retrying...")
-            if PixelSearch(&fx, &fy, Round(w * 0.4), Round(h * 0.05), Round(w * 0.7), Round(h * 0.35), 0x2BEB00, 2) {
-                readyX := fx
-                readyY := fy
-                continue
-            } else {
-                break
+        if !FindReadyButton(&checkX, &checkY) {
+            Sleep(200)
+            if !FindReadyButton(&checkX, &checkY) {
+                LogToConsole("Successfully started the match by clicking the ready button.")
+                return
             }
         }
+
+        readyX := checkX
+        readyY := checkY
+        LogToConsole("Ready button is still visible, retrying...")
+        Sleep(150)
     }
+
+    LogToConsole("Failed to confirm the Ready button after multiple attempts. Reloading...", true)
+    SafeReload()
 }
 
 waitReady() {
@@ -5975,13 +6010,12 @@ waitReady() {
             CloseRoblox()
             SafeReload()
         }
-        if PixelSearch(&fx, &fy, Round(w * 0.4), Round(h * 0.05), Round(w * 0.7), Round(h * 0.35), 0x2BEB00, 2) {
+        if FindReadyButton(&fx, &fy) {
             readyX := fx
             readyY := fy
             break
-        } else {
-            Sleep(50)
         }
+        Sleep(250)
     }
     startWatchdog()
 }
@@ -7372,7 +7406,7 @@ SendToWebhook(message) {
     WebhookQueue.Push(message)
     if (!WebhookTimerActive) {
         WebhookTimerActive := true
-        SetTimer(ProcessWebhookQueue, -100)
+        SetTimer(ProcessWebhookQueue, -2000)
     }
 }
 
@@ -7456,11 +7490,6 @@ ProcessWebhookQueue() {
         WebhookTimerActive := false
         return
     }
-    if (WebhookQueue.Length < 20) {
-        SetTimer(ProcessWebhookQueue, -2000)
-        return
-    }
-
     allMessages := ""
     loop 20 {
         if (WebhookQueue.Length = 0)
@@ -7772,7 +7801,7 @@ CreateFormData(&retData, &contentType, fields) {
     ObjRelease(pStream)
 
     pData := DllCall("GlobalLock", "Ptr", hData, "Ptr")
-    size := DllCall("GlobalSize", "Ptr", pData, "UPtr")
+    size := DllCall("GlobalSize", "Ptr", hData, "UPtr")
     retData := ComObjArray(0x11, size)
     pvData := NumGet(ComObjValue(retData), 8 + A_PtrSize, "Ptr")
     DllCall("RtlMoveMemory", "Ptr", pvData, "Ptr", pData, "Ptr", size)

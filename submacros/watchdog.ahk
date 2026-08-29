@@ -546,14 +546,21 @@ WebhookScreenshots) {
             whr.SetRequestHeader("Content-Type", contentType)
             whr.SetTimeouts(90000, 60000, 60000, 60000)
             whr.Send(postdata)
-            break
+
+            status := whr.Status
+            if (status >= 200 && status < 300)
+                return true
+
+            if (status != 0 && status != 429 && status < 500)
+                return false
         } catch as err {
-            if (A_Index == MaxAttempts) {
-            } else {
-                Sleep(2500)
-            }
         }
+
+        if (A_Index < MaxAttempts)
+            Sleep(2500)
     }
+
+    return false
 }
 
 CreateFormData(&retData, &contentType, fields) {
@@ -601,10 +608,11 @@ CreateFormData(&retData, &contentType, fields) {
     StrPut(str, utf8, "UTF-8")
     DllCall("shlwapi\IStream_Write", "Ptr", pStream, "Ptr", utf8.Ptr, "UInt", length, "UInt")
 
-    pStream := ""
+    DllCall("ole32\IUnknown_Release", "Ptr", pStream)
+    pStream := 0
 
     pData := DllCall("GlobalLock", "Ptr", hData, "Ptr")
-    size := DllCall("GlobalSize", "Ptr", pData, "UPtr")
+    size := DllCall("GlobalSize", "Ptr", hData, "UPtr")
 
     retData := ComObjArray(0x11, size)
     pvData := NumGet(ComObjValue(retData), 8 + A_PtrSize, "Ptr")
