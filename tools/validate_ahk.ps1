@@ -2,7 +2,6 @@ param(
     [string[]]$ScriptPath = @(
         'Main.ahk',
         'submacros/watchdog.ahk',
-        'submacros/updater.ahk',
         'submacros/auto_coa.ahk',
         'submacros/auto_open_consumable.ahk',
         'submacros/auto_spin.ahk'
@@ -78,9 +77,12 @@ try {
         [void]$startInfo.ArgumentList.Add($resolvedScript)
 
         $process = [Diagnostics.Process]::Start($startInfo)
+        if (-not $process.WaitForExit(15000)) {
+            $process.Kill($true)
+            throw "AutoHotkey validation timed out for $script."
+        }
         $stdout = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
 
         if ($stdout) { Write-Host $stdout.TrimEnd() }
         if ($stderr) { Write-Host $stderr.TrimEnd() }

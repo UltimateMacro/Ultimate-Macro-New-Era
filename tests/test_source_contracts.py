@@ -184,6 +184,36 @@ def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
     assert re.search(r"try\s*\{.*RtlMoveMemory.*\}\s*finally\s*\{", discord_form, re.DOTALL)
 
 
+def validate_transactional_updater(updater: str, safe_updater: str, wrapper: str) -> None:
+    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/latest" in updater
+    assert 'PreferredAsset := "TDS_Macro.zip"' in updater
+    assert "JSON.parse" in updater
+    assert 'RegExMatch(candidateDigest, "i)^sha256:[0-9a-f]{64}$")' in updater
+    assert "CompareMacroVersions(latestVer, installedVer) <= 0" in updater
+    assert "GetCurrentProcessId" in updater
+    assert 'command .= " -SelfDelete"' in updater
+    assert "DarksenDev/tds-macro" not in updater
+
+    assert "[Parameter(Mandatory = $true)][string]$ExpectedSha256" in safe_updater
+    assert "Refusing to update a filesystem root" in safe_updater
+    assert "does not contain Main.ahk" in safe_updater
+    assert "A .git entry was detected" in safe_updater
+    assert "Normalize-Sha256" in safe_updater
+    assert "SHA-256 mismatch" in safe_updater
+    assert "Assert-SafeZip" in safe_updater
+    assert "Assert-RuntimePayload" in safe_updater
+    assert "Move-Item -LiteralPath $MacroDir -Destination $backupDir" in safe_updater
+    assert "Restore-PreservedStrategies" in safe_updater
+    assert "The previous installation was restored" in safe_updater
+    assert "Updater self-delete path" in safe_updater
+    assert "checksum verification was skipped" not in safe_updater.casefold()
+
+    assert "safe_update.ps1" in wrapper
+    assert "del /f /s /q" not in wrapper.casefold()
+    assert "rd /s /q" not in wrapper.casefold()
+    assert "expand-archive" not in wrapper.casefold()
+
+
 def validate_roblox_coordinates(roblox: str) -> None:
     client_region = region(roblox, "getRobloxPos(", "; Returns the Roblox client rectangle in SCREEN coordinates.")
     assert "GetClientRect" in client_region
@@ -200,6 +230,9 @@ def validate(root: Path) -> None:
     discord = read(root / "lib" / "Discord.ahk")
     roblox = read(root / "lib" / "Roblox.ahk")
     image_search = read(root / "lib" / "ImageSearch" / "ImageSearch.ahk")
+    updater = read(root / "submacros" / "updater.ahk")
+    safe_updater = read(root / "submacros" / "safe_update.ps1")
+    wrapper = read(root / "submacros" / "update.bat")
 
     validate_settings_contracts(main)
     validate_strategy_geometry(main)
@@ -214,6 +247,7 @@ def validate(root: Path) -> None:
     validate_image_search_coordinates(image_search)
     validate_discord_retries(discord)
     validate_multipart_handles(main, watchdog, discord)
+    validate_transactional_updater(updater, safe_updater, wrapper)
 
 
 if __name__ == "__main__":

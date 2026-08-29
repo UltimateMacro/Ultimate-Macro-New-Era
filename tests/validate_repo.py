@@ -20,6 +20,7 @@ REQUIRED_RUNTIME_FILES = (
     "lib/Roblox.ahk",
     "submacros/updater.ahk",
     "submacros/update.bat",
+    "submacros/safe_update.ps1",
     "submacros/watchdog.ahk",
 )
 
@@ -224,6 +225,48 @@ def validate_dependency_bootstrap(root: Path, errors: list[str]) -> None:
             fail(errors, f"dependency bootstrap contract is missing: {marker}")
 
 
+def validate_updater(root: Path, errors: list[str]) -> None:
+    updater = read_text(root / "submacros" / "updater.ahk")
+    safe = read_text(root / "submacros" / "safe_update.ps1")
+    wrapper = read_text(root / "submacros" / "update.bat")
+
+    updater_markers = (
+        "UltimateMacro/Ultimate-Macro-New-Era/releases/latest",
+        'PreferredAsset := "TDS_Macro.zip"',
+        "JSON.parse",
+        'asset["digest"]',
+        "CompareMacroVersions",
+        "GetCurrentProcessId",
+        "safe_update.ps1",
+    )
+    safe_markers = (
+        "Assert-InstallRoot",
+        "Normalize-Sha256",
+        "Assert-SafeZip",
+        "Assert-RuntimePayload",
+        "Assert-PayloadVersion",
+        "Restore-PreservedStrategies",
+        "Creating rollback backup",
+        "The previous installation was restored",
+    )
+    for marker in updater_markers:
+        if marker not in updater:
+            fail(errors, f"updater contract is missing: {marker}")
+    for marker in safe_markers:
+        if marker not in safe:
+            fail(errors, f"safe updater contract is missing: {marker}")
+
+    if "DarksenDev/tds-macro" in updater:
+        fail(errors, "updater still references the retired release repository")
+    if "checksum verification was skipped" in safe.casefold():
+        fail(errors, "safe updater permits installation without a checksum")
+    for destructive in ("del /f /s /q", "rd /s /q", "Expand-Archive"):
+        if destructive.casefold() in wrapper.casefold():
+            fail(errors, f"batch wrapper contains legacy destructive behavior: {destructive}")
+    if "safe_update.ps1" not in wrapper:
+        fail(errors, "batch wrapper does not delegate to safe_update.ps1")
+
+
 def validate(root: Path) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -238,6 +281,7 @@ def validate(root: Path) -> tuple[list[str], list[str]]:
     validate_tracked_scope(tracked, errors)
     validate_text_hygiene(root, tracked, errors)
     validate_dependency_bootstrap(root, errors)
+    validate_updater(root, errors)
 
     if not (root / "lib" / "ImageSearch" / "opencv_world500.dll").is_file():
         warnings.append(

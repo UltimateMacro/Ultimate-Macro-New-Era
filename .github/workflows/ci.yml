@@ -44,6 +44,14 @@ jobs:
         shell: pwsh
         run: python tests/lint_strategies.py .
 
+      - name: Validate PowerShell source
+        shell: pwsh
+        run: ./tools/validate_powershell.ps1
+
+      - name: Transactional updater smoke test
+        shell: pwsh
+        run: ./tests/safe_updater_smoke.ps1
+
       - name: Validate AutoHotkey source load
         shell: pwsh
         run: ./tools/validate_ahk.ps1
