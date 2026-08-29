@@ -57,4 +57,7 @@ The PNGs restored by the pre-QA port are only the files current code directly
 loads or searches for. Each is byte-identical to the official New Era v1.3.3
 `TDS_Macro.zip` asset, whose SHA-256 is
 `6d4cae2e3be38b4df70dc38be84c38cef89f1086d6db7f530d210762fc5cdde3`.
+They ship as part of the project's GPL-3.0 release; no separate per-image
+license notice was present, so the project license and attribution must remain
+with redistributed copies.
 Unused FULL-only images remain deferred; see `PLAN.md`.

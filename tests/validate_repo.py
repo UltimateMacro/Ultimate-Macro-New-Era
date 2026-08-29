@@ -24,6 +24,20 @@ REQUIRED_RUNTIME_FILES = (
     "submacros/watchdog.ahk",
 )
 
+REQUIRED_QA_FILES = (
+    ".github/workflows/ci.yml",
+    ".github/pull_request_template.md",
+    ".github/ISSUE_TEMPLATE/bug_report.yml",
+    ".github/ISSUE_TEMPLATE/config.yml",
+    "PLAN.md",
+    "DEPENDENCIES.md",
+    "SECURITY.md",
+    "TESTING.md",
+    "QA_CHECKLIST.md",
+    "CONTRIBUTING.md",
+    "docs/BRANCH_PROTECTION.md",
+)
+
 # These paths are assembled dynamically in the AHK source, so a literal-string
 # scan cannot discover them. Every listed file is used by current runtime code.
 DYNAMIC_RUNTIME_RESOURCES = (
@@ -101,9 +115,9 @@ def fail(errors: list[str], message: str) -> None:
 
 
 def validate_required_files(root: Path, errors: list[str]) -> None:
-    for relative in REQUIRED_RUNTIME_FILES:
+    for relative in REQUIRED_RUNTIME_FILES + REQUIRED_QA_FILES:
         if not (root / relative).is_file():
-            fail(errors, f"required runtime file is missing: {relative}")
+            fail(errors, f"required project file is missing: {relative}")
 
 
 def validate_main_includes(root: Path, errors: list[str]) -> None:
@@ -267,6 +281,25 @@ def validate_updater(root: Path, errors: list[str]) -> None:
         fail(errors, "batch wrapper does not delegate to safe_update.ps1")
 
 
+def validate_ci_workflow(root: Path, errors: list[str]) -> None:
+    workflow = read_text(root / ".github" / "workflows" / "ci.yml")
+    markers = (
+        "permissions:\n  contents: read",
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "./tools/sync_dependencies.ps1",
+        "python tests/test_source_contracts.py .",
+        "python tests/validate_repo.py .",
+        "python tests/lint_strategies.py .",
+        "./tools/validate_powershell.ps1",
+        "./tests/safe_updater_smoke.ps1",
+        "./tools/validate_ahk.ps1",
+    )
+    for marker in markers:
+        if marker not in workflow:
+            fail(errors, f"CI workflow contract is missing: {marker}")
+
+
 def validate(root: Path) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -282,6 +315,7 @@ def validate(root: Path) -> tuple[list[str], list[str]]:
     validate_text_hygiene(root, tracked, errors)
     validate_dependency_bootstrap(root, errors)
     validate_updater(root, errors)
+    validate_ci_workflow(root, errors)
 
     if not (root / "lib" / "ImageSearch" / "opencv_world500.dll").is_file():
         warnings.append(
