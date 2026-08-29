@@ -102,6 +102,86 @@ def validate_watchdog_retry_lifecycle(watchdog: str) -> None:
         "each watchdog retry must create a fresh WinHttpRequest inside the attempt loop"
     )
     assert "static whr" not in send
+    assert "status >= 200 && status < 300" in send
+    assert "status != 429" in send and "status < 500" in send
+    assert "return true" in send and "return false" in send
+
+
+def validate_ready_detection(main: str) -> None:
+    ready = region(main, "FindReadyButton(&foundX, &foundY)", "activateTimescale()")
+    assert 'AdvancedImageSearch("Resources/ready_gs.png"' in ready
+    assert "PixelSearch" not in ready, "Ready must not click a generic green pixel"
+    assert "loop 5" in ready, "Ready click retries must remain bounded"
+    assert ready.count("FindReadyButton(") >= 5, (
+        "Ready must be detected before a click and rechecked after it"
+    )
+    assert "SafeReload()" in ready, "unconfirmed Ready clicks must fail safely"
+    assert "WinGetClientPos" not in ready, (
+        "Ready must trust the shared client-coordinate contract instead of applying a second offset"
+    )
+
+
+def validate_community_strategy_update(main: str) -> None:
+    assert (
+        "UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main" in main
+    )
+    assert "DarksenDev/tds-macro/contents/Strategies" not in main
+    assert "for entry in JSON.parse(responseText)" in main
+    assert "fileCount := strategyFiles.Length" in main
+    assert "if (fileCount == 0)" in main
+    assert "if (successCount != fileCount)" in main
+    assert r"raw\.githubusercontent\.com/UltimateMacro/Ultimate-Macro-New-Era/" in main
+
+
+def validate_webhook_batching(main: str) -> None:
+    queue = region(main, "SendToWebhook(message)", "SafeReload()")
+    assert "SetTimer(ProcessWebhookQueue, -2000)" in queue
+    process = region(queue, "ProcessWebhookQueue()", "FlushWebhookQueue() {")
+    assert "WebhookQueue.Length < 20" not in process, (
+        "small webhook batches must be sent after the collection window, not deferred forever"
+    )
+
+
+def validate_image_search_coordinates(image_search: str) -> None:
+    fallback = region(image_search, "; GDI+ Fallback", 'return {status: "error", message: "Unknown error occurred"')
+    assert 'Gdip_BitmapFromScreen(xC "|" yC "|" widthC "|" heightC)' in fallback
+    assert "getRobloxPos(" not in fallback, (
+        "fallback capture must not overwrite screen-space xC/yC with client-space zeroes"
+    )
+    assert "x: centerX" in fallback and "y: centerY" in fallback
+    assert "xC + centerX" not in fallback and "yC + centerY" not in fallback
+
+
+def validate_discord_retries(discord: str) -> None:
+    request = region(discord, "static Request(method, url", "static GetRetryDelayMs(")
+    loop_index = request.find("loop maxAttempts")
+    request_index = request.find('wr := ComObject("WinHttp.WinHttpRequest.5.1")')
+    assert 0 <= loop_index < request_index
+    assert "wr.Open(method, url, false)" in request
+    assert "status = 429" in request
+    assert "status >= 500 && status <= 599" in request
+
+    delay = region(discord, "static GetRetryDelayMs(", "static CreateFormData(")
+    assert 'GetResponseHeader("Retry-After")' in delay
+    assert 'parsed.Has("retry_after")' in delay
+    assert "Min(30000" in delay
+
+
+def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
+    for name, source in (("Main", main), ("watchdog", watchdog), ("Discord", discord)):
+        assert 'GlobalSize", "Ptr", hData' in source, f"{name} must pass HGLOBAL to GlobalSize"
+        assert 'GlobalSize", "Ptr", pData' not in source, (
+            f"{name} must not pass the GlobalLock pointer to GlobalSize"
+        )
+    assert 'IUnknown_Release", "Ptr", pStream' in watchdog
+    assert "ObjRelease(pStream)" in main
+    assert "ObjRelease(pStream)" in discord
+
+    discord_form = region(discord, "static CreateFormData(", "\n}")
+    assert "streamComplete := false" in discord_form
+    assert "if !streamComplete" in discord_form
+    assert discord_form.count('GlobalFree", "Ptr", hData') >= 3
+    assert re.search(r"try\s*\{.*RtlMoveMemory.*\}\s*finally\s*\{", discord_form, re.DOTALL)
 
 
 def validate_roblox_coordinates(roblox: str) -> None:
@@ -119,6 +199,7 @@ def validate(root: Path) -> None:
     watchdog = read(root / "submacros" / "watchdog.ahk")
     discord = read(root / "lib" / "Discord.ahk")
     roblox = read(root / "lib" / "Roblox.ahk")
+    image_search = read(root / "lib" / "ImageSearch" / "ImageSearch.ahk")
 
     validate_settings_contracts(main)
     validate_strategy_geometry(main)
@@ -127,6 +208,12 @@ def validate(root: Path) -> None:
     validate_watchdog_conditions_and_formatting(watchdog)
     validate_watchdog_retry_lifecycle(watchdog)
     validate_roblox_coordinates(roblox)
+    validate_ready_detection(main)
+    validate_community_strategy_update(main)
+    validate_webhook_batching(main)
+    validate_image_search_coordinates(image_search)
+    validate_discord_retries(discord)
+    validate_multipart_handles(main, watchdog, discord)
 
 
 if __name__ == "__main__":

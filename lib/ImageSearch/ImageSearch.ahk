@@ -1,4 +1,4 @@
-﻿#Requires AutoHotkey v2.0
+#Requires AutoHotkey v2.0
 
 #Include %A_LineFile%/../../Gdip_All.ahk
 #Include %A_LineFile%/../../Gdip_ImageSearch.ahk
@@ -6,6 +6,7 @@
 
 ; this library is for ImageSearch. it uses image_search.dll, which utilizes opencv to search for images and return a score. this dll and this lib make it possible to support any screen resolution.
 ; also, If the dll call fails, it falls back to Gdip_ImageSearch.
+; Contract: returned x/y values are Roblox CLIENT coordinates for both backends.
 AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0, maxScale := 0.0, scaleStep := 0.05) {
     static hOpenCV := 0
     static hModule := 0
@@ -131,8 +132,9 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
         if (!pToken)
             return {status: "error", message: "GDI+ failed to start", score: 0}
 
-        getRobloxPos(&xC, &yC, &widthC, &heightC)
-            
+        ; xC/yC came from WinGetClientPos and are screen coordinates, which are
+        ; required for capture. Gdip_ImageSearch itself returns bitmap-relative
+        ; coordinates, which map directly to Roblox client coordinates.
         pBitmapHaystack := Gdip_BitmapFromScreen(xC "|" yC "|" widthC "|" heightC)
         pBitmapTemplate := Gdip_CreateBitmapFromFile(templatePath)
         
@@ -179,8 +181,8 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
             bestResult := {
                 status: "success",
                 score: 1.0,
-                x: Integer(xC + centerX),
-                y: Integer(yC + centerY),
+                x: centerX,
+                y: centerY,
                 w: Integer(tW),
                 h: Integer(tH),
                 scale: 1.0,

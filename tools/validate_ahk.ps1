@@ -1,5 +1,12 @@
 param(
-    [string[]]$ScriptPath = @('Main.ahk')
+    [string[]]$ScriptPath = @(
+        'Main.ahk',
+        'submacros/watchdog.ahk',
+        'submacros/updater.ahk',
+        'submacros/auto_coa.ahk',
+        'submacros/auto_open_consumable.ahk',
+        'submacros/auto_spin.ahk'
+    )
 )
 
 $ErrorActionPreference = 'Stop'
