@@ -23,6 +23,10 @@ def validate_source_dependency_bootstrap(main: str) -> None:
     assert r"#Include *i lib\OCR.ahk" in main
     assert r"#Include *i lib\JSON.ahk" in main
 
+    json_include = main.index(r"#Include *i lib\JSON.ahk")
+    updater_include = main.index(r"#Include submacros\updater.ahk")
+    assert json_include < updater_include, "JSON must be included before updater.ahk"
+
     startup = region(
         main,
         'if (!FileExist(A_ScriptDir "\\lib\\OCR.ahk")',

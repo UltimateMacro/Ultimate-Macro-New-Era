@@ -45,8 +45,8 @@ if (A_PtrSize == 4) {
 #Include lib\Roblox.ahk
 #Include lib\HyperSleep.ahk
 #Include lib\ImageSearch\ImageSearch.ahk
-#Include submacros\updater.ahk
 #Include *i lib\JSON.ahk
+#Include submacros\updater.ahk
 #Include lib\Discord.ahk
 #Include lib\RuntimeLog.ahk
 
