@@ -16,6 +16,10 @@ SetWorkingDir(A_ScriptDir "\..\")
 #Include "%A_LineFile%\..\..\lib\Gdip_All.ahk"
 #Include "%A_LineFile%\..\..\lib\OCR.ahk"
 #Include "%A_LineFile%\..\..\lib\Roblox.ahk"
+#Include "%A_LineFile%\..\..\lib\RuntimeLog.ahk"
+
+RuntimeLogInstall("Watchdog")
+RuntimeLogInfo("watchdog_start", "Watchdog started")
 
 Opt := A_AppData "\Ultimate_Macro\Options"
 SettingsFile := Opt "\Settings.tds"
@@ -85,8 +89,9 @@ loop {
     }
 
     if WinExist("Roblox Crash") {
+        RuntimeLogError("roblox_crash_detected", "Roblox Crash window detected")
         if (WebhookEnabled && WebhookLink != "") {
-            pBitmap := Gdip_BitmapFromScreen()
+            pBitmap := CaptureRobloxClientBitmap()
             if (pBitmap) {
                 SendScreenshot(pBitmap, "Roblox has crashed!")
                 Gdip_DisposeImage(pBitmap)
@@ -97,13 +102,9 @@ loop {
     }
 
     if !WinExist("Roblox ahk_exe RobloxPlayerBeta.exe") && !WinExist("Roblox ahk_exe ApplicationFrameHost.exe") {
-        if (WebhookEnabled && WebhookLink != "") {
-            pBitmap := Gdip_BitmapFromScreen()
-            if (pBitmap) {
-                SendScreenshot(pBitmap, "Roblox is not running!")
-                Gdip_DisposeImage(pBitmap)
-            }
-        }
+        RuntimeLogError("roblox_process_missing", "Roblox process/window is no longer present")
+        if (WebhookEnabled && WebhookLink != "")
+            SendScreenshot(0, "Roblox is not running!", 12434877, 0)
         RestartMain()
         return
     }
@@ -116,9 +117,10 @@ loop {
 
         try {
             if ImageSearch(&FoundX, &FoundY, 0, 0, sw, sh, "*26 Resources/Disconnected.png") {
+                RuntimeLogWarn("roblox_disconnect_detected", "Disconnected dialog detected", "template=Disconnected.png")
                 CoordMode("Pixel", "Client")
                 if (WebhookEnabled && WebhookLink != "") {
-                    pBitmap := Gdip_BitmapFromScreen()
+                    pBitmap := CaptureRobloxClientBitmap()
                     if (pBitmap) {
                         SendScreenshot(pBitmap, "Disconnected, rejoining")
                         Gdip_DisposeImage(pBitmap)
@@ -127,9 +129,10 @@ loop {
                 RestartMain()
                 ExitApp()
             } else if ImageSearch(&FoundX, &FoundY, 0, 0, sw, sh, "*26 Resources/disconnected2.png") {
+                RuntimeLogWarn("roblox_disconnect_detected", "Disconnected dialog detected", "template=disconnected2.png")
                 CoordMode("Pixel", "Client")
                 if (WebhookEnabled && WebhookLink != "") {
-                    pBitmap := Gdip_BitmapFromScreen()
+                    pBitmap := CaptureRobloxClientBitmap()
                     if (pBitmap) {
                         SendScreenshot(pBitmap, "Disconnected, rejoining")
                         Gdip_DisposeImage(pBitmap)
@@ -139,6 +142,7 @@ loop {
                 ExitApp()
             }
         } catch Error as err {
+            RuntimeLogWarn("watchdog_image_search_error", err.Message)
             CoordMode("Pixel", "Client")
         }
 
@@ -276,7 +280,7 @@ SendInfo(matchResult := "") {
 
     if (FoundX == 0 && FoundY == 0) {
         if (WebhookEnabled && WebhookLink != "") {
-            pBitmap := Gdip_BitmapFromScreen()
+            pBitmap := CaptureRobloxClientBitmap()
             if (pBitmap) {
                 headerTitle := (matchResult = "Triumph") ? "### :trophy: TRIUMPH!" : "### :skull: YOU LOST!"
                 color := (matchResult = "Triumph") ? 3066993 : 12434877
@@ -448,7 +452,7 @@ SendInfo(matchResult := "") {
     }
 
     if (WebhookEnabled && WebhookLink != "") {
-        pBitmap := Gdip_BitmapFromScreen()
+        pBitmap := CaptureRobloxClientBitmap()
         if (pBitmap) {
             SendScreenshot(pBitmap, description, color, WebhookTriumphScreenshots)
             Gdip_DisposeImage(pBitmap)
@@ -505,7 +509,7 @@ TakeRandomScreenshot() {
     if (WebhookLink = WebhookLink2)
         WebhookLink := IniRead(SettingsFile, "Webhook", "Link", "")
 
-    pBitmap := Gdip_BitmapFromScreen()
+    pBitmap := CaptureRobloxClientBitmap()
     if (pBitmap > 0) {
         SendScreenshot(pBitmap, "Automatic screenshot", 3447003)
         Gdip_DisposeImage(pBitmap)
@@ -515,7 +519,7 @@ TakeRandomScreenshot() {
     SetTimer(TakeRandomScreenshot, screenshotDelay)
 }
 
-SendScreenshot(pBitmap := Gdip_BitmapFromScreen(), description := "", color := 12434877, screenshot :=
+SendScreenshot(pBitmap := CaptureRobloxClientBitmap(), description := "", color := 12434877, screenshot :=
 WebhookScreenshots) {
     global WebhookLink
 
@@ -525,7 +529,7 @@ WebhookScreenshots) {
 
     fields := []
 
-    if (screenshot == "0" || screenshot == 0) {
+    if (screenshot == "0" || screenshot == 0 || !pBitmap) {
         payload_json := '{"embeds": [{"description": "' escapedDescription '", "color": ' color '}]}'
         fields.Push(Map("name", "payload_json", "content-type", "application/json", "content", payload_json))
     }
@@ -597,7 +601,7 @@ CreateFormData(&retData, &contentType, fields) {
                 DllCall("shlwapi\IStream_Size", "Ptr", pFileStream, "UInt64P", &size := 0, "UInt")
                 DllCall("shlwapi\IStream_Reset", "Ptr", pFileStream, "UInt")
                 DllCall("shlwapi\IStream_Copy", "Ptr", pFileStream, "Ptr", pStream, "UInt", size, "UInt")
-                DllCall("ole32\IUnknown_Release", "Ptr", pFileStream)
+                ObjRelease(pFileStream)
             }
         }
     }
@@ -608,7 +612,7 @@ CreateFormData(&retData, &contentType, fields) {
     StrPut(str, utf8, "UTF-8")
     DllCall("shlwapi\IStream_Write", "Ptr", pStream, "Ptr", utf8.Ptr, "UInt", length, "UInt")
 
-    DllCall("ole32\IUnknown_Release", "Ptr", pStream)
+    ObjRelease(pStream)
     pStream := 0
 
     pData := DllCall("GlobalLock", "Ptr", hData, "Ptr")
@@ -625,44 +629,28 @@ CreateFormData(&retData, &contentType, fields) {
 }
 
 CloseMain() {
-    global MainPID, SettingsFile
+    global MainPID
 
-    try ProcessClose(MainPID)
-
-    wmi := ComObjGet("winmgmts:")
-    query :=
-        "SELECT * FROM Win32_Process WHERE Name = 'AutoHotkey.exe' OR Name = 'AutoHotkeyU64.exe' OR Name = 'AutoHotkeyU32.exe' OR Name = 'AutoHotkey64.exe' OR Name = 'AutoHotkey32.exe'"
-    for process in wmi.ExecQuery(query) {
-        cmd := process.CommandLine
-        if (InStr(cmd, "Main.ahk")) {
-            try ProcessClose(process.ProcessId)
-        }
-    }
+    ; The watchdog may only close the exact parent process that launched it.
+    if (MainPID && ProcessExist(MainPID))
+        try ProcessClose(MainPID)
 }
 
 RestartMain() {
-    global MainPID, SettingsFile
+    RuntimeLogInfo("watchdog_restart_main", "Restarting Main after watchdog recovery event")
+    global MainPID, SettingsFile, WebhookLink, WebhookEnabled
 
-    try ProcessClose(MainPID)
+    if (MainPID && ProcessExist(MainPID))
+        try ProcessClose(MainPID)
 
-    wmi := ComObjGet("winmgmts:")
-    query :=
-        "SELECT * FROM Win32_Process WHERE Name = 'AutoHotkey.exe' OR Name = 'AutoHotkeyU64.exe' OR Name = 'AutoHotkeyU32.exe' OR Name = 'AutoHotkey64.exe' OR Name = 'AutoHotkey32.exe'"
-    for process in wmi.ExecQuery(query) {
-        cmd := process.CommandLine
-        if (InStr(cmd, "Main.ahk")) {
-            try ProcessClose(process.ProcessId)
-        }
-    }
     WebhookLink := IniRead(SettingsFile, "Webhook", "Link", "")
     tempWebhook := IniRead(SettingsFile, "Webhook", "Enabled", "OFF")
     WebhookEnabled := (tempWebhook = "1") ? true : false
 
-    if (A_PtrSize == 4) {
+    if (A_PtrSize == 4)
         Run('"' A_WorkingDir '\submacros\AutoHotkey32.exe" "' A_WorkingDir '\Main.ahk"')
-    } else {
+    else
         Run('"' A_WorkingDir '\submacros\AutoHotkey64.exe" "' A_WorkingDir '\Main.ahk"')
-    }
 
     ExitApp()
 }

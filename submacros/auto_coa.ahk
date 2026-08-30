@@ -10,7 +10,7 @@ global SettingsFile := AppDataOpt "\Settings.tds"
 if !DirExist(AppDataOpt)
     DirCreate(AppDataOpt)
 
-SetWorkingDir(A_LineFile "/../../")
+SetWorkingDir(A_ScriptDir "\..")
 
 global ChainKey, BeatKey
 ChainKey := IniRead(SettingsFile, "Hotkeys", "Chain", "C")
@@ -47,6 +47,7 @@ aGui.OnEvent("Close", (*) => ExitApp())
 SetTimer(() => RemoveInitialFocus(), -50)
 
 RemoveInitialFocus() {
+    global aGui, s_txt
     if !WinActive("ahk_id " aGui.Hwnd)
         return
     ControlFocus(s_txt, "ahk_id " aGui.Hwnd)
@@ -56,16 +57,20 @@ F3::StartMacro()
 F4::StopMacro()
 
 StartMacro() {
-    global IsRunning
+    global IsRunning, aGui
     if (IsRunning)
         return
+    if !GetRobloxHWND() {
+        try aGui.Title := "Roblox not found"
+        return
+    }
     IsRunning := true
     aGui.Title := "auto_coa.ahk - Running"
     SetTimer(UseAbilities, 100)
 }
 
 StopMacro() {
-    global IsRunning
+    global IsRunning, aGui
     if (!IsRunning)
         return
     IsRunning := false
@@ -74,64 +79,65 @@ StopMacro() {
 }
 
 UseAbilities() {
-    global LastChainTime, LastBeatTime
-    v := aGui.Submit(false)
+    global LastChainTime, LastBeatTime, aGui, unfocusX, unfocusY, ChainKey, BeatKey
 
-    if (v.useChain) {
-        if (A_TickCount - LastChainTime > v.chainInterval * 1000) {
-            if (waitForTowerUI()) {
-                SendEvent("{RButton Up}")
-                Click(ScaleX(unfocusX), ScaleY(unfocusY))
-                Sleep(300)
-                SendEvent("{" ChainKey "}")
-                LastChainTime := A_TickCount
-            } else {
-            SendEvent("{" ChainKey "}")
-            LastChainTime := A_TickCount
-            }
-        }
+    if !GetRobloxHWND() {
+        StopMacro()
+        try aGui.Title := "Roblox not found"
+        return
     }
 
-    if (v.useBeat) {
-        if (A_TickCount - LastBeatTime > v.beatInterval * 1000) {
-            if (waitForTowerUI()) {
-                SendEvent("{RButton Up}")
-                Click(ScaleX(unfocusX), ScaleY(unfocusY))
-                Sleep(300)
-                SendEvent("{" BeatKey "}")
-                LastBeatTime := A_TickCount
-            } else {
-            SendEvent("{" BeatKey "}")
-            LastBeatTime := A_TickCount
-            }
+    v := aGui.Submit(false)
+
+    if (v.useChain && A_TickCount - LastChainTime > v.chainInterval * 1000) {
+        if (waitForTowerUI()) {
+            SendEvent("{RButton Up}")
+            Click(ScaleX(unfocusX), ScaleY(unfocusY))
+            Sleep(300)
         }
+        SendEvent("{" ChainKey "}")
+        LastChainTime := A_TickCount
+    }
+
+    if (v.useBeat && A_TickCount - LastBeatTime > v.beatInterval * 1000) {
+        if (waitForTowerUI()) {
+            SendEvent("{RButton Up}")
+            Click(ScaleX(unfocusX), ScaleY(unfocusY))
+            Sleep(300)
+        }
+        SendEvent("{" BeatKey "}")
+        LastBeatTime := A_TickCount
     }
 }
 
 ScaleX(baseX, Width := 1920) {
     getRobloxPos(&pX, &pY, &currentWidth, &currentHeight)
-    return Round(baseX * (currentWidth / Width))
+    return currentWidth > 0 ? Round(baseX * (currentWidth / Width)) : baseX
 }
 
 ScaleY(baseY, Height := 1009) {
     getRobloxPos(&pX, &pY, &currentWidth, &currentHeight)
-    return Round(baseY * (currentHeight / Height))
+    return currentHeight > 0 ? Round(baseY * (currentHeight / Height)) : baseY
 }
 
 waitForTowerUI(&resV2 := "", &resV1 := "") {
+    if !GetRobloxHWND()
+        return false
+
     StartTime := A_TickCount
     Loop {
         getRobloxPos(&rx, &ry, &w, &h)
+        if (w <= 0 || h <= 0)
+            return false
+
         X1_v2 := 0
         Y1_v2 := Round(h/2)
         W_v2 := Round(w * 0.3) - X1_v2
         H_v2 := Round(h) - Y1_v2
 
         resV2 := AdvImageSearch("Resources\TowerUI\Variant2.png", X1_v2, Y1_v2, W_v2, H_v2, ,,0.05)
-
-        if (resV2.status == "success" && resV2.score > 0.55) {
+        if (resV2.status == "success" && resV2.score > 0.55)
             return true
-        }
 
         Sleep(30)
 
@@ -141,15 +147,12 @@ waitForTowerUI(&resV2 := "", &resV1 := "") {
         H_v1 := Round(h * 0.4) - Y1_v1
         resV1 := AdvImageSearch("Resources\TowerUI\Variant1.png", X1_v1, Y1_v1, W_v1, H_v1, ,,0.05)
 
-        if (resV1.status == "success" && resV1.score > 0.68) {
+        if (resV1.status == "success" && resV1.score > 0.68)
             return true
-        }
+
         Sleep(30)
 
-
-        if (A_TickCount - StartTime > 1000) {
+        if (A_TickCount - StartTime > 1000)
             return false
-        }
-
     }
 }
