@@ -44,10 +44,13 @@ if (A_PtrSize == 4) {
 #Include submacros\updater.ahk
 #Include lib\JSON.ahk
 #Include lib\Discord.ahk
+#Include lib\RuntimeLog.ahk
 
 command_buffer := []
 
-ver := "1.3.3"
+ver := "1.3.4"
+
+RuntimeLogInstall("Main", ver)
 
 A_MaxHotkeysPerInterval := 9999
 
@@ -200,6 +203,7 @@ global SpecialMaps := ["Simplicity", "Cataclysm"]
 global MoveEnabled := false, MoveDirection := "W", MoveDuration := 750
 global unfocusX := 150, unfocusY := 200
 global Towers := Map(), RecordedSteps := [], Recording := false, RunningStrategy := false
+global RecordingWidth := 0, RecordingHeight := 0
 global modifiers := ""
 global LastDisconnectCheck := 0
 global LastOpenedTowerID := ""
@@ -565,6 +569,50 @@ AdvancedImageSearch(templ, x, y, w, h, minScale := 0.0, maxScale := 0.0, scaleSt
     }
 }
 
+UIFont() {
+    static selected := ""
+    if (selected != "")
+        return selected
+
+    for candidate in ["Segoe UI", "Tahoma", "Arial"] {
+        if IsFontAvailable(candidate) {
+            selected := candidate
+            return selected
+        }
+    }
+
+    selected := "Arial"
+    return selected
+}
+
+IsFontAvailable(faceName) {
+    hdc := DllCall("user32\GetDC", "Ptr", 0, "Ptr")
+    if !hdc
+        return false
+
+    hFont := DllCall("gdi32\CreateFontW",
+        "Int", -12, "Int", 0, "Int", 0, "Int", 0, "Int", 400,
+        "UInt", 0, "UInt", 0, "UInt", 0, "UInt", 1,
+        "UInt", 0, "UInt", 0, "UInt", 0, "UInt", 0,
+        "Str", faceName, "Ptr")
+    if !hFont {
+        DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", hdc)
+        return false
+    }
+
+    oldFont := DllCall("gdi32\SelectObject", "Ptr", hdc, "Ptr", hFont, "Ptr")
+    faceBuf := Buffer(256, 0)
+    chars := DllCall("gdi32\GetTextFaceW", "Ptr", hdc, "Int", 128, "Ptr", faceBuf.Ptr, "Int")
+    actualFace := (chars > 0) ? StrGet(faceBuf, "UTF-16") : ""
+
+    if oldFont
+        DllCall("gdi32\SelectObject", "Ptr", hdc, "Ptr", oldFont, "Ptr")
+    DllCall("gdi32\DeleteObject", "Ptr", hFont)
+    DllCall("user32\ReleaseDC", "Ptr", 0, "Ptr", hdc)
+
+    return (StrLower(actualFace) = StrLower(faceName))
+}
+
 autoRun := IniRead(StateFile, "State", "Running", 0)
 autoStrat := IniRead(StateFile, "State", "Strategy", "")
 savedStartTime := IniRead(StateFile, "State", "StartTime", 0)
@@ -606,7 +654,7 @@ global SystemHwnds := Map()
 sysBar1 := MainGui.Add("Progress", "x0 y3 w700 h39 Disabled Background0A0A0A", 0)
 SystemHwnds[sysBar1.Hwnd] := true
 
-MainGui.SetFont("s11 w300 cFFFFFF", "Segoe UI")
+MainGui.SetFont("s11 w300 cFFFFFF", UIFont())
 if FileExist(IconPath) {
     sysIcon := MainGui.Add("Picture", "BackgroundTrans x20 y12 w20 h20", IconPath)
     SystemHwnds[sysIcon.Hwnd] := true
@@ -633,7 +681,7 @@ SystemHwnds[BtnClose.Hwnd] := true
 sysLine1 := MainGui.Add("Progress", "x0 y42 w700 h1 Background222222", 0)
 SystemHwnds[sysLine1.Hwnd] := true
 
-MainGui.SetFont("s10 w400 c888888", "Segoe UI")
+MainGui.SetFont("s10 w400 c888888", UIFont())
 global HoverTab := []
 global TabCtrl := []
 global HoverEffect := []
@@ -670,11 +718,11 @@ SystemHwnds[sysLine2.Hwnd] := true
 
 ; tab 1 - MAIN ===========================
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab1_Section1 := MainGui.Add("Text", "x30 y95  w200 h22", "Custom Strategies")
 global Tab1_Line1 := MainGui.Add("Progress", "x30 y118 w640 h1  Background333333", 0)
 
-MainGui.SetFont("s9 w400 cAAAAAA", "Segoe UI")
+MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
 global Tab1_Lbl1 := MainGui.Add("Text", "x30 y130 w100 h20", "Strategy:")
 MainGui.SetFont("s9 w400 c000000")
 global Strategy1Ctrl := MainGui.Add("Edit", "x110 y127 w400 h22 vStrategy1", Strategy1Path)
@@ -732,7 +780,7 @@ MainGui.SetFont("s9 w400 cFFFFFF")
 global AutoEquipCtrl := MainGui.Add("Checkbox", "x357 y190 vAutoEquip 0x200 Checked" AutoEquip, "Auto Equip Towers")
 AutoEquipCtrl.OnEvent("Click", EnableAutoEquip)
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Community Strategies")
 global Tab1_Line2 := MainGui.Add("Progress", "x30 y248 w640 h1 Background333333", 0)
 
@@ -751,111 +799,153 @@ if (lastUpdate != "0") {
 }
 
 if (needUpdate) {
+    tempDir := StratsDir "\.download_temp"
+    communityBackupDir := StratsDir "\.community_backup"
+
     try {
         apiURL := "https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main"
 
         whr := ComObject("WinHttp.WinHttpRequest.5.1")
-        whr.Open("GET", apiURL, true)
-        whr.SetRequestHeader("User-Agent", "Strategy-Updater")
+        whr.Open("GET", apiURL, false)
+        whr.SetRequestHeader("User-Agent", "Ultimate-Macro-New-Era-Strategy-Updater")
+        whr.SetRequestHeader("Accept", "application/vnd.github+json")
+        whr.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28")
+        whr.SetTimeouts(5000, 5000, 10000, 10000)
         whr.Send()
 
-        while (!whr.WaitForResponse(1)) {
-            Sleep(50)
-        }
-
-        if (whr.Status != 200) {
+        if (whr.Status != 200)
             throw Error("API request failed with status: " whr.Status)
-        }
 
-        responseText := whr.ResponseText
-
-        tempDir := StratsDir "\.download_temp"
         if DirExist(tempDir)
             DirDelete(tempDir, true)
+        if DirExist(communityBackupDir)
+            DirDelete(communityBackupDir, true)
         DirCreate(tempDir)
 
-        strategyFiles := []
-        for entry in JSON.parse(responseText) {
-            if !entry.Has("type") || entry["type"] != "file"
-                continue
-            if !entry.Has("name") || !RegExMatch(entry["name"], 'i)^[^\\/:*?"<>|]+\.strat$')
-                continue
-            if !entry.Has("download_url") || !RegExMatch(entry["download_url"],
-                "i)^https://raw\.githubusercontent\.com/UltimateMacro/Ultimate-Macro-New-Era/")
-                continue
-            strategyFiles.Push(entry)
-        }
+        try strategyIndex := JSON.parse(whr.ResponseText)
+        catch Error as parseErr
+            throw Error("Community strategy index JSON is invalid: " parseErr.Message)
 
-        fileCount := strategyFiles.Length
+        if !IsObject(strategyIndex)
+            throw Error("Community strategy index is not an array/object.")
+
+        fileCount := 0
         successCount := 0
 
-        for entry in strategyFiles {
-            fileName := entry["name"]
-            downloadURL := entry["download_url"]
+        for item in strategyIndex {
+            if !item.Has("name")
+                continue
 
+            fileName := item["name"]
+            if !RegExMatch(fileName, "i)\.strat$")
+                continue
+
+            fileCount++
+            if !item.Has("download_url") || item["download_url"] = "" {
+                LogToConsole("Community strategy has no download URL: " fileName, false)
+                continue
+            }
+
+            downloadURL := item["download_url"]
             try {
                 fileWhr := ComObject("WinHttp.WinHttpRequest.5.1")
-                fileWhr.SetTimeouts(0, 2000, 2000, 1500)
                 fileWhr.Open("GET", downloadURL, false)
-                fileWhr.SetRequestHeader("User-Agent", "Strategy-Updater")
+                fileWhr.SetRequestHeader("User-Agent", "Ultimate-Macro-New-Era-Strategy-Updater")
+                fileWhr.SetTimeouts(5000, 5000, 10000, 10000)
                 fileWhr.Send()
 
                 if (fileWhr.Status == 200) {
                     ado := ComObject("ADODB.Stream")
-                    ado.Type := 1
-                    ado.Open()
-                    ado.Write(fileWhr.ResponseBody)
-                    ado.SaveToFile(tempDir "\" fileName, 2)
-                    ado.Close()
-                    successCount++
+                    try {
+                        ado.Type := 1
+                        ado.Open()
+                        ado.Write(fileWhr.ResponseBody)
+                        ado.SaveToFile(tempDir "\" fileName, 2)
+                        successCount++
+                    } finally {
+                        try ado.Close()
+                    }
                 } else {
-                    LogToConsole("Failed to download file '" fileName "'. Status: " fileWhr.Status, (AlwaysOnTop = 1) ?
-                        0x1000 : 0)
+                    LogToConsole("Failed to download community strategy '" fileName "'. Status: " fileWhr.Status, false)
                 }
             } catch Error as fileErr {
-                LogToConsole("Network error downloading file '" fileName "': " fileErr.Message, (AlwaysOnTop = 1) ?
-                    0x1000 : 0)
+                LogToConsole("Network error downloading community strategy '" fileName "': " fileErr.Message, false)
             }
 
             Sleep(30)
         }
 
-        if (fileCount == 0) {
-            DirDelete(tempDir, true)
-            throw Error("No strategy files were returned. Aborting update to protect existing files.")
-        }
-
-        if (successCount != fileCount) {
-            DirDelete(tempDir, true)
-            throw Error("Only " successCount " of " fileCount
-                " strategy files downloaded. Aborting update to protect existing files.")
-        }
-
-        if !DirExist(StratsDir)
-            DirCreate(StratsDir)
+        ; Transaction guard: an empty/partial fetch can never replace the
+        ; currently installed community strategy set.
+        if (fileCount == 0)
+            throw Error("Community strategy index returned zero .strat files; keeping current files.")
+        if (successCount != fileCount)
+            throw Error("Community strategy refresh incomplete (" successCount "/" fileCount "); keeping current files.")
 
         oldManifestStr := IniRead(StateFile, "Cache", "CommunityStratFiles", "")
+        oldLastUpdate := IniRead(StateFile, "Cache", "LastUpdateTime", "0")
         oldManifestFiles := (oldManifestStr = "") ? [] : StrSplit(oldManifestStr, "|")
+        oldManifestMap := Map()
+        for oldFile in oldManifestFiles {
+            if (oldFile != "")
+                oldManifestMap[oldFile] := true
+        }
 
+        ; A local file not owned by the previous community manifest belongs to
+        ; the user/package. Never overwrite it silently.
+        newManifestFiles := []
+        loop files, tempDir "\*.strat" {
+            target := StratsDir "\" A_LoopFileName
+            if (FileExist(target) && !oldManifestMap.Has(A_LoopFileName)) {
+                LogToConsole("Community refresh would overwrite a local strategy; keeping local file: " A_LoopFileName, false)
+                FileDelete(A_LoopFileFullPath)
+                continue
+            }
+            newManifestFiles.Push(A_LoopFileName)
+        }
+
+        DirCreate(communityBackupDir)
         for oldFile in oldManifestFiles {
             if (oldFile != "" && FileExist(StratsDir "\" oldFile))
-                try FileDelete(StratsDir "\" oldFile)
+                FileCopy(StratsDir "\" oldFile, communityBackupDir "\" oldFile, 1)
         }
 
         newManifestStr := ""
-        newFileCount := 0
-        loop files, tempDir "\*.strat" {
-            FileMove(A_LoopFileFullPath, StratsDir "\" A_LoopFileName, 1)
-            newManifestStr .= (newManifestStr = "" ? "" : "|") A_LoopFileName
-            newFileCount++
+        for newFile in newManifestFiles
+            newManifestStr .= (newManifestStr = "" ? "" : "|") newFile
+
+        try {
+            for oldFile in oldManifestFiles {
+                if (oldFile != "" && FileExist(StratsDir "\" oldFile))
+                    FileDelete(StratsDir "\" oldFile)
+            }
+
+            for newFile in newManifestFiles
+                FileMove(tempDir "\" newFile, StratsDir "\" newFile, 1)
+
+            IniWrite(newManifestStr, StateFile, "Cache", "CommunityStratFiles")
+            IniWrite(A_Now, StateFile, "Cache", "LastUpdateTime")
+        } catch Error as commitErr {
+            ; Restore only files managed by the community updater. User files are
+            ; outside this transaction and are never deleted.
+            for newFile in newManifestFiles {
+                if FileExist(StratsDir "\" newFile)
+                    try FileDelete(StratsDir "\" newFile)
+            }
+            loop files, communityBackupDir "\*.strat" {
+                try FileCopy(A_LoopFileFullPath, StratsDir "\" A_LoopFileName, 1)
+            }
+            try IniWrite(oldManifestStr, StateFile, "Cache", "CommunityStratFiles")
+            try IniWrite(oldLastUpdate, StateFile, "Cache", "LastUpdateTime")
+            throw commitErr
         }
-
-        DirDelete(tempDir, true)
-        IniWrite(A_Now, StateFile, "Cache", "LastUpdateTime")
-        IniWrite(newManifestStr, StateFile, "Cache", "CommunityStratFiles")
-
     } catch Error as err {
         LogToConsole("Error while downloading strats: " err.Message, (AlwaysOnTop = 1) ? 0x1000 : 0)
+    } finally {
+        if DirExist(tempDir)
+            try DirDelete(tempDir, true)
+        if DirExist(communityBackupDir)
+            try DirDelete(communityBackupDir, true)
     }
 }
 
@@ -870,7 +960,7 @@ global ChildHwnd := 0
 
 ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
 ChildGui.BackColor := "181818"
-ChildGui.SetFont("s10 cWhite", "Segoe UI")
+ChildGui.SetFont("s10 cWhite", UIFont())
 width := FrameW - 6
 
 loop files, StratsDir "\*.strat" {
@@ -917,7 +1007,7 @@ for index, strat in LoadedStrats {
     hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
     ChildGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
 
-    hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", "Segoe UI",
+    hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(),
         10, 1)
     ChildGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
 
@@ -953,11 +1043,11 @@ for index, strat in LoadedStrats {
         ChildGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
     }
 
-    ChildGui.SetFont("s11 Bold cWhite", "Segoe UI")
+    ChildGui.SetFont("s11 Bold cWhite", UIFont())
     ChildGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title :
         "Unknown Strat")
 
-    ChildGui.SetFont("s9 w500 c7E848E", "Segoe UI")
+    ChildGui.SetFont("s9 w500 c7E848E", UIFont())
     helpDl1 := ChildGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
     helpDl1.OnEvent("Click", ((t, a, r, m, d) => (*) => StratInfo(t, a, r, m, d))(
         strat.title,
@@ -967,11 +1057,11 @@ for index, strat in LoadedStrats {
         strat.desc
     ))
 
-    ChildGui.SetFont("s9 w400 cE2E4E7", "Segoe UI")
+    ChildGui.SetFont("s9 w400 cE2E4E7", UIFont())
     ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers :
         "None"))
 
-    ChildGui.SetFont("s9 w400 c7E848E", "Segoe UI")
+    ChildGui.SetFont("s9 w400 c7E848E", UIFont())
     ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
 
     if (strat.difficulty = "Hardcore") {
@@ -987,10 +1077,10 @@ for index, strat in LoadedStrats {
     }
 
     hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty !=
-        "" ? strat.difficulty : "Easy", "Segoe UI", 11, 1)
+        "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
     ChildGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
 
-    ChildGui.SetFont("s9 w500 c9CA4B0", "Segoe UI")
+    ChildGui.SetFont("s9 w500 c9CA4B0", UIFont())
     ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time :
         "Unknown"))
     ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income :
@@ -998,21 +1088,21 @@ for index, strat in LoadedStrats {
 
     if ((strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore")) {
         hBtnNormal := CreateGradientButton(220, 38, 8, "0xff961ea1", "0xff5f237a", "0x40000000", "0x5dffffff", "Load",
-            "Segoe UI", 14, 1)
+            UIFont(), 14, 1)
         hBtnHover := CreateGradientButton(220, 38, 8, "0xffea00ff", "0xff8d32b7", "0x60000000", "0x5dffffff", "Load",
-            "Segoe UI", 14, 1)
+            UIFont(), 14, 1)
     } else {
         hBtnNormal := CreateGradientButton(220, 38, 8, "0xFF147A6E", "0xFF214B75", "0x40000000", "0x5dffffff", "Load",
-            "Segoe UI", 14, 1)
+            UIFont(), 14, 1)
         hBtnHover := CreateGradientButton(220, 38, 8, "0xFF1CB5A2", "0xFF3272B7", "0x60000000", "0x5dffffff", "Load",
-            "Segoe UI", 14, 1)
+            UIFont(), 14, 1)
     }
 
     picLoadBtn := ChildGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal
     )
 
     dl1 := ChildGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
-    dl1.SetFont("cFFFFFF s10 Bold", "Segoe UI")
+    dl1.SetFont("cFFFFFF s10 Bold", UIFont())
 
     dl1.StratFile := strat.fileName
     dl1.OnEvent("Click", DownloadStrat)
@@ -1024,7 +1114,7 @@ for index, strat in LoadedStrats {
 }
 
 if (LoadedStrats.Length == 0) {
-    ChildGui.SetFont("s12 c7E848E", "Segoe UI")
+    ChildGui.SetFont("s12 c7E848E", UIFont())
     ChildGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
     ContentH := 220
 }
@@ -1065,7 +1155,7 @@ if (ContentH > 0) {
 OnMessage(0x0115, OnScroll)
 OnMessage(0x020A, OnMouseWheel)
 
-MainGui.SetFont("s11 w400 cFFFFFF", "Segoe UI")
+MainGui.SetFont("s11 w400 cFFFFFF", UIFont())
 global Tab1_Start := MainGui.Add("Text", "x30 y500 w300 h40 Center Background0e0e0f +Border 0x200", "Start (F1)")
 Tab1_Start.OnEvent("Click", StartStrategy)
 global Tab1_Stop := MainGui.Add("Text", "x340 y500 w330 h40 Center Background0e0e0f +Border 0x200", "Stop (F2)")
@@ -1076,14 +1166,14 @@ HoverEffect.Push(Tab1_Stop)
 
 ; tab 2 - RECORD ===========================
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab2_Title := MainGui.Add("Text", "x30 y95  w200 h22 Hidden", "Configuration")
 global Tab2_Line1 := MainGui.Add("Progress", "x30 y118 w640 h1  Hidden Background333333", 0)
 
 MainGui.SetFont("s9 w400 cAAAAAA")
 global Tab2_Lbl1 := MainGui.Add("Text", "x30 y145 w80 h20 Hidden", "Map:")
-MainGui.SetFont("s9 w400 cFFFFFF")
-global RecMapsD := MainGui.Add("DropDownList", "x80 y142 w220 Hidden vRecMaps", [ ; WARNING: These are all the supported maps for this macro. If a map is not listed here, it is unsupported
+MainGui.SetFont("s9 w400 c000000")
+global RecMapsD := MainGui.Add("ComboBox", "x80 y142 w220 Hidden vRecMaps", [ ; WARNING: These are all the supported maps for this macro. If a map is not listed here, it is unsupported
     "Abandoned City", "Area 52", "Autumn Falling",
     "Badlands II", "Black Spot Exchange", "Candy Valley", "Cataclysm", "Chess Board",
     "Construction Crazy", "Coral Deep", "Crossroads", "Crystal Cave",
@@ -1104,10 +1194,10 @@ global RecMapsD := MainGui.Add("DropDownList", "x80 y142 w220 Hidden vRecMaps", 
 
 MainGui.SetFont("s9 w400 cAAAAAA")
 global Tab2_Lbl2 := MainGui.Add("Text", "x320 y145 w80 h20 Hidden", "Mode:")
-MainGui.SetFont("s9 w400 cFFFFFF")
+MainGui.SetFont("s9 w400 c000000")
 global RecDiffCtrl := MainGui.Add("DropDownList", "x380 y142 w220 Hidden vRecDifficulty", [
     "Easy", "Casual", "Intermediate", "Molten", "Fallen", "Frost",
-    "Hardcore", "Voidcore", "Pizza Party", "Badlands II", "Polluted Wasteland II"
+    "Hardcore", "Voidcore", "Arcade", "Pizza Party", "Badlands II", "Polluted Wasteland II"
 ])
 
 MainGui.SetFont("s9 w400 cAAAAAA")
@@ -1120,7 +1210,7 @@ global RecModifiersCtrl := MainGui.Add("ListBox", "x110 y232 w220 h200 Multi Hid
     "Committed", "Quarantine", "Speedy"
 ])
 
-MainGui.SetFont("s9 w400 cAAAAAA", "Segoe UI")
+MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
 global Tab2_Info2 := MainGui.Add("Text", "x20 w60 y275 BackgroundTrans Hidden",
     "Hold CTRL to deselect/select multiple modifiers.")
 
@@ -1129,7 +1219,7 @@ global Tab2_Lbl4 := MainGui.Add("Text", "x30 y185 w80 h20 Hidden", "Towers:")
 MainGui.SetFont("s9 w400 c000000")
 global RecTowersCtrl := MainGui.Add("Edit", "x80 y182 w220 h22 Hidden vRecRequiredTowers", requiredTowers)
 
-MainGui.SetFont("s9 w400 cAAAAAA", "Segoe UI")
+MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
 global Tab2_Info1 := MainGui.Add("Text", "x320 y173 BackgroundTrans Hidden",
     "Enter towers for your strategy using comma after every tower.`nMinigunner, Ranger, Commander, DJ, Military Base for example.`nType G Whatever if the tower you using NEEDS to be golden."
 )
@@ -1137,7 +1227,7 @@ global Tab2_Info1 := MainGui.Add("Text", "x320 y173 BackgroundTrans Hidden",
 MainGui.Add("Progress", "x360 y232 w320 h1 Hidden Background333333 vTab2_Line2", 0)
 global Tab2_Line2 := MainGui["Tab2_Line2"]
 
-MainGui.SetFont("s9 w400 cFFFFFF", "Segoe UI")
+MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
 global RecAutoChainCtrl := MainGui.Add("Checkbox", "x360 y255 Hidden vRecAutoChain Checked" (autoChain = "ON" ? 1 : 0),
 "Use Call of Arms")
 global RecAutoCaravanCtrl := MainGui.Add("Checkbox", "x490 y255 Hidden vRecAutoCaravan Checked" (autoCaravan = "ON" ? 1 :
@@ -1160,7 +1250,7 @@ global RecMoveCtrl := MainGui.Add("Checkbox", "x30 y452 w60 h20 Hidden vRecMoveE
 "Move")
 MainGui.SetFont("s9 w400 cAAAAAA")
 global DIRECTIONTEXTCtrl := MainGui.Add("Text", "x100 y452 w45 Hidden", "Direction")
-MainGui.SetFont("s9 w400 cFFFFFF")
+MainGui.SetFont("s9 w400 c000000")
 global RecMoveDirCtrl := MainGui.Add("DropDownList", "x160 y450 w45 Hidden Choose1 vRecMoveDirection", ["W", "A", "S",
     "D"])
 MainGui.SetFont("s9 w400 cAAAAAA")
@@ -1168,11 +1258,11 @@ global Tab2_Txt4 := MainGui.Add("Text", "x220 y452 Hidden", "Duration (ms):")
 MainGui.SetFont("s9 w400 c000000")
 global RecMoveDurCtrl := MainGui.Add("Edit", "x310 y450 w50 h22 Hidden vRecMoveDuration", 1000)
 
-MainGui.SetFont("s11 w400 cFFFFFF", "Segoe UI")
+MainGui.SetFont("s11 w400 cFFFFFF", UIFont())
 global Tab2_Btn1 := MainGui.Add("Text", "x30  y500 w300 h40 Center Background0e0e0f +Border 0x200 Hidden",
     "Start Recording")
 Tab2_Btn1.OnEvent("Click", StartRecording)
-MainGui.SetFont("s11 w400 c808080", "Segoe UI")
+MainGui.SetFont("s11 w400 c808080", UIFont())
 global Tab2_Btn2 := MainGui.Add("Text", "x340 y500 w330 h40 Center Background0e0e0f +Border 0x200 Hidden", "Stop")
 Tab2_Btn2.OnEvent("Click", StopRecord)
 
@@ -1180,7 +1270,7 @@ HoverEffect.Push(Tab2_Btn1)
 
 ; tab 3 - MULTIPLAYER ===========================
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab3_Title := MainGui.Add("Text", "x30 y95  w200 h22 Hidden", "Usernames")
 global Tab3_Line1 := MainGui.Add("Progress", "x30 y118 w640 h1 Hidden Background333333", 0)
 
@@ -1194,7 +1284,7 @@ global Tab3_PartyMemb := MainGui.Add("Text", "x30 y175 w165 BackgroundTrans h20 
 MainGui.SetFont("s9 w400 c000000")
 global Tab3_PartyMemb_Edit := MainGui.Add("Edit", "x130 y168 w540 Hidden vPartyMembersStr", PartyMembers)
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab3_Title2 := MainGui.Add("Text", "x30 y201  w200 h22 Hidden", "Settings")
 global Tab3_Line2 := MainGui.Add("Progress", "x30 y224 w640 h1 Hidden Background333333", 0)
 
@@ -1236,7 +1326,7 @@ TAB3.Push(Tab3_Title, Tab3_Line1, Tab3_HostNm, Tab3_HostNm_EDIT, Tab3_PartyMemb,
 
 ; tab 4 - WEBHOOK ===========================
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab4_Title := MainGui.Add("Text", "x30 y95 vTab4_TITLE BackgroundTrans h22 w110 Hidden", "Discord Webhook")
 HoverEffect.Push(Tab4_Title)
 Tab4_Title.OnEvent("Click", DiscordSettings)
@@ -1331,11 +1421,11 @@ DiscordBotTab.Push(Tab4_Title, Tab4_Line1, Tab4_Line2, BotTokenCtrl, BotEnabledC
 
 ;TAB 5 - SETTINGS ==========================
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab5_Section1 := MainGui.Add("Text", "x30 y95  w200 h22 Hidden", "TDS Keybinds")
 global Tab5_Line1 := MainGui.Add("Progress", "x30 y118 w250 h1  Hidden Background333333", 0)
 
-MainGui.SetFont("s8 w400 cAAAAAA", "Segoe UI")
+MainGui.SetFont("s8 w400 cAAAAAA", UIFont())
 global Tab5_Lbl1 := MainGui.Add("Text", "x30 y135 w70 h16 Hidden", "Call of Arms:")
 MainGui.SetFont("s8 w400 c000000")
 global ChainKeyCtrl := MainGui.Add("Edit", "x105 y132 w40 h18 Center Limit1 Hidden", ChainKey)
@@ -1354,7 +1444,7 @@ MainGui.SetFont("s8 w400 cAAAAAA")
 global Tab5_Lbl44 := MainGui.Add("Text", "x152 y160 w80 h16 Hidden", "Raise the Dead:")
 MainGui.SetFont("s8 w400 c000000")
 global RaiseDeadKeyCtrl := MainGui.Add("Edit", "x238 y157 w40 h18 Center Limit1 Hidden", RaiseDeadKey)
-MainGui.SetFont("s9 w400 cFFFFFF", "Segoe UI")
+MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
 global Tab5_Help12 := MainGui.Add("Text", "x280 y157 w18 h18 0x200 Center Hidden", "?")
 Tab5_Help12.OnEvent("Click", HelpRaise)
 
@@ -1367,7 +1457,7 @@ MainGui.SetFont("s8 w400 cAAAAAA")
 global Tab5_Lbl56 := MainGui.Add("Text", "x152 y185 h16 Hidden", "Reposition:")
 MainGui.SetFont("s8 w400 c000000")
 global RepoKeyCtrl := MainGui.Add("Edit", "x238 y182 w40 h18 Center Limit1 Hidden", RepoKey)
-MainGui.SetFont("s9 w400 cFFFFFF", "Segoe UI")
+MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
 global Tab5_Help11 := MainGui.Add("Text", "x280 y182 w18 h18 0x200 Center Hidden", "?")
 Tab5_Help11.OnEvent("Click", HelpBrawler)
 
@@ -1388,11 +1478,11 @@ global UpgradeTowerGBCtrl := MainGui.Add("Edit", "x158 y248 W17 h17 Center Limit
 
 MainGui.SetFont("s9 w400 cFFFFFF")
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab5_Section2 := MainGui.Add("Text", "x310 y95  w200 h22 Hidden BackgroundTrans", "Macro Settings")
 global Tab5_Line2 := MainGui.Add("Progress", "x310 y118 w360 h1  Hidden Background333333", 0)
 
-MainGui.SetFont("s9 w400 cFFFFFF", "Segoe UI")
+MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
 global UseUpgradeHCtrl := MainGui.Add("Checkbox", "x310 y135 Hidden", "Use Hotkeys for Upgrading")
 UseUpgradeHCtrl.Value := (UseHForUpgrade = 1)
 global Tab5_Help6 := MainGui.Add("Text", "x475 y135 w18 h18 0x200 Center Hidden", "?")
@@ -1452,7 +1542,7 @@ global KeyDelayTxt := MainGui.Add("Text", "x625 y270 w32 Hidden", KeyDelay)
 global KeyDelayUpDown := MainGui.Add("UpDown", "Range5-100 Hidden", KeyDelay)
 KeyDelayUpDown.OnEvent("Change", (ctrl, *) => KeyDelayTxt.Value := ctrl.Value)
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab5_Section3 := MainGui.Add("Text", " BackgroundTrans x30 y272 w200 h22 Hidden", "Recording Hotkeys")
 global Tab5_Line3 := MainGui.Add("Progress", "x30 y295 w640 h1  Hidden Background333333", 0)
 
@@ -1513,7 +1603,7 @@ HoverEffect.Push(Tab5_Btn1)
 
 ; tab 6 - tools ===========================
 
-MainGui.SetFont("s10 w400 c3A86FF", "Segoe UI")
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tools_Section := MainGui.Add("Text", "x30 y95 w200 h22 Hidden", "Tools")
 global Tools_Section_Line := MainGui.Add("Progress", "x30 y118 w640 h1 Hidden  Background333333", 0)
 
@@ -1537,28 +1627,47 @@ Auto_Consum.OnEvent("Click", RunAutoConsumableTool)
 
 ; tab 7 - credits ===========================
 
-MainGui.SetFont("s18 bold cFFFFFF", "Segoe UI")
+MainGui.SetFont("s18 bold cFFFFFF", UIFont())
 global Credit_TITLE := MainGui.Add("Text", "x30 y95 w640 Hidden Center", "Ultimate Macro")
 
 global Credit_Divider := MainGui.Add("Progress", "x80 y132 w530 h2 Hidden Center Background6e6e6e", 0)
 
-MainGui.SetFont("s11 w400 cFFFFFF", "Segoe UI")
-global Credit_Content := MainGui.Add("Link", "x80 y150 w530 Hidden", "
+MainGui.SetFont("s11 w400 cFFFFFF", UIFont())
+global Credit_Content := MainGui.Add("Edit", "x80 y150 w530 h155 Multi ReadOnly +VScroll -Wrap -E0x200 Background111111 Hidden", "
 (
-Started on March 30, 2026. Built in AutoHotkey v2. Made by Darksen.
+Started on March 30, 2026. Built in AutoHotkey v2.
+
+Original Creator
+• Darksen
+
+Lead Developer
+• pizzaroles24
+
+Developers
+• ziadod
+• kronoxxv
+• banana.dev
+
+Development Contributor
+• 4riff
+
+QA
+• hetzel401
+• tristanm1ce
+• frostzzz
 )")
 
-MainGui.SetFont("s12 italic w400 cFFFFFF", "Segoe UI")
-global Credit_Support := MainGui.Add("Link", "x30 y410 w640 Hidden", "
+MainGui.SetFont("s12 italic w400 cFFFFFF", UIFont())
+global Credit_Support := MainGui.Add("Link", "x30 y390 w640 h90 Hidden", "
 (
 You can *support* me and the macro with <a href="https://www.donationalerts.com/r/darksen1">real money</a> or with <a href="https://www.roblox.com/games/115405526400244/Raise-an-Onett">robux (press donations button when you joined)</a>, do it if you're really enjoying the macro.
 I truly appreciate any support! (Please Donate)
 )"
 )
 
-global Credit_InfoBG := MainGui.Add("Progress", "x0 y255 w700 h60 Hidden Center Background2a5c3d", 0)
-MainGui.SetFont("s12 norm w400 cFFFFFF", "Segoe UI")
-global Credit_Info := MainGui.Add("Text", "x0 y0 w700 BackgroundTrans h565 0x200 Center Hidden", "
+global Credit_InfoBG := MainGui.Add("Progress", "x0 y320 w700 h50 Hidden Center Background2a5c3d", 0)
+MainGui.SetFont("s12 norm w400 cFFFFFF", UIFont())
+global Credit_Info := MainGui.Add("Text", "x0 y320 w700 h50 BackgroundTrans 0x200 Center Hidden", "
 (
 Special thanks to my Discord Community!
 )")
@@ -1566,14 +1675,14 @@ Special thanks to my Discord Community!
 global Divider := MainGui.Add("Progress", "x0 y500 w700 h1 Hidden Background222222", 0)
 global FooterBg := MainGui.Add("Progress", "x0 y501 w700 h64 Disabled Hidden Background0f0f0f", 0)
 
-MainGui.SetFont("s10 italic cFFFFFF", "Segoe UI")
+MainGui.SetFont("s10 italic cFFFFFF", UIFont())
 global version_text := MainGui.Add("Text", "x30 y520 BackgroundTrans Hidden", ver " * made by darksen")
 
-global githubImg := MainGui.Add("Picture", "x580 y520 w24 h-1 Hidden BackgroundTrans", "Resources\github.png")
+global githubImg := MainGui.Add("Picture", "x580 y520 w24 h24 Hidden BackgroundTrans", "Resources\github.png")
 githubImg.OnEvent("Click", githubLink)
-global DiscordImg := MainGui.Add("Picture", "x611 y520 w24 h-1 Hidden BackgroundTrans", "Resources\discord.png")
+global DiscordImg := MainGui.Add("Picture", "x611 y520 w24 h24 Hidden BackgroundTrans", "Resources\discord.png")
 DiscordImg.OnEvent("Click", DiscordLink)
-global YoutubeImg := MainGui.Add("Picture", "x642 y520 w24 h-1 Hidden BackgroundTrans", "Resources\youtube.png")
+global YoutubeImg := MainGui.Add("Picture", "x642 y520 w24 h24 Hidden BackgroundTrans", "Resources\youtube.png")
 YoutubeImg.OnEvent("Click", YouTubeLink)
 
 MainGui.Title := "Ultimate Macro"
@@ -1986,7 +2095,7 @@ DiscordLink(ctrl, *) {
     Run("https://discord.gg/DQnc2JDJtr")
 }
 githubLink(ctrl, *) {
-    Run("https://github.com/DarksenDev/tds-macro")
+    Run("https://github.com/UltimateMacro/Ultimate-Macro-New-Era")
 }
 YouTubeLink(ctrl, *) {
     Run("https://www.youtube.com/@darksenn")
@@ -2209,7 +2318,7 @@ StartStrategy(*) {
     if (g_IsFirstLaunch = 1) {
         IniWrite(0, StateFile, "State", "IsFirstLaunch")
         MsgBox(
-            "Since you are starting the macro for the first time... Read this so your macro can work properly:`n`n1. Go to the TDS Settings and ENABLE 'Prefer Vertical Upgrades`n2. Go to the TDS Settings and set UI Scale to 'LARGE'`n3. Set your Roblox Camera Mode to Classic`n4. If your Roblox graphics are automatic, set them to manual.`n5. Turn off camera shake in TDS.`n6. Disable Dialog in TDS`n7. Enable UI Navigation toggle in the Roblox settings.`n8. Enable 'Show Tower Options' in TDS.`n9. Make sure you have 60 fps in Roblox settings.`n`nRecommended screen resolution for this macro is 1920x1080 (Resolutions bigger than 1080p may not work. You can use 1366x768 & 1280x720 though, they work pretty well). The scale must be 100%.`nThis macro requires a good CPU. You can use it though if your device is bad, enable potato mode and make the delays bigger.`nPlease, join my Discord server to get help and check the FAQ.",
+            "Since you are starting the macro for the first time... Read this so your macro can work properly:`n`n1. Go to the TDS Settings and ENABLE 'Prefer Vertical Upgrades`n2. Go to the TDS Settings and set UI Scale to 'LARGE'`n3. Set your Roblox Camera Mode to Classic`n4. If your Roblox graphics are automatic, set them to manual.`n5. Turn off camera shake in TDS.`n6. Disable Dialog in TDS`n7. Enable UI Navigation toggle in the Roblox settings.`n8. Enable 'Show Tower Options' in TDS.`n9. Set Roblox Maximum Frame Rate to 60 FPS (recommended for consistent macro timing).`n10. Set Windows Display Scale to 100%.`n`nRecommended screen resolution for this macro is 1920x1080 (Resolutions bigger than 1080p may not work. You can use 1366x768 & 1280x720 though, they work pretty well).`nThis macro requires a good CPU. You can use it though if your device is bad, enable potato mode and make the delays bigger.`nPlease, join my Discord server to get help and check the FAQ.",
             "READ THIS!!", 0x1030)
     }
 
@@ -2314,6 +2423,7 @@ StartRecording(ctrl, *) {
     global autoDropTheBeat, AutoSkip, AbilitySpam, MoveEnabled, MoveDirection, MoveDuration
     global Commander, RecordedSteps, Towers, MacroRecording, GuiTitleCtrl
     global Tab2_Btn1, Tab2_Btn2, HoverEffect
+    global RecordingWidth, RecordingHeight
 
     if (Recording)
         return
@@ -2326,6 +2436,22 @@ StartRecording(ctrl, *) {
             "Error", 0x1010)
         return
     }
+
+    ; Validate Roblox before changing button/title state. A failed Start Recording
+    ; must leave both the runtime state and the GUI in their idle state.
+    if !getRobloxPos(, , &RecordingWidth, &RecordingHeight) || RecordingWidth <= 0 || RecordingHeight <= 0 {
+        RecordingWidth := 0
+        RecordingHeight := 0
+        RuntimeLogWarn("recording_geometry_required", "Recording blocked because Roblox client geometry is unavailable")
+        MsgBox(
+            "Roblox must be open and detectable before starting a recording.`n`nOpen Roblox, then try Start Recording again.",
+            "Roblox required for recording",
+            0x30
+        )
+        return
+    }
+
+    RuntimeLogInfo("recording_geometry_captured", "Captured Roblox client size for recording", "width=" RecordingWidth "; height=" RecordingHeight)
 
     if (A_ScreenWidth != 1920 || A_ScreenHeight != 1080) {
         if (MsgBox(
@@ -2398,6 +2524,7 @@ StopRecord(ctrl, *) {
     global autoChain, autoCaravan, autoDropTheBeat, AutoSkip, AbilitySpam, MoveEnabled, MoveDirection, MoveDuration
     global GuiTitleCtrl, Strategy1Ctrl, RecordingsDir
     global Tab2_Btn1, Tab2_Btn2, HoverEffect
+    global RecordingWidth, RecordingHeight
 
     if (MacroRecording) {
         MacroRecording := false
@@ -2454,18 +2581,54 @@ StopRecord(ctrl, *) {
         if (box.Result = "Cancel")
             return
         filePath := RecordingsDir "\" box.Value ".strat"
-        if FileExist(filePath)
-            FileDelete(filePath)
-        getRobloxPos(&pX, &pY, &currentWidth, &currentHeight)
 
-        FileAppend("[Settings]`nmap=" gamemap "`ndifficulty=" difficulty "`nrequiredTowers=" requiredTowers
-            . "`nmodifiers=" Join(modifiers)
-            . "`nautoChain=" autoChain "`nautoCaravan=" autoCaravan "`nautoDropTheBeat=" autoDropTheBeat
-            . "`nautoSkip=" AutoSkip "`nabilitySpam=" AbilitySpam "`nmoveEnabled=" MoveEnabled "`nmoveDirection=" MoveDirection
-            . "`nmoveDuration=" MoveDuration "`n`n[DO NOT EDIT]`nwidth=" currentWidth "`nheight=" currentHeight "`n`n[Steps]`n",
-            filePath)
-        for i, step in RecordedSteps
-            FileAppend(step "`n", filePath)
+        if !getRobloxPos(&pX, &pY, &currentWidth, &currentHeight) || currentWidth <= 0 || currentHeight <= 0 {
+            currentWidth := RecordingWidth
+            currentHeight := RecordingHeight
+            RuntimeLogWarn("recording_geometry_save_fallback", "Using recording-start Roblox client size while saving", "width=" currentWidth "; height=" currentHeight)
+        }
+
+        if (currentWidth <= 0 || currentHeight <= 0) {
+            RuntimeLogError("recording_geometry_invalid", "Strategy save blocked because no valid Roblox client geometry is available")
+            MsgBox(
+                "The recording cannot be saved because its Roblox window size could not be determined.`n`nKeep Roblox open and try again.",
+                "Recording geometry unavailable",
+                0x10
+            )
+            return
+        }
+
+        ; Write beside the destination first. The previous strategy remains
+        ; untouched until the complete replacement is ready.
+        tempPath := filePath ".tmp"
+        try {
+            if FileExist(tempPath)
+                FileDelete(tempPath)
+
+            FileAppend("[Settings]`nmap=" gamemap "`ndifficulty=" difficulty "`nrequiredTowers=" requiredTowers
+                . "`nmodifiers=" Join(modifiers)
+                . "`nautoChain=" autoChain "`nautoCaravan=" autoCaravan "`nautoDropTheBeat=" autoDropTheBeat
+                . "`nautoSkip=" AutoSkip "`nabilitySpam=" AbilitySpam "`nmoveEnabled=" MoveEnabled "`nmoveDirection=" MoveDirection
+                . "`nmoveDuration=" MoveDuration "`n`n[DO NOT EDIT]`nwidth=" currentWidth "`nheight=" currentHeight "`n`n[Steps]`n",
+                tempPath)
+            for i, step in RecordedSteps
+                FileAppend(step "`n", tempPath)
+
+            FileMove(tempPath, filePath, 1)
+        } catch Error as err {
+            try {
+                if FileExist(tempPath)
+                    FileDelete(tempPath)
+            }
+            RuntimeLogError("recording_save_failed", "Recorded strategy save failed", "error=" err.Message)
+            MsgBox(
+                "The strategy could not be saved. Your previous file was left untouched.`n`n" err.Message,
+                "Recording save failed",
+                0x10
+            )
+            return
+        }
+
         LogToConsole("Strategy saved: " filePath)
         Strategy1Ctrl.Value := filePath
     } else {
@@ -3604,9 +3767,9 @@ ShowTowerPathDialog(towerID) {
     if (!Towers.Has(towerID) || Towers[towerID].path = 0 || Towers[towerID].path = "") {
         ActivePathSelectTowerID := towerID
         PathGui := Gui("+AlwaysOnTop +Border", "Path Selection")
-        PathGui.SetFont("s12 Bold c000000", "Segoe UI")
+        PathGui.SetFont("s12 Bold c000000", UIFont())
         PathGui.Add("Text", "x25 y20 w350", "Tower " towerID)
-        PathGui.SetFont("s11 w400 c000000", "Segoe UI")
+        PathGui.SetFont("s11 w400 c000000", UIFont())
         PathGui.Add("Text", "x25 y+10 w350", "Choose an upgrade path")
         PathGui.Add("Text", "x25 y+10 w350",
             "Rigth click on the tower indicator to make this appear.`nNote: enter 3 for Pursuit, Juggernaut, and Kingpin, 4 for Hacker"
@@ -4208,7 +4371,7 @@ LoadStrategyFile(file) {
     Commander := false
 
     StrategyWidth := Integer(IniRead(file, "DO NOT EDIT", "width", "1920"))
-    StrategyHeight := Integer(IniRead(file, "DO NOT EDIT", "height", "1090"))
+    StrategyHeight := Integer(IniRead(file, "DO NOT EDIT", "height", "1080"))
 
     inSteps := false
     loop read, file {
@@ -4335,12 +4498,20 @@ RunStrategy(stratFile := "", skipRestart := false) {
 
     if (!IsRestarting) {
         CheckTheMapF()
-        if (!InArray(SpecialMaps, gamemap)) {
+        if (!InArray(SpecialMaps, gamemap) && ResolveArcadeTarget() = "") {
             AlignCamera()
         }
     }
 
     activateTimescale()
+
+    if (!IsRestarting && ResolveArcadeTarget() != "") {
+        ; Arcade/Trial worlds should use the same deterministic camera baseline
+        ; before gameplay begins. Align while the Ready screen is still active,
+        ; then press Ready only after the camera operation has completed.
+        RuntimeLogInfo("arcade_camera_pre_ready", "Aligning Arcade camera before Ready", "target=" ResolveArcadeTarget())
+        AlignCamera()
+    }
 
     ClickReady()
 
@@ -5063,13 +5234,139 @@ SwitchToNextStrategy(&stratName) {
     return true
 }
 
+IsLegacyArcadeTarget(value) {
+    return (value = "Pizza Party" || value = "Badlands II" || value = "Polluted Wasteland II")
+}
+
+ResolveArcadeTarget() {
+    global gamemap, difficulty
+
+    ; v1.3.4 canonical format: Mode=Arcade and Map=<visible Arcade/Trial card label>.
+    ; Keep historical Pizza Party / Badlands II / PW2 strategy formats working.
+    if (difficulty = "Arcade" && gamemap != "")
+        return gamemap
+    if IsLegacyArcadeTarget(gamemap)
+        return gamemap
+    if IsLegacyArcadeTarget(difficulty)
+        return difficulty
+    return ""
+}
+
+TryOpenArcadeCategory(w, h) {
+    ; Prefer text targeting, but OCR must use SCREEN coordinates because
+    ; OCR.FromRect is independent of AHK's client-relative CoordMode.
+    try {
+        if GetRobloxScreenClientRect(&screenX, &screenY, &screenW, &screenH) {
+            langCode := "en-US"
+            for availableLang in StrSplit(OCR.GetAvailableLanguages(), "`n", "`r") {
+                if (availableLang != "" && SubStr(availableLang, 1, 2) = "en") {
+                    langCode := availableLang
+                    break
+                }
+            }
+
+            navX := screenX + Round(screenW * 0.145)
+            navY := screenY + Round(screenH * 0.08)
+            navW := Round(screenW * 0.09)
+            navH := Round(screenH * 0.50)
+            ocrResult := OCR.FromRect(navX, navY, navW, navH, {
+                lang: langCode,
+                scale: 1.7,
+                grayscale: 1
+            })
+            match := ocrResult.FindString("Arcade", { CaseSense: false, IgnoreLinebreaks: true })
+            if (match) {
+                RuntimeLogInfo("arcade_category_select", "Opening Arcade category by sidebar text")
+                match.Click()
+                Sleep(650)
+                return true
+            }
+        }
+    } catch Error as e {
+        RuntimeLogWarn("arcade_category_ocr_error", "Could not target Arcade category by text", "error=" e.Message)
+    }
+
+    ; The Play navigation rail is a fixed client-relative layout. This bounded
+    ; fallback prevents OCR/font/locale changes from blocking Arcade entirely.
+    ; At supported client sizes Arcade is the fourth item in the rail.
+    ActivateRoblox()
+    fallbackX := Round(w * 0.18)
+    fallbackY := Round(h * 0.43)
+    RuntimeLogInfo("arcade_category_fallback", "Opening Arcade category by relative sidebar position", "x=" fallbackX "; y=" fallbackY)
+    Click(fallbackX, fallbackY)
+    Sleep(650)
+    return true
+}
+
+GetArcadeCardClientRegion(w, h, &cardX, &cardY, &cardW, &cardH) {
+    ; Intentionally exclude the left category rail and the lower-right macro
+    ; console/log overlay. That overlay contains the configured map name and
+    ; previously caused OCR to click its own log text instead of a game card.
+    cardX := Round(w * 0.22)
+    cardY := Round(h * 0.06)
+    cardW := Round(w * 0.62)
+    cardH := Round(h * 0.70)
+}
+
+TryClickArcadeTarget(target, w, h) {
+    GetArcadeCardClientRegion(w, h, &cardX, &cardY, &cardW, &cardH)
+
+    imagePath := "Resources/" target ".png"
+    if FileExist(imagePath) {
+        res := AdvancedImageSearch(imagePath, cardX, cardY, cardX + cardW, cardY + cardH)
+        if (res.status = "success" && res.score >= 0.67) {
+            RuntimeLogInfo("arcade_card_image_select", "Selecting Arcade card by image", "target=" target "; score=" res.score)
+            Click(res.x, res.y)
+            Sleep(250)
+            return true
+        }
+    }
+
+    ; Generic fallback for future Arcade/Trial cards. OCR only the central game
+    ; card panel and capture it in SCREEN coordinates so moved Roblox windows
+    ; remain supported. Never OCR the macro console or sidebar here.
+    try {
+        if !GetRobloxScreenClientRect(&screenX, &screenY, &screenW, &screenH)
+            return false
+
+        langCode := "en-US"
+        for availableLang in StrSplit(OCR.GetAvailableLanguages(), "`n", "`r") {
+            if (availableLang != "" && SubStr(availableLang, 1, 2) = "en") {
+                langCode := availableLang
+                break
+            }
+        }
+
+        ocrX := screenX + Round(screenW * 0.22)
+        ocrY := screenY + Round(screenH * 0.06)
+        ocrW := Round(screenW * 0.62)
+        ocrH := Round(screenH * 0.70)
+        ocrResult := OCR.FromRect(ocrX, ocrY, ocrW, ocrH, {
+            lang: langCode,
+            scale: 1.45,
+            grayscale: 1
+        })
+        match := ocrResult.FindString(target, { CaseSense: false, IgnoreLinebreaks: true })
+        if (match) {
+            RuntimeLogInfo("arcade_card_text_select", "Selecting Arcade/Trial card by bounded text OCR", "target=" target)
+            match.Click()
+            Sleep(250)
+            return true
+        }
+    } catch Error as e {
+        RuntimeLogWarn("arcade_ocr_error", "Arcade card OCR targeting failed", "target=" target "; error=" e.Message)
+    }
+
+    return false
+}
+
 WaitForLobbyLoad() {
     global difficulty, MultiplayerEnabled, PlayerRole
 
     SetTimer(CheckPopups, 0)
 
     startTime := A_TickCount
-    if (difficulty != "Pizza Party" && difficulty != "Badlands II" && difficulty != "Polluted Wasteland II") {
+    if (ResolveArcadeTarget() = "") {
         Sleep(6000)
         loop {
             if (A_TickCount - startTime > 60000) {
@@ -5098,6 +5395,10 @@ WaitForLobbyLoad() {
 
 JoinGame() {
     global SendCurrenciesEnabled, WebhookEnabled, difficulty, CollectPlaytimeRewards, PlayerRole, MultiplayerEnabled
+    global readyX, readyY
+    readyX := 0
+    readyY := 0
+    RuntimeLogInfo("matchmaking_ready_reset", "Reset Ready coordinates before fresh matchmaking join")
     getRobloxPos(, , &w, &h)
 
     startTime := A_TickCount
@@ -5133,7 +5434,10 @@ JoinGame() {
 
             }
 
-            LogToConsole("Joining " difficulty "...", true, false)
+            joinTarget := ResolveArcadeTarget()
+            if (joinTarget = "")
+                joinTarget := difficulty
+            LogToConsole("Joining " joinTarget "...", true, false)
 
             Click(res.x, res.y)
             break
@@ -5142,20 +5446,66 @@ JoinGame() {
     }
     Sleep(300)
 
-    startTime := A_TickCount
-    modeImg := ""
+    lastArcadeScroll := 0
+    arcadeScrollAttempts := 0
 
-    if (difficulty = "Pizza Party" || difficulty = "Badlands II" || difficulty = "Polluted Wasteland II") {
-        modeImg := "SpecialMode.png"
-    }
-
-    if modeImg != "" {
-        getRobloxPos(, , &w, &h)
+    arcadeTarget := ResolveArcadeTarget()
+    if (arcadeTarget != "") {
+        categoryStart := A_TickCount
+        categoryOpened := false
         loop {
+            getRobloxPos(, , &w, &h)
+            if TryOpenArcadeCategory(w, h) {
+                categoryOpened := true
+                break
+            }
+            if (A_TickCount - categoryStart > 8000) {
+                RuntimeLogWarn("arcade_category_timeout", "Could not open Arcade category before card selection", "target=" arcadeTarget)
+                break
+            }
+            Sleep(150)
+        }
+        if !categoryOpened {
+            SafeReload()
+            return
+        }
+
+        ; Start card scrolling only after the Arcade category is active.
+        lastArcadeScroll := 0
+        arcadeScrollAttempts := 0
+        startTime := A_TickCount
+        loop {
+            getRobloxPos(, , &w, &h)
+            if (A_TickCount - startTime > 35000) {
+                RuntimeLogWarn("arcade_matchmaking_timeout", "Could not find Arcade/Trial card", "target=" arcadeTarget)
+                SafeReload()
+                break
+            }
+
+            if TryClickArcadeTarget(arcadeTarget, w, h)
+                break
+
+            ; Arcade lives below the standard matchmaking rows in the current Play UI.
+            ; Keep scrolling here (not inside ImageSearch) so image, OCR, and LegacyMode
+            ; all share the exact same bounded navigation behavior.
+            if (A_TickCount - lastArcadeScroll >= 650 && arcadeScrollAttempts < 12) {
+                ActivateRoblox()
+                MouseMove(Round(w * 0.78), Round(h * 0.78), 0)
+                SendEvent("{WheelDown 4}")
+                lastArcadeScroll := A_TickCount
+                arcadeScrollAttempts++
+            }
+            Sleep(100)
+        }
+        Sleep(300)
+    } else {
+        startTime := A_TickCount
+        loop {
+            getRobloxPos(, , &w, &h)
             if (A_TickCount - startTime > 20000) {
                 newStartTime := A_TickCount
-                res := AdvancedImageSearch("Resources\Play.png", x1, y1, x2, y2)
-                if (res.status == "success" && res.score > 0.65) {
+                res := AdvancedImageSearch("Resources\\Play.png", x1, y1, x2, y2)
+                if (res.status == "success" && res.score > 0.7) {
                     Click(res.x, res.y)
                     startTime := A_TickCount
                 } else {
@@ -5165,9 +5515,8 @@ JoinGame() {
                     }
                 }
             }
-
-            res := AdvancedImageSearch("Resources/" modeImg, 0, 0, w, h)
-            if (res.status = "success" && res.score >= 0.67) {
+            res := AdvancedImageSearch("Resources/" difficulty ".png", 0, 0, w, h)
+            if (res.status = "success" && res.score >= 0.7) {
                 Click(res.x, res.y)
                 break
             }
@@ -5175,31 +5524,6 @@ JoinGame() {
         }
         Sleep(300)
     }
-
-    startTime := A_TickCount
-    loop {
-        getRobloxPos(, , &w, &h)
-        if (A_TickCount - startTime > 20000) {
-            newStartTime := A_TickCount
-            res := AdvancedImageSearch("Resources\Play.png", x1, y1, x2, y2)
-            if (res.status == "success" && res.score > 0.7) {
-                Click(res.x, res.y)
-                startTime := A_TickCount
-            } else {
-                if (A_TickCount - newStartTime > 40000) {
-                    SafeReload()
-                    break
-                }
-            }
-        }
-        res := AdvancedImageSearch("Resources/" difficulty ".png", 0, 0, w, h)
-        if (res.status = "success" && res.score >= 0.7) {
-            Click(res.x, res.y)
-            break
-        }
-        Sleep(100)
-    }
-    Sleep(300)
 
     startTime := A_TickCount
     loop {
@@ -5870,7 +6194,7 @@ CheckTheMapF() {
 
     modifiers_str := (modifiers is Array) ? Join(modifiers) : String(modifiers)
 
-    if (FileExist("Resources\Maps\" . gamemap . ".png") && CheckTheMap = 1 && !InArray(SpecialMaps, gamemap) && !
+    if (ResolveArcadeTarget() = "" && FileExist("Resources\Maps\" . gamemap . ".png") && CheckTheMap = 1 && !InArray(SpecialMaps, gamemap) && !
     RegExMatch(modifiers_str, "i)fog")) {
         AlignCamera(false, false, false)
 
@@ -5954,6 +6278,14 @@ FindReadyButton(&foundX, &foundY) {
     if (result.status = "success" && result.score > 0.7) {
         foundX := result.x
         foundY := result.y
+
+        ; The GDI+ fallback reports screen coordinates, while mouse input uses Client coordinates.
+        if InStr(result.message, "Gdip fallback") {
+            WinGetClientPos(&clientX, &clientY, , , "ahk_exe RobloxPlayerBeta.exe")
+            foundX -= clientX
+            foundY -= clientY
+        }
+
         return true
     }
 
@@ -6028,8 +6360,7 @@ activateTimescale() {
     }
 
     getRobloxPos(&x, &y, &w, &h)
-    if (UseTimeScale && difficulty != "Pizza Party" && difficulty != "Badlands II" && difficulty !=
-        "Polluted Wasteland II") {
+    if (UseTimeScale && ResolveArcadeTarget() = "") {
         LogToConsole("Applying timescale: " TimeScaleMode ". Please, enable UI Navigation Toggle.")
         Click(Round(w * 0.5), Round(h * 0.5))
 
@@ -7400,37 +7731,146 @@ closeChat() {
 
 SendToWebhook(message) {
     global WebhookQueue, WebhookTimerActive
-    if (message = "" || Trim(message) = "") {
+    if (message = "" || Trim(message) = "")
         return
-    }
+
     WebhookQueue.Push(message)
     if (!WebhookTimerActive) {
         WebhookTimerActive := true
+        ; Debounce once, then send whatever is queued. Small batches are never
+        ; held indefinitely waiting to reach 20 messages.
         SetTimer(ProcessWebhookQueue, -2000)
     }
 }
 
 SendToWebhookInstant(message, embedColor := 3447003, flush := true) {
     global WebhookInstantQueue, WebhookInstantTimerActive, WebhookEnabled
-    if (!WebhookEnabled || message = "" || Trim(message) = "") {
+    if (!WebhookEnabled || message = "" || Trim(message) = "")
         return
-    }
-    if (flush) {
+
+    if (flush)
         FlushWebhookQueue()
-    }
 
     WebhookInstantQueue.Push({ msg: message, color: embedColor })
-
     if (!WebhookInstantTimerActive) {
         WebhookInstantTimerActive := true
         SetTimer(ProcessWebhookInstantQueue, -100)
     }
 }
 
+WebhookEscapeJson(value) {
+    value := String(value)
+    value := StrReplace(value, "\", "\\")
+    value := StrReplace(value, '"', '\"')
+    value := StrReplace(value, "`r", "")
+    value := StrReplace(value, "`n", "\n")
+    value := StrReplace(value, "`t", "\t")
+    return value
+}
+
+WebhookRetryDelayMs(whr, responseText := "") {
+    seconds := 0
+
+    try {
+        parsed := JSON.parse(responseText)
+        if parsed.Has("retry_after") && IsNumber(parsed["retry_after"])
+            seconds := Number(parsed["retry_after"])
+    }
+
+    if (seconds <= 0) {
+        try {
+            header := Trim(whr.GetResponseHeader("Retry-After"))
+            if IsNumber(header)
+                seconds := Number(header)
+        }
+    }
+
+    if (seconds <= 0) {
+        try {
+            header := Trim(whr.GetResponseHeader("X-RateLimit-Reset-After"))
+            if IsNumber(header)
+                seconds := Number(header)
+        }
+    }
+
+    if (seconds <= 0)
+        seconds := 1
+
+    return Min(30000, Max(500, Ceil(seconds * 1000) + 150))
+}
+
+PostWebhookJson(url, payload, maxAttempts := 3) {
+    global ver
+    if (url = "")
+        return false
+
+    loop maxAttempts {
+        try {
+            whr := ComObject("WinHttp.WinHttpRequest.5.1")
+            whr.Open("POST", url, false)
+            whr.SetRequestHeader("Content-Type", "application/json")
+            whr.SetRequestHeader("User-Agent", "Ultimate-Macro-New-Era/" ver)
+            whr.SetTimeouts(5000, 5000, 10000, 10000)
+            whr.Send(payload)
+
+            status := whr.Status
+            responseText := whr.ResponseText
+
+            if (status >= 200 && status < 300)
+                return true
+
+            if (status = 429) {
+                if (A_Index < maxAttempts) {
+                    Sleep(WebhookRetryDelayMs(whr, responseText))
+                    continue
+                }
+                return false
+            }
+
+            if (status >= 500 && status <= 599) {
+                if (A_Index < maxAttempts) {
+                    Sleep(Min(5000, 750 * A_Index))
+                    continue
+                }
+                return false
+            }
+
+            return false
+        } catch Error {
+            if (A_Index >= maxAttempts)
+                return false
+            Sleep(Min(5000, 750 * A_Index))
+        }
+    }
+
+    return false
+}
+
+PostWebhookDescription(url, description, color := 3447003, codeBlock := false) {
+    ; Discord embed descriptions are limited to 4096 characters. Keep a margin
+    ; for code fences and split large debug batches instead of receiving HTTP 400.
+    maxChars := codeBlock ? 3600 : 3900
+    remaining := String(description)
+
+    if (remaining = "")
+        return true
+
+    while (StrLen(remaining) > 0) {
+        chunk := SubStr(remaining, 1, maxChars)
+        remaining := SubStr(remaining, maxChars + 1)
+        escaped := WebhookEscapeJson(chunk)
+        fence := Chr(96) Chr(96) Chr(96)
+        rendered := codeBlock ? (fence "\n" escaped "\n" fence) : escaped
+        payload := '{"embeds":[{"description":"' rendered '","color":' color '}]}'
+        if !PostWebhookJson(url, payload)
+            return false
+    }
+
+    return true
+}
+
 ProcessWebhookInstantQueue() {
     global WebhookInstantQueue, WebhookInstantTimerActive, WebhookLink
-
-    static whr := ComObject("WinHttp.WinHttpRequest.5.1")
 
     if (WebhookInstantQueue.Length = 0) {
         WebhookInstantTimerActive := false
@@ -7447,7 +7887,6 @@ ProcessWebhookInstantQueue() {
             continue
 
         allMessages .= (allMessages != "") ? "`n" item.msg : item.msg
-
         if (item.color != 3447003) {
             finalColor := item.color
             hasCustomColor := true
@@ -7460,72 +7899,37 @@ ProcessWebhookInstantQueue() {
 
     if (!hasCustomColor) {
         lower := Format("{:L}", allMessages)
-        if (InStr(lower, "error") || InStr(lower, "failed") || InStr(lower, "reloading")) {
+        if (InStr(lower, "error") || InStr(lower, "failed") || InStr(lower, "reloading"))
             finalColor := 15158332
-        } else if (InStr(lower, "success") || InStr(lower, "completed")) {
+        else if (InStr(lower, "success") || InStr(lower, "completed"))
             finalColor := 3066993
-        } else if (InStr(lower, "warning")) {
+        else if (InStr(lower, "warning"))
             finalColor := 16776960
-        }
     }
 
-    escaped := StrReplace(StrReplace(StrReplace(allMessages, "\", "\\"), '"', '\"'), "`n", "\n")
-    payload := '{"embeds":[{"description":"' escaped '","color":' finalColor '}]}'
-
-    try {
-        whr.Open("POST", WebhookLink, true)
-        whr.SetRequestHeader("Content-Type", "application/json")
-        whr.SetTimeouts(5000, 5000, 8000, 8000)
-        whr.Send(payload)
-    } catch Error as err {
-        LogToConsole("Webhook send failed: " err.Message)
-    }
+    PostWebhookDescription(WebhookLink, allMessages, finalColor, false)
 }
 
 ProcessWebhookQueue() {
     global WebhookQueue, WebhookTimerActive, WebhookLink
-    static whr := ComObject("WinHttp.WinHttpRequest.5.1")
 
     if (WebhookQueue.Length = 0) {
         WebhookTimerActive := false
         return
     }
-    allMessages := ""
-    loop 20 {
-        if (WebhookQueue.Length = 0)
-            break
 
+    allMessages := ""
+    batchCount := Min(20, WebhookQueue.Length)
+
+    loop batchCount {
         msg := WebhookQueue.RemoveAt(1)
         if (Trim(msg) = "")
             continue
-
-        escaped := StrReplace(msg, "\", "\\")
-        escaped := StrReplace(escaped, '"', '\"')
-        escaped := StrReplace(escaped, "`n", "\n")
-        escaped := StrReplace(escaped, "`r", "")
-
-        if (Trim(escaped) = "")
-            continue
-
-        allMessages .= escaped "\n"
+        allMessages .= (allMessages != "") ? "`n" msg : msg
     }
 
-    if (allMessages = "") {
-        WebhookTimerActive := false
-        return
-    }
-
-    allMessages := RTrim(allMessages, "\n")
-
-    embedColor := 9868950
-    payload := '{"embeds":[{"description":"``````\n' allMessages '\n``````","color":' embedColor '}]}'
-
-    try {
-        whr.Open("POST", WebhookLink, true)
-        whr.SetRequestHeader("Content-Type", "application/json")
-        whr.Send(payload)
-    } catch Error {
-    }
+    if (allMessages != "")
+        PostWebhookDescription(WebhookLink, allMessages, 9868950, true)
 
     if (WebhookQueue.Length > 0)
         SetTimer(ProcessWebhookQueue, -1000)
@@ -7547,35 +7951,11 @@ FlushWebhookQueue() {
         msg := WebhookQueue.RemoveAt(1)
         if (Trim(msg) = "")
             continue
-
-        escaped := StrReplace(msg, "\", "\\")
-        escaped := StrReplace(escaped, '"', '\"')
-        escaped := StrReplace(escaped, "`n", "\n")
-        escaped := StrReplace(escaped, "`r", "")
-
-        if (Trim(escaped) = "")
-            continue
-
-        allMessages .= escaped "\n"
+        allMessages .= (allMessages != "") ? "`n" msg : msg
     }
 
-    if (allMessages = "")
-        return
-
-    allMessages := RTrim(allMessages, "\n")
-
-    embedColor := 9868950
-    payload := '{"embeds":[{"description":"``````\n' allMessages '\n``````","color":' embedColor '}]}'
-
-    try {
-        whr := ComObject("WinHttp.WinHttpRequest.5.1")
-        whr.Open("POST", WebhookLink, false)
-        whr.SetRequestHeader("Content-Type", "application/json")
-        whr.SetTimeouts(5000, 5000, 8000, 8000)
-        whr.Send(payload)
-    } catch Error as err {
-        LogToConsole("Webhook send failed: " err.Message)
-    }
+    if (allMessages != "")
+        PostWebhookDescription(WebhookLink, allMessages, 9868950, true)
 }
 
 SafeReload() {
@@ -7622,38 +8002,30 @@ startWatchdog() {
 KillSubmacros() {
     global watchdogPID
 
+    ; Prefer the exact PID returned when this installation launched watchdog.
     if (watchdogPID != "") {
         try {
-            RunWait(A_ComSpec " /c taskkill /PID " watchdogPID " /F /T", , "Hide")
-        } catch Error {
+            if ProcessExist(watchdogPID)
+                ProcessClose(watchdogPID)
         }
         watchdogPID := ""
     }
 
+    ; Fallback cleanup is path-scoped so another checkout/instance is untouched.
+    targetScript := StrLower(StrReplace(A_ScriptDir "\submacros\watchdog.ahk", "/", "\"))
     try {
         for process in ComObjGet("winmgmts:").ExecQuery(
             "SELECT * FROM Win32_Process WHERE Name = 'AutoHotkey64.exe' OR Name = 'AutoHotkey.exe' OR Name = 'AutoHotkey32.exe'"
         ) {
             try {
                 cmd := process.CommandLine
-                if (InStr(cmd, "watchdog.ahk")) {
-                    try {
-                        pID := process.ProcessId
-                        try {
-                            ProcessClose(pID)
-                        }
-
-                        process.Terminate()
-                    } catch Error {
-                        continue
-                    }
-                }
-            } catch Error {
-                continue
+                if (cmd = "")
+                    continue
+                normalizedCmd := StrLower(StrReplace(cmd, "/", "\"))
+                if InStr(normalizedCmd, targetScript)
+                    try ProcessClose(process.ProcessId)
             }
         }
-    } catch Error {
-        return
     }
 }
 
@@ -7722,38 +8094,68 @@ CheckOcrLanguage() {
     }
 }
 
-SendScreenshot(pBitmap := Gdip_BitmapFromScreen(), description := "", color := 12434877, screenshot :=
-WebhookScreenshots) {
+SendScreenshot(pBitmap := CaptureRobloxClientBitmap(), description := "", color := 12434877, screenshot := WebhookScreenshots) {
     global WebhookLink
 
-    escapedDescription := StrReplace(description, "\", "\\")
-    escapedDescription := StrReplace(escapedDescription, '"', '\"')
-    escapedDescription := StrReplace(escapedDescription, "`n", "\n")
-
+    escapedDescription := WebhookEscapeJson(description)
     fields := []
 
-    if (screenshot == "0" || screenshot == 0) {
+    if (screenshot == "0" || screenshot == 0 || !pBitmap) {
         payload_json := '{"embeds": [{"description": "' escapedDescription '", "color": ' color '}]}'
         fields.Push(Map("name", "payload_json", "content-type", "application/json", "content", payload_json))
-    }
-    else {
+    } else {
         payload_json := '{"embeds": [{"description": "' escapedDescription '", "color": ' color ', "image": {"url": "attachment://screenshot.png"}}]}'
         fields.Push(Map("name", "payload_json", "content-type", "application/json", "content", payload_json))
-        fields.Push(Map("name", "files[0]", "filename", "screenshot.png", "content-type", "image/png", "pBitmap",
-            pBitmap))
+        fields.Push(Map("name", "files[0]", "filename", "screenshot.png", "content-type", "image/png", "pBitmap", pBitmap))
     }
 
     CreateFormData(&postdata, &contentType, fields)
+    return PostWebhookMultipart(WebhookLink "?wait=true", postdata, contentType)
+}
 
-    try {
-        whr := ComObject("WinHttp.WinHttpRequest.5.1")
-        whr.Open("POST", WebhookLink "?wait=true", false)
-        whr.SetRequestHeader("Content-Type", contentType)
-        whr.SetTimeouts(5000, 5000, 15000, 15000)
-        whr.Send(postdata)
-    } catch Error as err {
-        LogToConsole("Screenshot webhook failed: " err.Message)
+PostWebhookMultipart(url, postdata, contentType, maxAttempts := 3) {
+    global ver
+
+    loop maxAttempts {
+        try {
+            whr := ComObject("WinHttp.WinHttpRequest.5.1")
+            whr.Open("POST", url, false)
+            whr.SetRequestHeader("Content-Type", contentType)
+            whr.SetRequestHeader("User-Agent", "Ultimate-Macro-New-Era/" ver)
+            whr.SetTimeouts(5000, 5000, 15000, 15000)
+            whr.Send(postdata)
+
+            status := whr.Status
+            responseText := whr.ResponseText
+            if (status >= 200 && status < 300)
+                return true
+
+            if (status = 429) {
+                if (A_Index < maxAttempts) {
+                    Sleep(WebhookRetryDelayMs(whr, responseText))
+                    continue
+                }
+                return false
+            }
+
+            if (status >= 500 && status <= 599) {
+                if (A_Index < maxAttempts) {
+                    Sleep(Min(5000, 750 * A_Index))
+                    continue
+                }
+                return false
+            }
+
+            return false
+        } catch Error as err {
+            if (A_Index >= maxAttempts) {
+                LogToConsole("Screenshot webhook failed: " err.Message)
+                return false
+            }
+            Sleep(Min(5000, 750 * A_Index))
+        }
     }
+    return false
 }
 
 CreateFormData(&retData, &contentType, fields) {
@@ -7817,8 +8219,11 @@ InArray(arr, value) {
     return false
 }
 
-CreateGradientButton(w, h, r, colorStart, colorEnd, shadowColor, strokeColor, btnText := "...", textFont := "Segoe UI",
+CreateGradientButton(w, h, r, colorStart, colorEnd, shadowColor, strokeColor, btnText := "...", textFont := "",
     textSize := 12, gradientDirection := 0) {
+    if (textFont = "")
+        textFont := UIFont()
+
     hdc := GetDC(0)
     hbm := CreateDIBSection(w, h)
     hdcMem := CreateCompatibleDC()
@@ -8163,7 +8568,7 @@ ProcessCommands(*) {
             )
         }
         else if (content == "!screenshot") {
-            pBitmap := Gdip_BitmapFromScreen()
+            pBitmap := CaptureRobloxClientBitmap()
             Discord.SendScreenshot(pBitmap, "Requested Screenshot")
             Gdip_DisposeImage(pBitmap)
         }
