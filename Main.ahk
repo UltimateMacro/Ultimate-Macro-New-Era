@@ -27,6 +27,10 @@ if (RegExMatch(A_ScriptDir, "i)\.(zip|rar)")) {
     ExitApp()
 }
 
+if (!FileExist(A_ScriptDir "\lib\OCR.ahk") || !FileExist(A_ScriptDir "\lib\JSON.ahk")) {
+    BootstrapPinnedSourceDependencies()
+}
+
 if WinExist("Ultimate Macro") {
     WinClose("Ultimate Macro")
 }
@@ -36,15 +40,73 @@ if (A_PtrSize == 4) {
 }
 
 #Include lib\Gdip_All.ahk
-#Include lib\OCR.ahk
+#Include *i lib\OCR.ahk
 #Include lib\Gdip_ImageSearch.ahk
 #Include lib\Roblox.ahk
 #Include lib\HyperSleep.ahk
 #Include lib\ImageSearch\ImageSearch.ahk
 #Include submacros\updater.ahk
-#Include lib\JSON.ahk
+#Include *i lib\JSON.ahk
 #Include lib\Discord.ahk
 #Include lib\RuntimeLog.ahk
+
+BootstrapPinnedSourceDependencies() {
+    ocrPath := A_ScriptDir "\lib\OCR.ahk"
+    jsonPath := A_ScriptDir "\lib\JSON.ahk"
+    syncScript := A_ScriptDir "\tools\sync_dependencies.ps1"
+
+    if (FileExist(ocrPath) && FileExist(jsonPath))
+        return
+
+    if !FileExist(syncScript) {
+        MsgBox(
+            "Ultimate Macro is missing its verified OCR/JSON source dependencies.`n`n"
+            "This normally means you downloaded repository source files instead of an official release.`n`n"
+            "Please download TDS_Macro.zip from GitHub Releases, or restore tools\sync_dependencies.ps1.",
+            "Missing Runtime Dependencies",
+            0x10
+        )
+        ExitApp()
+    }
+
+    powershell := A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe"
+    quote := Chr(34)
+    command := quote powershell quote
+        . " -NoProfile -ExecutionPolicy Bypass -File "
+        . quote syncScript quote
+
+    try {
+        exitCode := RunWait(command, A_ScriptDir, "Hide")
+    } catch Error as err {
+        MsgBox(
+            "Ultimate Macro could not prepare its verified OCR/JSON dependencies.`n`n"
+            err.Message
+            "`n`nYou can also run tools\sync_dependencies.ps1 manually.",
+            "Dependency Setup Failed",
+            0x10
+        )
+        ExitApp()
+    }
+
+    if (
+        exitCode != 0
+        || !FileExist(ocrPath)
+        || !FileExist(jsonPath)
+    ) {
+        MsgBox(
+            "Verified OCR/JSON dependency setup did not complete successfully.`n`n"
+            "Check your internet connection or download the official TDS_Macro.zip release.",
+            "Dependency Setup Failed",
+            0x10
+        )
+        ExitApp()
+    }
+
+    ; Includes are processed when the script starts, so restart once the
+    ; verified files have been materialized.
+    Reload()
+    ExitApp()
+}
 
 command_buffer := []
 

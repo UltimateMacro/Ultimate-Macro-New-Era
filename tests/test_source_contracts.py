@@ -19,6 +19,31 @@ def region(source: str, start: str, end: str) -> str:
     return source[start_index:end_index]
 
 
+def validate_source_dependency_bootstrap(main: str) -> None:
+    assert r"#Include *i lib\OCR.ahk" in main
+    assert r"#Include *i lib\JSON.ahk" in main
+
+    startup = region(
+        main,
+        'if (!FileExist(A_ScriptDir "\\lib\\OCR.ahk")',
+        'if WinExist("Ultimate Macro")',
+    )
+    assert "BootstrapPinnedSourceDependencies()" in startup
+
+    bootstrap = region(
+        main,
+        "BootstrapPinnedSourceDependencies() {",
+        "command_buffer := []",
+    )
+
+    assert r"tools\sync_dependencies.ps1" in bootstrap
+    assert "RunWait(" in bootstrap
+    assert "-NoProfile -ExecutionPolicy Bypass -File" in bootstrap
+    assert r"lib\OCR.ahk" in bootstrap
+    assert r"lib\JSON.ahk" in bootstrap
+    assert "Reload()" in bootstrap
+
+
 def validate_settings_contracts(main: str) -> None:
     assert re.search(
         r'global\s+UpgradeDelay\s*:=\s*IniRead\(SettingsFile,\s*"Options",\s*"UpgradeDelay",\s*200\)',
@@ -294,6 +319,7 @@ def validate(root: Path) -> None:
     safe_updater = read(root / "submacros" / "safe_update.ps1")
     wrapper = read(root / "submacros" / "update.bat")
 
+    validate_source_dependency_bootstrap(main)
     validate_settings_contracts(main)
     validate_strategy_geometry(main)
     validate_bitmap_ownership(main, watchdog, discord)
