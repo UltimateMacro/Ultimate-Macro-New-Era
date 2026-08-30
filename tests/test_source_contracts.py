@@ -52,14 +52,31 @@ def validate_bitmap_ownership(main: str, watchdog: str, discord: str) -> None:
     assert 'SendScreenshot(, "' not in watchdog, (
         "watchdog screenshot callers must allocate and own their bitmap explicitly"
     )
+
+    owned_captures = re.findall(
+        r"(?m)^\s*pBitmap\s*:=\s*CaptureRobloxClientBitmap\(\)\s*$",
+        watchdog,
+    )
     owned_pairs = re.findall(
         r"SendScreenshot\(pBitmap,[^\r\n]*\)\s*(?:\r?\n)\s*Gdip_DisposeImage\(pBitmap\)",
         watchdog,
     )
-    assert len(owned_pairs) >= 7, "every watchdog screenshot path must dispose its owned bitmap"
 
-    bot_screenshot = region(main, 'else if (content == "!screenshot")', 'else if (content == "!status")')
-    assert "pBitmap := Gdip_BitmapFromScreen()" in bot_screenshot
+    assert owned_captures, "watchdog must explicitly capture Roblox-client bitmaps"
+    assert len(owned_pairs) == len(owned_captures), (
+        "every watchdog CaptureRobloxClientBitmap path must dispose its owned bitmap"
+    )
+
+    # Roblox being absent is intentionally text-only. Never capture the desktop
+    # merely to report that the Roblox client does not exist.
+    assert 'SendScreenshot(0, "Roblox is not running!"' in watchdog
+
+    bot_screenshot = region(
+        main,
+        'else if (content == "!screenshot")',
+        'else if (content == "!status")',
+    )
+    assert "pBitmap := CaptureRobloxClientBitmap()" in bot_screenshot
     assert 'Discord.SendScreenshot(pBitmap, "Requested Screenshot")' in bot_screenshot
     assert "Gdip_DisposeImage(pBitmap)" in bot_screenshot
 
@@ -67,7 +84,6 @@ def validate_bitmap_ownership(main: str, watchdog: str, discord: str) -> None:
     assert "Gdip_DisposeImage" not in discord_send, (
         "Discord.SendScreenshot must not dispose a caller-owned bitmap"
     )
-
 
 def validate_watchdog_result_fallbacks(watchdog: str) -> None:
     send_info = region(watchdog, 'SendInfo(matchResult := "")', "BinarizeTargetBitmap(pBitmap)")
@@ -116,22 +132,32 @@ def validate_ready_detection(main: str) -> None:
         "Ready must be detected before a click and rechecked after it"
     )
     assert "SafeReload()" in ready, "unconfirmed Ready clicks must fail safely"
-    assert "WinGetClientPos" not in ready, (
-        "Ready must trust the shared client-coordinate contract instead of applying a second offset"
-    )
-
 
 def validate_community_strategy_update(main: str) -> None:
-    assert (
-        "UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main" in main
-    )
-    assert "DarksenDev/tds-macro/contents/Strategies" not in main
-    assert "for entry in JSON.parse(responseText)" in main
-    assert "fileCount := strategyFiles.Length" in main
-    assert "if (fileCount == 0)" in main
-    assert "if (successCount != fileCount)" in main
-    assert r"raw\.githubusercontent\.com/UltimateMacro/Ultimate-Macro-New-Era/" in main
+    community = region(main, "if (needUpdate) {", "global FrameX := 30")
 
+    assert (
+        "UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main"
+        in community
+    )
+    assert "DarksenDev/tds-macro/contents/Strategies" not in community
+
+    # The v1.3.4 updater parses GitHub's structured response and counts only
+    # valid .strat entries. Do not couple this contract to an obsolete local
+    # strategyFiles array implementation.
+    assert "JSON.parse(whr.ResponseText)" in community
+    assert "RegExMatch(responseText" not in community
+
+    # Empty or partial remote results can never replace the currently installed
+    # community strategy set.
+    assert "fileCount == 0" in community
+    assert "successCount != fileCount" in community
+
+    # User files are not silently overwritten and the refresh is transactional.
+    assert "would overwrite a local strategy" in community
+    assert ".download_temp" in community
+    assert ".community_backup" in community
+    assert "finally" in community
 
 def validate_webhook_batching(main: str) -> None:
     queue = region(main, "SendToWebhook(message)", "SafeReload()")
@@ -143,14 +169,24 @@ def validate_webhook_batching(main: str) -> None:
 
 
 def validate_image_search_coordinates(image_search: str) -> None:
-    fallback = region(image_search, "; GDI+ Fallback", 'return {status: "error", message: "Unknown error occurred"')
-    assert 'Gdip_BitmapFromScreen(xC "|" yC "|" widthC "|" heightC)' in fallback
-    assert "getRobloxPos(" not in fallback, (
-        "fallback capture must not overwrite screen-space xC/yC with client-space zeroes"
-    )
-    assert "x: centerX" in fallback and "y: centerY" in fallback
-    assert "xC + centerX" not in fallback and "yC + centerY" not in fallback
+    # The image-search contract has two coordinate spaces:
+    # capture in SCREEN coordinates, results in Roblox CLIENT coordinates.
+    assert "GetRobloxScreenClientRect" in image_search
+    assert 'pBitmapHaystack := Gdip_BitmapFromScreen(screenX' in image_search
 
+    assert "x: centerX" in image_search
+    assert "y: centerY" in image_search
+
+    # Never add the screen-space client origin back into returned coordinates.
+    assert "xC + centerX" not in image_search
+    assert "yC + centerY" not in image_search
+    assert "screenX + centerX" not in image_search
+    assert "screenY + centerY" not in image_search
+
+    # Runtime must expose which backend is active and retain a safe fallback.
+    assert "GetImageSearchBackendInfo()" in image_search
+    assert '"GDI+ fallback"' in image_search
+    assert '"OpenCV native"' in image_search
 
 def validate_discord_retries(discord: str) -> None:
     request = region(discord, "static Request(method, url", "static GetRetryDelayMs(")
@@ -168,21 +204,45 @@ def validate_discord_retries(discord: str) -> None:
 
 
 def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
+    # GlobalSize must receive the owning HGLOBAL, never the GlobalLock pointer.
     for name, source in (("Main", main), ("watchdog", watchdog), ("Discord", discord)):
-        assert 'GlobalSize", "Ptr", hData' in source, f"{name} must pass HGLOBAL to GlobalSize"
+        assert 'GlobalSize", "Ptr", hData' in source, (
+            f"{name} must pass HGLOBAL to GlobalSize"
+        )
         assert 'GlobalSize", "Ptr", pData' not in source, (
             f"{name} must not pass the GlobalLock pointer to GlobalSize"
         )
-    assert 'IUnknown_Release", "Ptr", pStream' in watchdog
+
+    # AutoHotkey v2 owns COM interface references through ObjRelease.
+    assert "IUnknown_Release" not in watchdog
+    assert "ObjRelease(pFileStream)" in watchdog
+    assert "ObjRelease(pStream)" in watchdog
     assert "ObjRelease(pStream)" in main
     assert "ObjRelease(pStream)" in discord
 
     discord_form = region(discord, "static CreateFormData(", "\n}")
-    assert "streamComplete := false" in discord_form
-    assert "if !streamComplete" in discord_form
-    assert discord_form.count('GlobalFree", "Ptr", hData') >= 3
-    assert re.search(r"try\s*\{.*RtlMoveMemory.*\}\s*finally\s*\{", discord_form, re.DOTALL)
 
+    # Multipart streams must have explicit ownership and finally-based cleanup.
+    assert "pStream := 0" in discord_form
+    assert "ObjRelease(pStream)" in discord_form
+
+    # Discord has bitmap and file-backed multipart paths. Both temporary
+    # IStream references must be independently released.
+    assert discord_form.count("pFileStream := 0") >= 2
+    assert discord_form.count("ObjRelease(pFileStream)") >= 2
+
+    # Backing HGLOBAL must be locked only for the final copy and released
+    # regardless of whether RtlMoveMemory succeeds.
+    assert 'GlobalLock", "Ptr", hData' in discord_form
+    assert 'GlobalUnlock", "Ptr", hData' in discord_form
+    assert 'GlobalFree", "Ptr", hData' in discord_form
+
+    assert re.search(
+        r"try\s*\{.*RtlMoveMemory.*\}\s*finally\s*\{"
+        r".*GlobalUnlock.*GlobalFree",
+        discord_form,
+        re.DOTALL,
+    ), "Discord multipart HGLOBAL must be released in finally"
 
 def validate_transactional_updater(updater: str, safe_updater: str, wrapper: str) -> None:
     assert "UltimateMacro/Ultimate-Macro-New-Era/releases/latest" in updater

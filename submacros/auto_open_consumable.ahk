@@ -4,7 +4,7 @@
 #Include %A_LineFile%/../../lib/Roblox.ahk
 #Include %A_LineFile%/../../lib/ImageSearch/ImageSearch.ahk
 
-SetWorkingDir("%A_LineFile%/../../")
+SetWorkingDir(A_ScriptDir "\..")
 
 global unfocusX := 150, unfocusY := 200
 global isRunning := false
@@ -30,6 +30,7 @@ aGui.OnEvent("Close", (*) => ExitApp())
 SetTimer(() => RemoveInitialFocus(), -50)
 
 RemoveInitialFocus() {
+    global aGui, text
     if !WinActive("ahk_id " aGui.Hwnd)
         return
     ControlFocus(text, "ahk_id " aGui.Hwnd)
@@ -39,24 +40,26 @@ F3::StartMacro()
 F4::StopMacro()
 
 StartMacro() {
-    global IsRunning
+    global IsRunning, aGui
     if (IsRunning)
         return
+    if !GetRobloxHWND() {
+        try aGui.Title := "Roblox not found"
+        return
+    }
+
     IsRunning := true
-
     try aGui.Title := "Running..."
-
     SetTimer(StartSpinningtheWheel, 100)
 }
 
 StopMacro() {
-    global IsRunning, usedt
+    global IsRunning, aGui
     if (!IsRunning)
         return
     IsRunning := false
 
     try aGui.Title := "auto_open_consumable.ahk"
-
     SetTimer(StartSpinningtheWheel, 0)
 }
 
@@ -66,37 +69,51 @@ StartSpinningtheWheel() {
     if (!IsRunning)
         return
 
-    SetTimer(StartSpinningtheWheel, 0) 
-    
+    SetTimer(StartSpinningtheWheel, 0)
     SpinWheel()
-    
+
     if (IsRunning)
-        SetTimer(StartSpinningtheWheel, 100) 
+        SetTimer(StartSpinningtheWheel, 100)
 }
 
 SpinWheel() {
-    global IsRunning, usedt
-    ActivateRoblox()
+    global IsRunning, usedt, aGui, unfocusX, unfocusY, usedtickets_text
+    if !ActivateRoblox() {
+        StopMacro()
+        try aGui.Title := "Roblox not found"
+        return
+    }
 
     if (!IsRunning)
         return
 
     getRobloxPos(,,&w,&h)
+    if (w <= 0 || h <= 0) {
+        StopMacro()
+        return
+    }
 
     startTime := A_TickCount
 
     Loop {
+        if (!IsRunning)
+            return
+
         resOpen := AdvImageSearch("Resources/open.png", Round(w*0.25), Round(h*0.6), Round(w*0.5), h)
-        if (resOpen.score > 0.7) {
+        if (resOpen.status == "success" && resOpen.score > 0.7) {
             Click(resOpen.x, resOpen.y)
             MouseMove(ScaleX(unfocusX), ScaleY(unfocusY))
             Sleep(550)
             break
-        } 
+        }
+
         if (A_TickCount - startTime > 3000) {
             StopMacro()
             return
         }
+
+        ; Avoid a tight OpenCV/GDI+ loop while waiting for the Open button.
+        Sleep(75)
     }
 
     loop 15 {
@@ -114,17 +131,17 @@ SpinWheel() {
     Loop {
         if (!IsRunning)
             break
-            
+
         resConfirm := AdvImageSearch("Resources/next.png", Round(w*0.25), Round(h*0.6), Round(w*0.5), h)
-        
+
         if (resConfirm.status == "success" && resConfirm.score > 0.55) {
             oldMode := A_SendMode
             oldDelay := A_MouseDelay
             SetMouseDelay(0)
             SendMode('Input')
             Loop 30 {
-            Click(resConfirm.x, resConfirm.y)
-            Sleep(1)
+                Click(resConfirm.x, resConfirm.y)
+                Sleep(1)
             }
             SetMouseDelay(oldDelay)
             SendMode(oldMode)
@@ -146,19 +163,17 @@ SpinWheel() {
             break
         }
 
-        if attempts > 10 
+        if attempts > 10
             break
-
-        
     }
 }
 
 ScaleX(baseX, Width := 1920) {
     getRobloxPos(&pX, &pY, &currentWidth, &currentHeight)
-    return Round(baseX * (currentWidth / Width))
+    return currentWidth > 0 ? Round(baseX * (currentWidth / Width)) : baseX
 }
 
 ScaleY(baseY, Height := 1009) {
     getRobloxPos(&pX, &pY, &currentWidth, &currentHeight)
-    return Round(baseY * (currentHeight / Height))
+    return currentHeight > 0 ? Round(baseY * (currentHeight / Height)) : baseY
 }

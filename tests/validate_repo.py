@@ -18,6 +18,7 @@ REQUIRED_RUNTIME_FILES = (
     "lib/OCR.ahk",
     "lib/JSON.ahk",
     "lib/Roblox.ahk",
+    "lib/RuntimeLog.ahk",
     "submacros/updater.ahk",
     "submacros/update.bat",
     "submacros/safe_update.ps1",
@@ -141,17 +142,19 @@ def validate_resources(root: Path, errors: list[str]) -> None:
 
     for source in root.rglob("*.ahk"):
         for match in resource_re.findall(read_text(source)):
-            references.add(match.lstrip("\\/").replace("\\", "/"))
+            normalized = match.lstrip("\\/").replace("\\", "/")
+            normalized = re.sub(r"/+", "/", normalized)
+            references.add(normalized)
 
     actual = {
         path.relative_to(root).as_posix().casefold()
         for path in (root / "Resources").rglob("*")
         if path.is_file()
     }
+
     for reference in sorted(references):
         if reference.casefold() not in actual:
             fail(errors, f"runtime resource is missing: {reference}")
-
 
 def validate_binary_scope(root: Path, tracked: list[str], errors: list[str]) -> None:
     binaries = {
