@@ -32,10 +32,23 @@ already required by the runtime.
 | `lib/ImageSearch/image_search.dll` | `346d25b9baf582b4cd5550fceaa57f4b1e18f10ae38007ba52ccd07bd790221e` | Existing unsigned upstream binary. Its source/build provenance still needs a separate binary review. |
 | `lib/ImageSearch/msvcp140.dll` | `7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca` | Existing Microsoft-signed runtime, version 14.51.36247.0. Prefer the official Visual C++ Redistributable in a future packaging review. |
 
-`ImageSearch.ahk` also looks for `opencv_world500.dll`. The runtime deliberately
-falls back to GDI+ when it is absent.
+`ImageSearch.ahk` also looks for `opencv_world500.dll`.
 
-The FULL reference copy of `opencv_world500.dll` was audited but is not shipped:
+> **Changed in this build.** `opencv_world500.dll` and `vcruntime140.dll` are now
+> **shipped**. Excluding them was not a neutral packaging choice: `image_search.dll`
+> links against OpenCV, so without them `LoadLibrary` fails with
+> `ERROR_MOD_NOT_FOUND` (126) and every detection silently drops to the GDI+
+> fallback, which does exact 1:1 pixel matching with no scale tolerance and
+> returns only 1.0 or 0. Every threshold in `Main.ahk` assumes real template-match
+> confidence, so in practice the macro stops recognising the game. Both files are
+> byte-identical to the official New Era v1.3.3 `TDS_Macro.zip` asset and are now
+> pinned by hash in `tests/validate_repo.py`.
+>
+> The open provenance question below is unchanged and still worth resolving — but
+> it must be resolved by producing a reproducible OpenCV build, not by shipping a
+> macro that cannot see.
+
+Audit of the shipped `opencv_world500.dll`:
 
 - size: 80,108,032 bytes;
 - file/product version: 5.0.0;
@@ -45,7 +58,7 @@ The FULL reference copy of `opencv_world500.dll` was audited but is not shipped:
 - upstream OpenCV license: Apache-2.0;
 - unresolved: exact compiler/build recipe and bundled notice provenance.
 
-The FULL `vcruntime140.dll` is also excluded. It is Microsoft-signed version
+`vcruntime140.dll` is now shipped alongside it. It is Microsoft-signed version
 14.51.36247.0 with SHA-256
 `d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7`.
 Install the supported Microsoft Visual C++ Redistributable instead of copying
