@@ -47,7 +47,7 @@ Primary provenance references:
 - <https://github.com/thqby/ahk2_lib/tree/4d1fe28493bcb665d7fcccce1289ed9a36df4ff0>
 - <https://github.com/opencv/opencv/releases/tag/5.0.0>
 - <https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist>
-- <https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases/tag/v1.3.3>
+- <https://github.com/DarksenDev/tds-macro/releases/tag/1.3.3>
 
 ## Changes to port
 
@@ -213,3 +213,14 @@ Manual QA remains required for Roblox image clicks at representative client
 sizes, a full strategy run, recording/settings persistence, webhook/bot sends
 with disposable credentials, watchdog recovery, and a disposable-install
 updater test.
+
+## Release updater repository migration
+
+- Point only latest-release discovery and release-asset allowlists at
+  `DarksenDev/tds-macro`.
+- Keep the development and community strategy source on
+  `UltimateMacro/Ultimate-Macro-New-Era`.
+- Extend repository/source contracts to require the official release endpoints
+  and reject the retired release lookup/download paths.
+- Run all repository, PowerShell, updater-smoke, and AutoHotkey validation gates.
+- Leave the result uncommitted and unpushed for manual review as requested.
