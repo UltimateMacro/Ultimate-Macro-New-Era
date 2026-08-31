@@ -1,4 +1,4 @@
-﻿#Requires AutoHotkey v2.0
+#Requires AutoHotkey v2.0
 
 #Include %A_LineFile%/../../Gdip_All.ahk
 #Include %A_LineFile%/../../Gdip_ImageSearch.ahk
@@ -25,58 +25,66 @@ GetImageSearchBackendInfo() {
     }
 }
 
-AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0, maxScale := 0.0, scaleStep := 0.05) {
+; Resolve the image-search backend once. Callers may invoke this at startup so
+; the macro can report which backend is active BEFORE any detection runs. The
+; GDI+ fallback has no scale tolerance and returns a binary score, so silently
+; degrading to it makes almost every threshold in the macro unreachable.
+EnsureImageSearchBackend() {
     global ImageSearchBackendState
+    static isInitialized := false
     static hOpenCV := 0
     static hModule := 0
-    static isInitialized := false
-    static useFallback := false
 
-    if (!isInitialized) {
-        SplitPath(A_LineFile, , &dir)
-        opencvPath := dir "\opencv_world500.dll"
-        dllPath := dir "\image_search.dll"
+    if isInitialized
+        return ImageSearchBackendState.nativeAvailable
 
-        if !FileExist(dllPath) {
-            useFallback := true
-            ImageSearchBackendState.backend := "GDI+ fallback"
-            ImageSearchBackendState.reason := "image_search.dll is missing"
-        } else if !FileExist(opencvPath) {
-            useFallback := true
-            ImageSearchBackendState.backend := "GDI+ fallback"
-            ImageSearchBackendState.reason := "opencv_world500.dll is missing"
-        } else {
-            oldDllDir := ""
-            try {
-                DllCall("Kernel32.dll\SetDllDirectory", "Str", dir)
-                hOpenCV := DllCall("Kernel32.dll\LoadLibraryW", "Str", opencvPath, "Ptr")
-                hModule := DllCall("Kernel32.dll\LoadLibraryW", "Str", dllPath, "Ptr")
-            } finally {
-                DllCall("Kernel32.dll\SetDllDirectoryW", "Ptr", 0)
-            }
+    SplitPath(A_LineFile, , &dir)
+    opencvPath := dir "\opencv_world500.dll"
+    dllPath := dir "\image_search.dll"
 
-            if (!hOpenCV || !hModule) {
-                useFallback := true
-                if hOpenCV {
-                    DllCall("Kernel32.dll\FreeLibrary", "Ptr", hOpenCV)
-                    hOpenCV := 0
-                }
-                if hModule {
-                    DllCall("Kernel32.dll\FreeLibrary", "Ptr", hModule)
-                    hModule := 0
-                }
-                ImageSearchBackendState.backend := "GDI+ fallback"
-                ImageSearchBackendState.reason := "native image-search dependencies failed to load"
-            } else {
-                ImageSearchBackendState.backend := "OpenCV native"
-                ImageSearchBackendState.reason := "native dependencies loaded"
-                ImageSearchBackendState.nativeAvailable := true
-            }
+    if !FileExist(dllPath) {
+        ImageSearchBackendState.backend := "GDI+ fallback"
+        ImageSearchBackendState.reason := "image_search.dll is missing"
+    } else if !FileExist(opencvPath) {
+        ImageSearchBackendState.backend := "GDI+ fallback"
+        ImageSearchBackendState.reason := "opencv_world500.dll is missing"
+    } else {
+        try {
+            DllCall("Kernel32.dll\SetDllDirectoryW", "Str", dir)
+            hOpenCV := DllCall("Kernel32.dll\LoadLibraryW", "Str", opencvPath, "Ptr")
+            hModule := DllCall("Kernel32.dll\LoadLibraryW", "Str", dllPath, "Ptr")
+        } finally {
+            DllCall("Kernel32.dll\SetDllDirectoryW", "Ptr", 0)
         }
 
-        ImageSearchBackendState.initialized := true
-        isInitialized := true
+        if (!hOpenCV || !hModule) {
+            if hOpenCV {
+                DllCall("Kernel32.dll\FreeLibrary", "Ptr", hOpenCV)
+                hOpenCV := 0
+            }
+            if hModule {
+                DllCall("Kernel32.dll\FreeLibrary", "Ptr", hModule)
+                hModule := 0
+            }
+            ImageSearchBackendState.backend := "GDI+ fallback"
+            ImageSearchBackendState.reason := "native image-search dependencies failed to load"
+        } else {
+            ImageSearchBackendState.backend := "OpenCV native"
+            ImageSearchBackendState.reason := "native dependencies loaded"
+            ImageSearchBackendState.nativeAvailable := true
+        }
     }
+
+    ImageSearchBackendState.initialized := true
+    isInitialized := true
+    return ImageSearchBackendState.nativeAvailable
+}
+
+AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0, maxScale := 0.0, scaleStep := 0.05) {
+    global ImageSearchBackendState
+
+    EnsureImageSearchBackend()
+    useFallback := !ImageSearchBackendState.nativeAvailable
 
     hwnd := GetRobloxHWND()
     if !hwnd
@@ -118,14 +126,6 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
             scale := NumGet(structResult, 24, "Float")
 
             if ((status >= 1 && status <= 4) && score >= 0.0) {
-                ; JoinGame requires >= 0.67 for SpecialMode.png. A weak native
-                ; match is therefore still a miss for that flow; scroll the new
-                ; vertically-scrollable Play menu and let its existing loop retry.
-                if (IsSpecialModeTemplate(templatePath) && score < 0.67) {
-                    if MaybeScrollSpecialModeSearch(templatePath, widthC, heightC)
-                        return ImageSearchError("special-mode menu scrolled; retrying", score)
-                }
-
                 ; The native DLL historically returns coordinates relative to the
                 ; searched Roblox client. Keep that established contract here.
                 return {
@@ -141,24 +141,15 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
                 }
             }
 
-            if MaybeScrollSpecialModeSearch(templatePath, widthC, heightC)
-                return ImageSearchError("special-mode menu scrolled; retrying", score)
-
             return ImageSearchError("Native image search returned code " status, score)
         } catch Error as err {
+            ; Demote to the fallback for the rest of the session. The loaded
+            ; modules are intentionally left mapped: another thread may still be
+            ; inside a native call, and unloading underneath it would crash.
             useFallback := true
             ImageSearchBackendState.backend := "GDI+ fallback"
             ImageSearchBackendState.reason := "native call failed: " err.Message
             ImageSearchBackendState.nativeAvailable := false
-
-            if hOpenCV {
-                DllCall("Kernel32.dll\FreeLibrary", "Ptr", hOpenCV)
-                hOpenCV := 0
-            }
-            if hModule {
-                DllCall("Kernel32.dll\FreeLibrary", "Ptr", hModule)
-                hModule := 0
-            }
         }
     }
 
@@ -219,9 +210,6 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
             }
         }
 
-        if MaybeScrollSpecialModeSearch(templatePath, widthC, heightC)
-            return ImageSearchError("special-mode menu scrolled; retrying")
-
         return ImageSearchError("image not found via GDI+ fallback")
     } finally {
         if pBitmapHaystack
@@ -229,50 +217,6 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
         if pBitmapTemplate
             Gdip_DisposeImage(pBitmapTemplate)
         Gdip_Shutdown(pToken)
-    }
-}
-
-IsSpecialModeTemplate(templatePath) {
-    SplitPath(templatePath, &templateName)
-    return (templateName = "SpecialMode.png")
-}
-
-MaybeScrollSpecialModeSearch(templatePath, clientWidth, clientHeight) {
-    ; TDS' current Play/Survival UI is vertically scrollable. In older layouts the
-    ; Special Mode entry was visible immediately, so JoinGame() only searched the
-    ; current viewport. If the template is not visible, gently scroll the menu and
-    ; let the caller's existing retry loop search again. This is deliberately
-    ; limited to SpecialMode.png so normal gameplay/image searches are unaffected.
-    static lastScrollTick := 0
-    static scrollAttempts := 0
-    static previousTemplate := ""
-
-    SplitPath(templatePath, &templateName)
-
-    if (templateName != previousTemplate) {
-        if (templateName != "SpecialMode.png")
-            scrollAttempts := 0
-        previousTemplate := templateName
-    }
-
-    if (templateName != "SpecialMode.png")
-        return false
-
-    if (A_TickCount - lastScrollTick < 650)
-        return false
-
-    if (scrollAttempts >= 10)
-        return false
-
-    try {
-        ActivateRoblox()
-        MouseMove(Round(clientWidth * 0.78), Round(clientHeight * 0.78), 0)
-        SendEvent("{WheelDown 4}")
-        lastScrollTick := A_TickCount
-        scrollAttempts++
-        return true
-    } catch {
-        return false
     }
 }
 
