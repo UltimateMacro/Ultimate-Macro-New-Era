@@ -1,6 +1,6 @@
 # Ultimate Macro: The New Era 🚀
 
-> **⚠️ DOWNLOAD ULTIMATE MACRO FROM [RELEASES](../../releases), NOT FROM THE REPOSITORY SOURCE FILES.**
+> **⚠️ For the recommended ready-to-use package, download `TDS_Macro.zip` from the [official releases](https://github.com/DarksenDev/tds-macro/releases).**
 
 **Ultimate Macro: The New Era** is the continuation of Ultimate Macro, a free and open-source automation tool for **Roblox Tower Defense Simulator**.
 
@@ -38,32 +38,20 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 ## 📥 Installation
 
-1. Download the latest `.zip` from **Releases**
+1. Download `TDS_Macro.zip` from the [official releases](https://github.com/DarksenDev/tds-macro/releases), or use **Code → Download ZIP** on the production [`main` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/tree/main)
 2. Extract all files
 3. Install **AutoHotkey v2.0**
 4. Run `Main.ahk`
 5. Configure your strategy and start
 
-## 🧪 Development and QA
+## 🛠️ Production and development
 
-Official **Releases** remain the recommended download for normal users.
-
-If you intentionally clone the repository or use GitHub's **Download ZIP**,
-`OCR.ahk` and `JSON.ahk` are reproducibly materialized from immutable upstream
-revisions. You can simply run `RUN_SOURCE.bat`; `Main.ahk` also detects these
-missing files and performs the same verified bootstrap automatically before
-restarting.
-
-Developers can run the bootstrap manually with
-`pwsh ./tools/sync_dependencies.ps1`.
-
-After dependency synchronization, follow the automated and manual gates in
-[TESTING.md](TESTING.md) and [QA_CHECKLIST.md](QA_CHECKLIST.md).
-
-Dependency provenance, integrity hashes, licenses, and the optional native
-image-search status are documented in [DEPENDENCIES.md](DEPENDENCIES.md).
-Please review [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change and
-report sensitive issues according to [SECURITY.md](SECURITY.md).
+- **Production/runtime:** the `main` branch contains only the files required to
+  run the macro. Official packaged releases are published separately in
+  [`DarksenDev/tds-macro`](https://github.com/DarksenDev/tds-macro/releases).
+- **Development/source:** source tooling, tests, CI configuration, QA guidance,
+  and contributor documentation live on the
+  [`dev` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/tree/dev).
 
 ## 👨‍💻 Development Team
 
