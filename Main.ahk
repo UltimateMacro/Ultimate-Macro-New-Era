@@ -20,6 +20,12 @@ ListLines(False)
 KeyHistory(0)
 SetTitleMatchMode(1)
 
+; Repository source checkouts intentionally omit pinned OCR/JSON files
+; during the first parse. Keep VarUnset warnings enabled while registering
+; these optional global dependency symbols for the bootstrap/reload flow.
+IsSet(OCR)
+IsSet(JSON)
+
 if (RegExMatch(A_ScriptDir, "i)\.(zip|rar)")) {
     MsgBox(
         "You are attempting to run the script from a ZIP file.`n`nPlease Extract/Unzip the file first, then run the script in the extracted folder.",
