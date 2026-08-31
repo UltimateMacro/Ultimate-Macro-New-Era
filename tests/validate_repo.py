@@ -248,7 +248,8 @@ def validate_updater(root: Path, errors: list[str]) -> None:
     wrapper = read_text(root / "submacros" / "update.bat")
 
     updater_markers = (
-        "UltimateMacro/Ultimate-Macro-New-Era/releases/latest",
+        "https://api.github.com/repos/DarksenDev/tds-macro/releases/latest",
+        r"https://github\.com/DarksenDev/tds-macro/releases/download/",
         'PreferredAsset := "TDS_Macro.zip"',
         "JSON.parse",
         'asset["digest"]',
@@ -258,6 +259,7 @@ def validate_updater(root: Path, errors: list[str]) -> None:
     )
     safe_markers = (
         "Assert-InstallRoot",
+        "/DarksenDev/tds-macro/releases/download/",
         "Normalize-Sha256",
         "Assert-SafeZip",
         "Assert-RuntimePayload",
@@ -273,8 +275,12 @@ def validate_updater(root: Path, errors: list[str]) -> None:
         if marker not in safe:
             fail(errors, f"safe updater contract is missing: {marker}")
 
-    if "DarksenDev/tds-macro" in updater:
+    if "UltimateMacro/Ultimate-Macro-New-Era/releases/latest" in updater:
         fail(errors, "updater still references the retired release repository")
+    if "UltimateMacro/Ultimate-Macro-New-Era/releases/download" in updater:
+        fail(errors, "updater still allows assets from the retired release repository")
+    if "UltimateMacro/Ultimate-Macro-New-Era/releases/download" in safe:
+        fail(errors, "safe updater still allows assets from the retired release repository")
     if "checksum verification was skipped" in safe.casefold():
         fail(errors, "safe updater permits installation without a checksum")
     for destructive in ("del /f /s /q", "rd /s /q", "Expand-Archive"):

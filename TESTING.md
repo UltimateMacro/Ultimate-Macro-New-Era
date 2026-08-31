@@ -81,7 +81,7 @@ Use only disposable test credentials and remove them afterward.
 
 Use a disposable extracted release copy, never this Git checkout.
 
-1. Confirm the updater reads `UltimateMacro/Ultimate-Macro-New-Era` and does
+1. Confirm the updater reads releases from `DarksenDev/tds-macro` and does
    not offer a downgrade or same-version reinstall.
 2. Confirm the chosen asset is `TDS_Macro.zip` and has a GitHub `sha256:`
    digest before accepting the prompt.
