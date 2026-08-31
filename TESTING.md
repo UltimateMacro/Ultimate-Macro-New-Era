@@ -63,6 +63,23 @@ preflight on Windows with read-only repository permissions.
    `Resources/Strats` manifest and leaves the prior managed set intact on a
    simulated partial or failed refresh.
 
+### Persistent logs
+
+Logs live in `%APPDATA%\Ultimate_Macro\Logs`. Session files are still written per
+run and pruned after 14 days; `ultimate-macro.log` is the persistent store that
+every component and every run appends to, capped at 2 MB with one previous
+generation kept as `ultimate-macro.previous.log`.
+
+1. Run a short strategy, close the macro, and reopen it. Confirm the console
+   lines from the earlier run are still in `ultimate-macro.log`, and that the
+   watchdog's lines appear there too under its own component name.
+2. Confirm no webhook URL or bot token reaches either file. Console lines go
+   through the same redaction as structured events.
+3. Press Clear Logs in Settings, confirm the prompt, and verify the whole
+   directory is emptied apart from the fresh `logs_cleared` entry. Logging must
+   keep working afterwards without a restart.
+4. Cancel the prompt instead and confirm nothing is deleted.
+
 ### Webhook, bot, and watchdog
 
 Use only disposable test credentials and remove them afterward.

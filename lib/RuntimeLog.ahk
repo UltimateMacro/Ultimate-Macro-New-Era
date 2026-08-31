@@ -3,12 +3,17 @@
 ; Persistent runtime/crash logging for Ultimate Macro.
 ; Logs are intentionally local-only and redact common secret formats before write.
 
+global RuntimeLogStoreMaxBytes := 2097152
+
 global RuntimeLogState := {
     Installed: false,
     Component: "Unknown",
     Version: "",
     Dir: "",
     SessionFile: "",
+    StoreFile: "",
+    StoreArchive: "",
+    StoreBytes: 0,
     StartTick: 0
 }
 
@@ -30,6 +35,13 @@ RuntimeLogInstall(component := "Main", version := "") {
     stamp := FormatTime(, "yyyyMMdd-HHmmss")
     pid := DllCall("Kernel32\GetCurrentProcessId", "UInt")
     sessionFile := logDir "\" safeComponent "-" stamp "-pid" pid ".log"
+    storeFile := logDir "\ultimate-macro.log"
+
+    storeBytes := 0
+    try {
+        if FileExist(storeFile)
+            storeBytes := FileGetSize(storeFile)
+    }
 
     RuntimeLogState := {
         Installed: true,
@@ -37,6 +49,9 @@ RuntimeLogInstall(component := "Main", version := "") {
         Version: version,
         Dir: logDir,
         SessionFile: sessionFile,
+        StoreFile: storeFile,
+        StoreArchive: logDir "\ultimate-macro.previous.log",
+        StoreBytes: storeBytes,
         StartTick: A_TickCount
     }
 
@@ -64,6 +79,10 @@ RuntimeLogError(event, message := "", details := "") {
     RuntimeLogWrite("ERROR", event, message, details)
 }
 
+RuntimeLogConsole(text) {
+    return RuntimeLogWrite("LOG", "console", text)
+}
+
 RuntimeLogWrite(level, event, message := "", details := "") {
     global RuntimeLogState
 
@@ -83,11 +102,89 @@ RuntimeLogWrite(level, event, message := "", details := "") {
 
         line := StrReplace(StrReplace(line, "`r", " "), "`n", " ")
         FileAppend(line "`n", RuntimeLogState.SessionFile, "UTF-8")
+        RuntimeLogStoreAppend(line)
         return true
     } catch {
         ; Logging must never crash the macro or recurse through OnError.
         return false
     }
+}
+
+RuntimeLogStoreAppend(line) {
+    global RuntimeLogState, RuntimeLogStoreMaxBytes
+
+    if (!RuntimeLogState.Installed || RuntimeLogState.StoreFile = "")
+        return false
+
+    entry := line "`n"
+    entryBytes := StrPut(entry, "UTF-8") - 1
+
+    if (RuntimeLogState.StoreBytes + entryBytes > RuntimeLogStoreMaxBytes)
+        RuntimeLogRotateStore()
+
+    ; One retry: Main and the watchdog share the store.
+    loop 2 {
+        try {
+            FileAppend(entry, RuntimeLogState.StoreFile, "UTF-8")
+            RuntimeLogState.StoreBytes += entryBytes
+            return true
+        }
+    }
+
+    return false
+}
+
+RuntimeLogRotateStore() {
+    global RuntimeLogState
+
+    if (RuntimeLogState.StoreFile = "" || !FileExist(RuntimeLogState.StoreFile))
+        return
+
+    try {
+        FileMove(RuntimeLogState.StoreFile, RuntimeLogState.StoreArchive, true)
+        RuntimeLogState.StoreBytes := 0
+    } catch {
+        ; A locked archive must not stop logging.
+    }
+}
+
+RuntimeLogClear() {
+    global RuntimeLogState
+
+    if (RuntimeLogState.Dir = "" || !DirExist(RuntimeLogState.Dir))
+        return 0
+
+    removed := 0
+    Loop Files, RuntimeLogState.Dir "\*.log", "F" {
+        try {
+            FileDelete(A_LoopFileFullPath)
+            removed += 1
+        }
+    }
+
+    RuntimeLogState.StoreBytes := 0
+    RuntimeLogWrite("INFO", "logs_cleared", "Stored logs cleared by the user", "removed=" removed)
+
+    return removed
+}
+
+; Total size of everything RuntimeLogClear() would delete.
+RuntimeLogStoredBytes() {
+    global RuntimeLogState
+
+    total := 0
+    if (RuntimeLogState.Dir = "" || !DirExist(RuntimeLogState.Dir))
+        return total
+
+    Loop Files, RuntimeLogState.Dir "\*.log", "F"
+        total += A_LoopFileSize
+
+    return total
+}
+
+RuntimeLogStorePath() {
+    global RuntimeLogState
+    return RuntimeLogState.StoreFile
 }
 
 RuntimeLogOnError(err, mode) {
@@ -170,7 +267,10 @@ RuntimeLogPrune(maxAgeDays := 14) {
 
     try {
         Loop Files, RuntimeLogState.Dir "\*.log", "F" {
-            if (A_LoopFileFullPath = RuntimeLogState.SessionFile)
+            ; The persistent store is pruned by size, never by age.
+            if (A_LoopFileFullPath = RuntimeLogState.SessionFile
+                || A_LoopFileFullPath = RuntimeLogState.StoreFile
+                || A_LoopFileFullPath = RuntimeLogState.StoreArchive)
                 continue
             try {
                 if (DateDiff(A_Now, A_LoopFileTimeModified, "Days") > maxAgeDays)

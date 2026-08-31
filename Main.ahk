@@ -1594,6 +1594,13 @@ global LegacyModeCtrl := MainGui.Add("Checkbox", "x560 y465 Hidden", "Legacy Mod
 LegacyModeCtrl.Value := (LegacyMode = "1" || LegacyMode = 1)
 LegacyModeCtrl.OnEvent("Click", LegacyModeInfo)
 
+MainGui.SetFont("s9 w400 cFFFFFF")
+global Tab5_BtnClearLogs := MainGui.Add("Text",
+    "x310 y463 w120 h24 Center Background0e0e0f +Border 0x200 Hidden", "Clear Logs")
+Tab5_BtnClearLogs.OnEvent("Click", ClearStoredLogs)
+
+HoverEffect.Push(Tab5_BtnClearLogs)
+
 MainGui.SetFont("s11 w400 cFFFFFF")
 global Tab5_Btn1 := MainGui.Add("Text", "x30 y500 w645 h40 Center Background0e0e0f +Border 0x200 Hidden",
     "Save all settings")
@@ -2027,7 +2034,8 @@ ShowTabContent(tab) {
             ChangeDJTrackKeyCtrl, SellTowerKeyCtrl, DeleteTowerRecordingKeyCtrl,
             RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL,
             CollectPlaytimeRewardsCtrl,
-            Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl, Tab5_Btn1,
+            Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl,
+            Tab5_BtnClearLogs, Tab5_Btn1,
             MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown,
             MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown]
             ctrl.Visible := true
@@ -4168,6 +4176,40 @@ LegacyModeInfo(*) {
             "Changes how the image detection works. May not work for some people.`n`nWarning: some features - such as Auto Equip, Changing Tower Targeting will not work with this mode!",
             "Legacy Mode", "0x1040")
     }
+}
+
+ClearStoredLogs(ctrl, *) {
+    logDir := RuntimeLogDirectory()
+
+    if (logDir = "" || !DirExist(logDir)) {
+        MsgBox("There are no stored logs yet.", "Clear Logs", "0x1040")
+        return
+    }
+
+    storedBytes := RuntimeLogStoredBytes()
+    if (storedBytes = 0) {
+        MsgBox("There are no stored logs to clear.", "Clear Logs", "0x1040")
+        return
+    }
+
+    prompt := "Delete every stored log in:`n" logDir
+    prompt .= "`n`nCurrently stored: " FormatLogSize(storedBytes)
+    prompt .= "`n`nThis removes the persistent log, past session logs, and the last crash report."
+    prompt .= " It cannot be undone."
+
+    if (MsgBox(prompt, "Clear Logs", "0x1024") != "Yes")
+        return
+
+    removed := RuntimeLogClear()
+    MsgBox("Cleared " removed " log file" (removed = 1 ? "" : "s") ".", "Clear Logs", "0x1040")
+}
+
+FormatLogSize(bytes) {
+    if (bytes >= 1048576)
+        return Format("{:.1f} MB", bytes / 1048576)
+    if (bytes >= 1024)
+        return Format("{:.1f} KB", bytes / 1024)
+    return bytes " bytes"
 }
 
 CheckVipLink(ctrl, *) {
@@ -7479,6 +7521,8 @@ LogToConsole(text, SendWebhookInstantly := false, flush := true) {
     LogLines.Push(formattedText)
     while (LogLines.Length > 500)
         LogLines.RemoveAt(1)
+
+    RuntimeLogConsole(text)
 
     if (OverlayHWND && WinExist("ahk_id " OverlayHWND))
         UpdateOverlay()
