@@ -18,7 +18,7 @@ SetWorkingDir(A_ScriptDir "\..\")
 #Include "%A_LineFile%\..\..\lib\Roblox.ahk"
 #Include "%A_LineFile%\..\..\lib\RuntimeLog.ahk"
 
-RuntimeLogInstall("Watchdog")
+RuntimeLogInstall("Watchdog", "1.3.4")
 RuntimeLogInfo("watchdog_start", "Watchdog started")
 
 Opt := A_AppData "\Ultimate_Macro\Options"
@@ -85,6 +85,36 @@ loop {
     if (Mod(loopCounter, 15) == 0) {
         if !Integer(IniRead(StateFile, "State", "Running", 0)) {
             ExitApp()
+        }
+    }
+
+    ; --- Main liveness ------------------------------------------------------
+    ; The watchdog used to observe only Roblox, never the macro. A wedged Main
+    ; was therefore invisible: recovery happened by accident, when Roblox's own
+    ; ~20 minute idle timeout produced a disconnect dialog. Main now publishes a
+    ; phase plus the budget that phase is allowed, and we enforce it here.
+    if (Mod(loopCounter, 10) == 0) {
+        phase := IniRead(StateFile, "State", "HeartbeatPhase", "")
+        if (phase != "") {
+            hbTick := Integer(IniRead(StateFile, "State", "HeartbeatTick", 0))
+            hbTimeout := Integer(IniRead(StateFile, "State", "HeartbeatTimeout", 0))
+            ; A_TickCount is system uptime, so it is directly comparable across
+            ; processes on this machine.
+            stalledFor := A_TickCount - hbTick
+            if (hbTimeout > 0 && hbTick > 0 && stalledFor > hbTimeout) {
+                RuntimeLogError("main_stalled", "Main made no progress within its phase budget",
+                    "phase=" phase "; stalled_ms=" stalledFor "; budget_ms=" hbTimeout)
+                stallText := "Macro stalled in '" phase "' for " Round(stalledFor / 1000) "s - restarting"
+                if (WebhookEnabled && WebhookLink != "") {
+                    pBitmap := CaptureRobloxClientBitmap()
+                    if (pBitmap) {
+                        SendScreenshot(pBitmap, stallText)
+                        Gdip_DisposeImage(pBitmap)
+                    }
+                }
+                RestartMain()
+                ExitApp()
+            }
         }
     }
 
@@ -292,8 +322,15 @@ SendInfo(matchResult := "") {
     }
 
     if (SendCurrenciesEnabled = "1") {
-        targetX := FoundX - sX(180)
-        targetY := FoundY - sY(250)
+        ; FoundX/FoundY are Roblox CLIENT coordinates, but Gdip_BitmapFromScreen
+        ; captures in SCREEN space. Without this offset the results OCR read the
+        ; wrong region (and the wrong monitor on multi-display setups), which is
+        ; why coins/gems/XP frequently came back as 0.
+        if !GetRobloxScreenClientRect(&statClientX, &statClientY, , )
+            statClientX := 0, statClientY := 0
+
+        targetX := statClientX + FoundX - sX(180)
+        targetY := statClientY + FoundY - sY(250)
         AreaW := sX(340)
         AreaH := sY(230)
 
@@ -315,8 +352,8 @@ SendInfo(matchResult := "") {
             Gdip_DisposeImage(pBitmapArea)
         }
 
-        infoX := FoundX + sX(200)
-        infoY := FoundY - sY(350)
+        infoX := statClientX + FoundX + sX(200)
+        infoY := statClientY + FoundY - sY(350)
         InfoW := sX(320)
         InfoH := sY(240)
 
@@ -336,11 +373,6 @@ SendInfo(matchResult := "") {
             }
             Gdip_DisposeImage(pBitmapInfo)
         }
-
-        xpX := FoundX - sX(180)
-        xpY := FoundY - sY(250)
-        xpW := sX(340)
-        xpH := sY(230)
 
         if RegExMatch(ocrTarget, "i)(\d[\d,]*)\s*c[o0]ins?", &coinsMatch)
             coinVal := Integer(StrReplace(coinsMatch[1], ",", ""))
@@ -542,13 +574,17 @@ WebhookScreenshots) {
 
     CreateFormData(&postdata, &contentType, fields)
 
+    ; Reporting must never outlast recovery. These calls run after Main has
+    ; already been killed and before it is relaunched, so the old 60-90 second
+    ; timeouts x3 attempts could leave the macro dead for several minutes on a
+    ; slow or rate-limited Discord.
     MaxAttempts := 3
     loop MaxAttempts {
         try {
             whr := ComObject("WinHttp.WinHttpRequest.5.1")
             whr.Open("POST", WebhookLink "?wait=true", false)
             whr.SetRequestHeader("Content-Type", contentType)
-            whr.SetTimeouts(90000, 60000, 60000, 60000)
+            whr.SetTimeouts(5000, 5000, 10000, 10000)
             whr.Send(postdata)
 
             status := whr.Status
@@ -561,7 +597,7 @@ WebhookScreenshots) {
         }
 
         if (A_Index < MaxAttempts)
-            Sleep(2500)
+            Sleep(1200)
     }
 
     return false
