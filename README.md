@@ -41,7 +41,7 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 ## 📥 Installation
 
-1. Download `TDS_Macro.zip` from the [official releases](https://github.com/DarksenDev/tds-macro/releases), or use **Code → Download ZIP** on the production [`main` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/tree/main)
+1. Download `TDS_Macro.zip` from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases), or use **Code → Download ZIP** on the production [`main` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era)
 2. Extract all files
 3. Install **AutoHotkey v2.0**
 4. Run `Main.ahk`
@@ -51,7 +51,7 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 - **Production/runtime:** the `main` branch contains only the files required to
   run the macro. Official packaged releases are published separately in
-  [`DarksenDev/tds-macro`](https://github.com/DarksenDev/tds-macro/releases).
+  [`UltimateMacro/Ultimate-Macro-New-Era`](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
 - **Development/source:** source tooling, tests, CI configuration, QA guidance,
   and contributor documentation are available on the
   [`dev` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/tree/dev).
