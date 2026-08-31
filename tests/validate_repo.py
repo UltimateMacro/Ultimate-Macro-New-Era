@@ -64,6 +64,16 @@ APPROVED_BINARIES = {
     "lib/imagesearch/msvcp140.dll": (
         "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"
     ),
+    # Native image-search backend. image_search.dll links against OpenCV, so
+    # shipping it without these two makes LoadLibrary fail with ERROR_MOD_NOT_FOUND
+    # and silently drops every detection to the scale-blind GDI+ fallback.
+    # Both hashes match the official DarksenDev/tds-macro v1.3.3 release package.
+    "lib/imagesearch/opencv_world500.dll": (
+        "7bc06231bf3cfd287e0b6853a78f78e00ceb58266f3cb49642f428ea6f4d1518"
+    ),
+    "lib/imagesearch/vcruntime140.dll": (
+        "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
+    ),
     "submacros/autohotkey32.exe": (
         "05fcaf6f09b9fe4b85887f75183310d34166a0b854ca0907b497808be7b8f87d"
     ),
@@ -326,10 +336,15 @@ def validate(root: Path) -> tuple[list[str], list[str]]:
     validate_updater(root, errors)
     validate_ci_workflow(root, errors)
 
-    if not (root / "lib" / "ImageSearch" / "opencv_world500.dll").is_file():
-        warnings.append(
-            "opencv_world500.dll is intentionally absent; runtime image search must use the GDI+ fallback"
-        )
+    # Inverted deliberately. The absence of these files is not an acceptable
+    # steady state: it is the defect that made v1.3.4 unable to see the game.
+    for required_dll in ("opencv_world500.dll", "vcruntime140.dll"):
+        if not (root / "lib" / "ImageSearch" / required_dll).is_file():
+            fail(
+                errors,
+                f"{required_dll} is missing; image_search.dll cannot load without it "
+                "and image detection silently degrades to the GDI+ fallback",
+            )
 
     return errors, warnings
 
