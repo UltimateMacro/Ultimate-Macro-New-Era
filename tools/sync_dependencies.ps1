@@ -23,17 +23,56 @@ $dependencies = @(
     }
 )
 
-function Get-GitBlobHash([string]$Path) {
-    $git = Get-Command git -ErrorAction Stop
-    $hash = & $git.Source hash-object -- $Path
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($hash)) {
-        throw "git hash-object failed for $Path"
+function Get-FileDigest([string]$Path, [string]$Algorithm) {
+    $stream = [System.IO.File]::OpenRead($Path)
+
+    try {
+        switch ($Algorithm.ToUpperInvariant()) {
+            'SHA256' {
+                $hasher = [System.Security.Cryptography.SHA256]::Create()
+            }
+            'SHA1' {
+                $hasher = [System.Security.Cryptography.SHA1]::Create()
+            }
+            default {
+                throw "Unsupported hash algorithm: $Algorithm"
+            }
+        }
+
+        try {
+            $hash = $hasher.ComputeHash($stream)
+            return ([System.BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
+        }
+        finally {
+            $hasher.Dispose()
+        }
     }
-    return $hash.Trim().ToLowerInvariant()
+    finally {
+        $stream.Dispose()
+    }
+}
+
+function Get-GitBlobHash([string]$Path) {
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $header = [System.Text.Encoding]::ASCII.GetBytes("blob $($bytes.Length)`0")
+
+    $payload = New-Object byte[] ($header.Length + $bytes.Length)
+    [System.Buffer]::BlockCopy($header, 0, $payload, 0, $header.Length)
+    [System.Buffer]::BlockCopy($bytes, 0, $payload, $header.Length, $bytes.Length)
+
+    $sha1 = [System.Security.Cryptography.SHA1]::Create()
+
+    try {
+        $hash = $sha1.ComputeHash($payload)
+        return ([System.BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha1.Dispose()
+    }
 }
 
 function Assert-DependencyHash([string]$Path, [hashtable]$Dependency) {
-    $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+    $actualSha256 = Get-FileDigest $Path 'SHA256'
     if ($actualSha256 -ne $Dependency.Sha256) {
         throw "SHA-256 verification failed for $($Dependency.Name). Expected $($Dependency.Sha256), got $actualSha256."
     }

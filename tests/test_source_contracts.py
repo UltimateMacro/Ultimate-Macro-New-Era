@@ -19,6 +19,58 @@ def region(source: str, start: str, end: str) -> str:
     return source[start_index:end_index]
 
 
+def validate_source_dependency_bootstrap(main: str) -> None:
+    assert r"#Include *i lib\OCR.ahk" in main
+    assert r"#Include *i lib\JSON.ahk" in main
+
+    assert "IsSet(OCR)" in main
+    assert "IsSet(JSON)" in main
+
+    first_boot_call = main.index("BootstrapPinnedSourceDependencies()")
+    assert main.index("IsSet(OCR)") < first_boot_call
+    assert main.index("IsSet(JSON)") < first_boot_call
+
+    # Never solve first-boot dependency handling by hiding genuine warnings.
+    assert "#Warn VarUnset, Off" not in main
+
+    json_include = main.index(r"#Include *i lib\JSON.ahk")
+    updater_include = main.index(r"#Include submacros\updater.ahk")
+    assert json_include < updater_include, "JSON must be included before updater.ahk"
+
+    startup = region(
+        main,
+        'if (!FileExist(A_ScriptDir "\\lib\\OCR.ahk")',
+        'if WinExist("Ultimate Macro")',
+    )
+    assert "BootstrapPinnedSourceDependencies()" in startup
+
+    bootstrap = region(
+        main,
+        "BootstrapPinnedSourceDependencies() {",
+        "command_buffer := []",
+    )
+
+    assert r"tools\sync_dependencies.ps1" in bootstrap
+    assert "RunWait(" in bootstrap
+    assert "-NoProfile -ExecutionPolicy Bypass -File" in bootstrap
+    assert r"lib\OCR.ahk" in bootstrap
+    assert r"lib\JSON.ahk" in bootstrap
+    assert "Reload()" in bootstrap
+
+
+
+def validate_dependency_bootstrap_portability(root: Path) -> None:
+    sync = read(root / "tools" / "sync_dependencies.ps1")
+
+    assert "Get-FileHash" not in sync
+    assert "Get-Command git" not in sync
+    assert "hash-object" not in sync
+
+    assert "System.Security.Cryptography.SHA256" in sync
+    assert "System.Security.Cryptography.SHA1" in sync
+    assert 'Get-GitBlobHash' in sync
+
+
 def validate_settings_contracts(main: str) -> None:
     assert re.search(
         r'global\s+UpgradeDelay\s*:=\s*IniRead\(SettingsFile,\s*"Options",\s*"UpgradeDelay",\s*200\)',
@@ -294,6 +346,8 @@ def validate(root: Path) -> None:
     safe_updater = read(root / "submacros" / "safe_update.ps1")
     wrapper = read(root / "submacros" / "update.bat")
 
+    validate_source_dependency_bootstrap(main)
+    validate_dependency_bootstrap_portability(root)
     validate_settings_contracts(main)
     validate_strategy_geometry(main)
     validate_bitmap_ownership(main, watchdog, discord)

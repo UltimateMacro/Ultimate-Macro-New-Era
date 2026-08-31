@@ -46,10 +46,19 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 ## 🧪 Development and QA
 
-Repository checkouts need two pinned source dependencies before `Main.ahk` can
-be validated. Run `pwsh ./tools/sync_dependencies.ps1`, then follow the
-automated and manual gates in [TESTING.md](TESTING.md) and
-[QA_CHECKLIST.md](QA_CHECKLIST.md).
+Official **Releases** remain the recommended download for normal users.
+
+If you intentionally clone the repository or use GitHub's **Download ZIP**,
+`OCR.ahk` and `JSON.ahk` are reproducibly materialized from immutable upstream
+revisions. You can simply run `RUN_SOURCE.bat`; `Main.ahk` also detects these
+missing files and performs the same verified bootstrap automatically before
+restarting.
+
+Developers can run the bootstrap manually with
+`pwsh ./tools/sync_dependencies.ps1`.
+
+After dependency synchronization, follow the automated and manual gates in
+[TESTING.md](TESTING.md) and [QA_CHECKLIST.md](QA_CHECKLIST.md).
 
 Dependency provenance, integrity hashes, licenses, and the optional native
 image-search status are documented in [DEPENDENCIES.md](DEPENDENCIES.md).
