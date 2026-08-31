@@ -65,6 +65,7 @@ report sensitive issues according to [SECURITY.md](SECURITY.md).
 - ziadod
 - kronoxxv
 - banana.dev
+- itzshovel
 
 **Development Contributor**
 - 4riff
