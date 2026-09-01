@@ -59,6 +59,18 @@ GPL-3.0 attribution.
   live image/timing behavior, and comparison with the bundled AutoHotkey 2.0.12
   runtime.
 
+## Follow-up execution status
+
+- [x] Plan revised in `08ec33c`.
+- [x] Git checkout/worktree community refresh blocked with regression contracts
+  in `6363085`; extracted releases retain the existing refresh path.
+- [x] Three-strategy Frost cleanup and both hash-pinned runtime DLLs finalized
+  in `40b820e`.
+- [x] Changelog, dependency policy, README, testing matrix, and validation plan
+  updated for final QA handoff.
+- [ ] Manual Roblox validation remains open for Numbers for Hotbar OFF, live
+  image/timing scenarios, and AutoHotkey 2.0.12 versus 2.0.26 behavior.
+
 ---
 
 # Reported runtime QA hotfix — 2026-09-01

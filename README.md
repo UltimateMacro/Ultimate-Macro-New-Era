@@ -55,6 +55,11 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 - **Development/source:** source tooling, tests, CI configuration, QA guidance,
   and contributor documentation are available on the
   [`dev` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/tree/dev).
+- Community strategies refresh automatically only in extracted release trees.
+  Git checkouts and linked worktrees intentionally keep their tracked strategy
+  inventory unchanged; developers update them through reviewed Git changes.
+- Official packages include the hash-pinned native image-search DLLs. Keep the
+  complete `lib/ImageSearch` directory when extracting or copying the macro.
 
 ## 👨‍💻 Development Team
 

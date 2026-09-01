@@ -20,10 +20,10 @@ pwsh ./tests/safe_updater_smoke.ps1
 pwsh ./tools/validate_ahk.ps1
 ```
 
-Expected non-failing warnings are:
+The expected non-failing warning is:
 
-- `opencv_world500.dll` is absent and image search uses the GDI+ fallback;
-- two pairs of currently tracked strategy files have duplicate contents.
+- `3_JuggernautExp.strat` and `JuggernautExp.strat` currently have duplicate
+  contents.
 
 `sync_dependencies.ps1` creates ignored `lib/OCR.ahk` and `lib/JSON.ahk`
 files from immutable, hash-verified sources. The CI workflow runs the same
@@ -51,8 +51,10 @@ preflight on Windows with read-only repository permissions.
    non-default supported client size. Match coordinates must remain relative to
    the Roblox client while screen capture uses the window's screen origin.
 4. Sanity-check two other image-driven actions such as Equip and Restart.
-5. Record whether the expected GDI+ fallback was active; the optional OpenCV
-   DLL is deliberately not part of this QA candidate.
+5. Confirm the native backend initializes with the required packaged DLLs. In a
+   disposable release copy only, an explicit fallback test may temporarily
+   remove the native DLLs and confirm the bounded GDI+ recovery path still
+   starts; restore the files before package validation.
 
 ### Reported-bug regression matrix
 
@@ -70,9 +72,20 @@ preflight on Windows with read-only repository permissions.
    post-match handling.
 2. Exercise placement, upgrade, target, ability, skip, and sell commands where
    available.
-3. Confirm community strategy refresh downloads the official
-   `Resources/Strats` manifest and leaves the prior managed set intact on a
-   simulated partial or failed refresh.
+3. Launch once from a Git checkout and once from a linked worktree; confirm no
+   community request or strategy mutation occurs. Then confirm an extracted
+   release copy downloads the official `Resources/Strats` manifest and leaves
+   the prior managed set intact on a simulated partial or failed refresh.
+4. Keep all three retired Frost strategies absent unless a developer/tester has
+   supplied and validated a replacement official strategy.
+
+### Pending input/runtime compatibility
+
+1. Turn **Use Numbers for Hotbar** OFF, record and replay placement/upgrade
+   actions, and confirm non-number input still selects the intended slots.
+2. Run the same short smoke strategy under the bundled AutoHotkey 2.0.12 and
+   the validation baseline 2.0.26. Record any parsing, timing, input, or image
+   backend difference; this comparison is not settled by source validation.
 
 ### Webhook, bot, and watchdog
 
