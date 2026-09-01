@@ -2,6 +2,7 @@
 """Source contracts for the reported-runtime QA hotfix."""
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 import sys
@@ -283,17 +284,25 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
 
 def validate_packaging(root: Path, validator: str, workflow: str) -> None:
     obsolete = {
+        "Resources/Strats/2_Absolute_Zero.strat",
         "Resources/Strats/4_FrostModeStrat(Mods)(1.3 fix).strat",
         "Resources/Strats/FrostModeStrat(Mods)(1.3 fix).strat",
     }
     expected_remaining = {
         "Resources/Strats/1_NST_DEAD_AHEAD_EASY.strat",
-        "Resources/Strats/2_Absolute_Zero.strat",
         "Resources/Strats/3_JuggernautExp.strat",
         "Resources/Strats/JuggernautExp.strat",
         "Resources/Strats/SigmaMoltenSpeedrun(NoExplodingfastestTime).strat",
         "Resources/Strats/SUICIDE_MINIGUNNER_GEM_EXP_FARM.strat",
         "Resources/Strats/Z_Bread Toaster_DAMolten.strat",
+    }
+    required_dlls = {
+        "lib/ImageSearch/opencv_world500.dll": (
+            "7bc06231bf3cfd287e0b6853a78f78e00ceb58266f3cb49642f428ea6f4d1518"
+        ),
+        "lib/ImageSearch/vcruntime140.dll": (
+            "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
+        ),
     }
     tracked_result = subprocess.run(
         ["git", "-C", str(root), "ls-files", "--", "Resources/Strats/*.strat"],
@@ -303,16 +312,32 @@ def validate_packaging(root: Path, validator: str, workflow: str) -> None:
     )
     tracked = {line.replace("\\", "/") for line in tracked_result.stdout.splitlines() if line}
     require(tracked == expected_remaining,
-            f"tracked strategy set changed outside the two obsolete Frost removals: {sorted(tracked)}")
+            f"tracked strategy set changed outside the three obsolete Frost removals: {sorted(tracked)}")
     for relative in obsolete:
         require(not (root / relative).exists(), f"obsolete bundled Frost strategy still exists: {relative}")
     for relative in expected_remaining:
         require((root / relative).is_file(), f"unrelated bundled strategy was removed: {relative}")
 
-    require('opencv_world500.dll": (' not in validator, "OpenCV must remain optional")
-    require('vcruntime140.dll": (' not in validator, "copied VC runtime must not be required")
-    require("supported multi-scale GDI+ fallback" in validator, "validator must disclose fallback operation")
-    require(not (root / "lib/ImageSearch/vcruntime140.dll").exists(), "copied vcruntime140.dll must be removed")
+    tracked_dll_result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--", "lib/ImageSearch/*.dll"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    tracked_dlls = {
+        line.replace("\\", "/") for line in tracked_dll_result.stdout.splitlines() if line
+    }
+    for relative, expected_hash in required_dlls.items():
+        dll_path = root / relative
+        require(relative in tracked_dlls, f"required runtime DLL is not tracked: {relative}")
+        require(dll_path.is_file(), f"required runtime DLL is missing: {relative}")
+        actual_hash = hashlib.sha256(dll_path.read_bytes()).hexdigest()
+        require(actual_hash == expected_hash,
+                f"required runtime DLL hash changed: {relative} ({actual_hash})")
+        require(f'"{relative.casefold()}": (' in validator,
+                f"repository validator does not require: {relative}")
+        require(expected_hash in validator,
+                f"repository validator is missing the approved hash for: {relative}")
     require("python tests/test_reported_runtime_fixes.py ." in workflow,
             "CI must execute the reported-runtime contracts")
 
