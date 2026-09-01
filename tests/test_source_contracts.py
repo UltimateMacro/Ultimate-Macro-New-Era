@@ -180,30 +180,17 @@ def validate_ready_detection(main: str) -> None:
     template_index = ready.find('AdvancedImageSearch("Resources/ready_gs.png"')
     assert template_index >= 0, "Ready must be detected by template first"
 
-    # This contract used to ban PixelSearch outright. That removed the only
-    # backend-independent way to locate Ready, so a missing native image-search
-    # backend (or changed TDS art) left the macro unable to start a match at all
-    # - it would retry five times and then reload, forever.
-    #
-    # The property that actually matters is not "no PixelSearch" but "no GENERIC
-    # green pixel click": the colour probe may only run as a fallback, after the
-    # template attempt, and only inside the same bounded region the template used.
-    pixel_index = ready.find("PixelSearch")
-    if pixel_index >= 0:
-        assert pixel_index > template_index, (
-            "the colour fallback must run after the template search, never before it"
-        )
-        assert re.search(
-            r"PixelSearch\(&\w+,\s*&\w+,\s*rx,\s*ry,\s*rx \+ rw,\s*ry \+ rh,",
-            ready,
-        ), "the Ready colour fallback must stay bounded to the template's region"
-        assert re.search(r"(?m)^\s*rx := Round\(w \* 0\.4\)", ready), (
-            "the bounded Ready region must remain anchored to the Roblox client"
-        )
-        assert re.search(r"(?m)^\s*rw := Round\(w \* 0\.3\)", ready)
+    assert "PixelSearch" not in ready, (
+        "Ready clicks must be based on the bounded template, not a generic green pixel"
+    )
+    assert re.search(r"(?m)^\s*rx := Round\(w \* 0\.4\)", ready), (
+        "the bounded Ready region must remain anchored to the Roblox client"
+    )
+    assert re.search(r"(?m)^\s*rw := Round\(w \* 0\.3\)", ready)
 
-    assert "loop 5" in ready, "Ready click retries must remain bounded"
-    assert ready.count("FindReadyButton(") >= 5, (
+    assert "readyDeadline := A_TickCount + 8000" in ready
+    assert "attempts < 6" in ready, "Ready click retries must remain bounded"
+    assert ready.count("FindReadyButton(") >= 3, (
         "Ready must be detected before a click and rechecked after it"
     )
     assert "SafeReload()" in ready, "unconfirmed Ready clicks must fail safely"
