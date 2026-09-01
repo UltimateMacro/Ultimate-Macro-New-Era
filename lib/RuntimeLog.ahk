@@ -52,6 +52,7 @@ RuntimeLogInstall(component := "Main", version := "") {
         StoreFile: storeFile,
         StoreArchive: logDir "\ultimate-macro.previous.log",
         StoreBytes: storeBytes,
+        StoreWrites: 0,
         StartTick: A_TickCount
     }
 
@@ -119,8 +120,19 @@ RuntimeLogStoreAppend(line) {
     entry := line "`n"
     entryBytes := StrPut(entry, "UTF-8") - 1
 
-    if (RuntimeLogState.StoreBytes + entryBytes > RuntimeLogStoreMaxBytes)
-        RuntimeLogRotateStore()
+    ; StoreBytes only counts this process. Re-stat periodically so a co-writer's
+    ; growth is seen, and always before rotating so we never move a file the
+    ; other process just rotated.
+    if (++RuntimeLogState.StoreWrites >= 64) {
+        RuntimeLogState.StoreWrites := 0
+        RuntimeLogSyncStoreSize()
+    }
+
+    if (RuntimeLogState.StoreBytes + entryBytes > RuntimeLogStoreMaxBytes) {
+        RuntimeLogSyncStoreSize()
+        if (RuntimeLogState.StoreBytes + entryBytes > RuntimeLogStoreMaxBytes)
+            RuntimeLogRotateStore()
+    }
 
     ; One retry: Main and the watchdog share the store.
     loop 2 {
@@ -134,17 +146,36 @@ RuntimeLogStoreAppend(line) {
     return false
 }
 
-RuntimeLogRotateStore() {
+RuntimeLogSyncStoreSize() {
     global RuntimeLogState
 
+    try {
+        RuntimeLogState.StoreBytes := FileExist(RuntimeLogState.StoreFile)
+            ? FileGetSize(RuntimeLogState.StoreFile)
+            : 0
+    } catch {
+        ; Keep the running count if the file cannot be measured right now.
+    }
+}
+
+RuntimeLogRotateStore() {
+    global RuntimeLogState, RuntimeLogStoreMaxBytes
+
     if (RuntimeLogState.StoreFile = "" || !FileExist(RuntimeLogState.StoreFile))
+        return
+
+    ; Confirmed against the file, so a peer that already rotated cannot have its
+    ; archive overwritten by a second, nearly empty rotation.
+    if (RuntimeLogState.StoreBytes < RuntimeLogStoreMaxBytes)
         return
 
     try {
         FileMove(RuntimeLogState.StoreFile, RuntimeLogState.StoreArchive, true)
         RuntimeLogState.StoreBytes := 0
     } catch {
-        ; A locked archive must not stop logging.
+        ; A locked archive must not stop logging. Back off one cycle so the next
+        ; write appends instead of retrying the move on every line.
+        RuntimeLogState.StoreBytes := 0
     }
 }
 
@@ -163,6 +194,7 @@ RuntimeLogClear() {
     }
 
     RuntimeLogState.StoreBytes := 0
+    RuntimeLogState.StoreWrites := 0
     RuntimeLogWrite("INFO", "logs_cleared", "Stored logs cleared by the user", "removed=" removed)
 
     return removed
@@ -246,15 +278,31 @@ RuntimeLogRedact(value) {
     ; Discord webhook URLs contain a secret token in the path.
     text := RegExReplace(
         text,
-        "i)https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9._-]+",
+        "i)https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/(?:v\d{1,2}/)?webhooks/[0-9]+/[A-Za-z0-9._-]+",
         "[REDACTED_DISCORD_WEBHOOK]"
     )
 
-    ; Avoid leaking common key/value secret fields into tester evidence.
+    ; Roblox private-server links are shared credentials for a VIP server.
     text := RegExReplace(
         text,
-        "i)\b(BotToken|Authorization|WebhookLink|Token)\s*[:=]\s*[^;|\s]+",
+        "i)(privateServerLinkCode=|share\?code=|linkCode=)[A-Za-z0-9]{16,}",
+        "$1[REDACTED]"
+    )
+
+    ; Avoid leaking common key/value secret fields into tester evidence. The
+    ; optional scheme word matters: without it "Authorization: Bearer <token>"
+    ; only redacted the word Bearer and left the token in the log.
+    text := RegExReplace(
+        text,
+        "i)\b(Bot[_-]?Token|Authorization|Webhook[_-]?Link|Webhook[_-]?Url|Api[_-]?Key|Token|Secret|Password)\b\s*[:=]\s*[\x22\x27]?(?:Bearer|Bot|Basic)?\s*[^\s;|\x22\x27]+",
         "$1=[REDACTED]"
+    )
+
+    ; Bare bot tokens and JWTs, which carry no key to match on.
+    text := RegExReplace(
+        text,
+        "[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}",
+        "[REDACTED_TOKEN]"
     )
 
     return text
