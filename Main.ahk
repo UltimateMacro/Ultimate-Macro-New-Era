@@ -120,39 +120,21 @@ ver := "1.3.4"
 
 RuntimeLogInstall("Main", ver)
 
-; Resolve the image-search backend before anything tries to detect something.
-; The GDI+ fallback has no scale tolerance and returns a binary score, so the
-; fractional thresholds used throughout this script become unreachable on it.
-; A downgrade this severe must never be silent again.
+; Resolve image detection once at startup. Native OpenCV is an optional fast
+; path; the portable GDI+ backend is intentionally supported and multi-scale.
 ImageBackend := GetImageSearchBackendInfo()
 try {
     EnsureImageSearchBackend()
     ImageBackend := GetImageSearchBackendInfo()
 } catch Error as backendErr {
-    RuntimeLogError("image_backend_probe_failed", "Could not probe image-search backend", "error=" backendErr.Message)
+    RuntimeLogWarn("image_backend_probe_failed", "Could not probe image-search backend", "error=" backendErr.Message)
 }
 
-if (ImageBackend.nativeAvailable) {
+if (ImageBackend.nativeAvailable)
     RuntimeLogInfo("image_backend", "Image search backend resolved", "backend=" ImageBackend.backend "; reason=" ImageBackend.reason)
-} else {
-    RuntimeLogError("image_backend_degraded", "Native image search unavailable - detection accuracy is severely reduced",
+else
+    RuntimeLogWarn("image_backend_fallback", "Using portable multi-scale image detection",
         "backend=" ImageBackend.backend "; reason=" ImageBackend.reason)
-    MsgBox(
-        "Ultimate Macro could not load its native image-detection engine.`n`n"
-        "Reason: " ImageBackend.reason "`n`n"
-        "The macro has fallen back to exact 1:1 pixel matching, which cannot scale "
-        "templates. Detection will fail often and the macro may stall waiting for "
-        "buttons it can no longer recognise.`n`n"
-        "Fix: make sure these files are present in lib\ImageSearch\ :`n"
-        "    image_search.dll`n"
-        "    opencv_world500.dll`n"
-        "    msvcp140.dll`n"
-        "    vcruntime140.dll`n`n"
-        "Re-download the official release if any are missing.",
-        "Image detection degraded",
-        0x30
-    )
-}
 
 A_MaxHotkeysPerInterval := 9999
 
@@ -556,7 +538,7 @@ DetectUpgrade(*) {
 
     region := [upgAX, upgAY, upgAW, upgAH]
 
-    if (path != 0 && nextLevel > pathLevel && pathLevel != 0) {
+    if IsPathSpecificUpgrade(towerID, nextLevel, path, pathLevel) {
         if (path = 2 && IsObject(resv1)) {
             region := [resv1.x - ScaleX(344), resv1.y + ScaleY(488), ScaleX(300), ScaleY(110)]
         }
@@ -641,6 +623,12 @@ sY(baseY, Height := 1090) {
     }
 
     return Round(baseY * (currentHeight / Height))
+}
+
+GetClientTemplateScale(clientHeight) {
+    if (!IsNumber(clientHeight) || clientHeight <= 0)
+        return 1.0
+    return Float(clientHeight) / 1009.0
 }
 
 Join(arr, delim := ", ") {
@@ -2568,12 +2556,31 @@ StartRecording(ctrl, *) {
 
     RuntimeLogInfo("recording_geometry_captured", "Captured Roblox client size for recording", "width=" RecordingWidth "; height=" RecordingHeight)
 
-    if (A_ScreenWidth != 1920 || A_ScreenHeight != 1080) {
-        if (MsgBox(
-            "Your screen resolution is not 1920x1080.`nThe recording system is highly recommended for 1920x1080. Do you want to continue?",
-            "Warning", 0x1034) = "No") {
-            return
+    recordingWarnings := []
+    if (A_ScreenWidth != 1920 || A_ScreenHeight != 1080)
+        recordingWarnings.Push("• Screen resolution is " A_ScreenWidth "x" A_ScreenHeight " (1920x1080 recommended).")
+
+    try {
+        recordingHwnd := GetRobloxHWND()
+        if recordingHwnd {
+            recordingDpi := DllCall("User32.dll\GetDpiForWindow", "Ptr", recordingHwnd, "UInt")
+            if (recordingDpi > 0) {
+                recordingScalePct := Round((recordingDpi / 96) * 100)
+                if (recordingScalePct != 100)
+                    recordingWarnings.Push("• Windows display scaling is approximately " recordingScalePct "% (100% recommended).")
+            }
         }
+    } catch Error as dpiErr {
+        RuntimeLogWarn("recording_dpi_check_failed", "Could not read Roblox window DPI", "error=" dpiErr.Message)
+    }
+
+    if (recordingWarnings.Length > 0) {
+        warningText := "Your recording environment differs from the recommended baseline:`n`n"
+        for recordingWarning in recordingWarnings
+            warningText .= recordingWarning "`n"
+        warningText .= "`nCoordinates are saved with the Roblox client size and normalized during replay.`nContinue recording?"
+        if (MsgBox(warningText, "Recording environment warning", 0x1034) = "No")
+            return
     }
 
     if (IsSet(GuiTitleCtrl) && GuiTitleCtrl) {
@@ -2697,13 +2704,19 @@ StopRecord(ctrl, *) {
             return
         filePath := RecordingsDir "\" box.Value ".strat"
 
-        if !getRobloxPos(&pX, &pY, &currentWidth, &currentHeight) || currentWidth <= 0 || currentHeight <= 0 {
-            currentWidth := RecordingWidth
-            currentHeight := RecordingHeight
-            RuntimeLogWarn("recording_geometry_save_fallback", "Using recording-start Roblox client size while saving", "width=" currentWidth "; height=" currentHeight)
+        ; Placement coordinates were captured in the client plane established
+        ; when recording began. Persist that exact plane even if the user resized
+        ; Roblox before pressing Stop; using the save-time size mis-scaled replay.
+        strategyWidthToSave := RecordingWidth
+        strategyHeightToSave := RecordingHeight
+        if getRobloxPos(, , &currentWidth, &currentHeight) && currentWidth > 0 && currentHeight > 0 {
+            if (currentWidth != RecordingWidth || currentHeight != RecordingHeight) {
+                RuntimeLogWarn("recording_geometry_changed", "Roblox client size changed during recording",
+                    "recorded=" RecordingWidth "x" RecordingHeight "; current=" currentWidth "x" currentHeight)
+            }
         }
 
-        if (currentWidth <= 0 || currentHeight <= 0) {
+        if (strategyWidthToSave <= 0 || strategyHeightToSave <= 0) {
             RuntimeLogError("recording_geometry_invalid", "Strategy save blocked because no valid Roblox client geometry is available")
             MsgBox(
                 "The recording cannot be saved because its Roblox window size could not be determined.`n`nKeep Roblox open and try again.",
@@ -2724,7 +2737,7 @@ StopRecord(ctrl, *) {
                 . "`nmodifiers=" Join(modifiers)
                 . "`nautoChain=" autoChain "`nautoCaravan=" autoCaravan "`nautoDropTheBeat=" autoDropTheBeat
                 . "`nautoSkip=" AutoSkip "`nabilitySpam=" AbilitySpam "`nmoveEnabled=" MoveEnabled "`nmoveDirection=" MoveDirection
-                . "`nmoveDuration=" MoveDuration "`n`n[DO NOT EDIT]`nwidth=" currentWidth "`nheight=" currentHeight "`n`n[Steps]`n",
+                . "`nmoveDuration=" MoveDuration "`n`n[DO NOT EDIT]`nwidth=" strategyWidthToSave "`nheight=" strategyHeightToSave "`n`n[Steps]`n",
                 tempPath)
             for i, step in RecordedSteps
                 FileAppend(step "`n", tempPath)
@@ -3911,43 +3924,88 @@ OnKeyUp(ih, vk, sc) {
 
 global ActivePathSelectTowerID := ""
 
+KnownPathBranchLevel(towerID) {
+    if RegExMatch(towerID, "i)^(Juggernaut|Pursuit|Kingpin)\d*$")
+        return 4
+    if RegExMatch(towerID, "i)^Hacker\d*$")
+        return 5
+    return 0
+}
+
+ResolvePathBranchLevel(towerID, pathLevel := 0) {
+    suppliedLevel := 0
+    try {
+        if IsNumber(pathLevel)
+            suppliedLevel := Integer(pathLevel)
+    } catch {
+        suppliedLevel := 0
+    }
+
+    knownLevel := KnownPathBranchLevel(towerID)
+    if (knownLevel > 0) {
+        if (suppliedLevel <= 0)
+            return knownLevel
+
+        ; Compatibility with old recordings, which stored the LAST shared
+        ; level (3 for Juggernaut/Pursuit/Kingpin and 4 for Hacker).
+        if (suppliedLevel = knownLevel - 1)
+            return knownLevel
+    }
+
+    ; Never impose known-tower defaults on a custom ID.
+    return suppliedLevel
+}
+
+IsPathSpecificUpgrade(towerID, nextLevel, path, pathLevel) {
+    effectivePathLevel := ResolvePathBranchLevel(towerID, pathLevel)
+    return (path != 0 && effectivePathLevel > 0 && nextLevel >= effectivePathLevel)
+}
+
 ShowTowerPathDialog(towerID) {
     global Towers, ActivePathSelectTowerID
-    if (!Towers.Has(towerID) || Towers[towerID].path = 0 || Towers[towerID].path = "") {
-        ActivePathSelectTowerID := towerID
-        PathGui := Gui("+AlwaysOnTop +Border", "Path Selection")
-        PathGui.SetFont("s12 Bold c000000", UIFont())
-        PathGui.Add("Text", "x25 y20 w350", "Tower " towerID)
-        PathGui.SetFont("s11 w400 c000000", UIFont())
-        PathGui.Add("Text", "x25 y+10 w350", "Choose an upgrade path")
-        PathGui.Add("Text", "x25 y+10 w350",
-            "Rigth click on the tower indicator to make this appear.`nNote: enter 3 for Pursuit, Juggernaut, and Kingpin, 4 for Hacker"
-        )
-        PathGui.SetFont("s10 w600 c000000")
-        b1 := PathGui.Add("Button", "x25 y+25 w165 h40", "Path 1 (Top)")
-        b1.OnEvent("Click", (*) => SelectPath(PathGui, 1))
-        b2 := PathGui.Add("Button", "x+10 w165 h40", "Path 2 (Bottom)")
-        b2.OnEvent("Click", (*) => SelectPath(PathGui, 2))
-        bc := PathGui.Add("Button", "x25 y+10 w340 h35", "Cancel")
-        bc.OnEvent("Click", (*) => PathGui.Destroy())
-        PathGui.Show("w390 h280")
-        WinWaitClose("ahk_id " PathGui.Hwnd)
-    }
+    if !Towers.Has(towerID)
+        return
+
+    ; Allow reopening the dialog so a recorder can correct an earlier choice.
+    ActivePathSelectTowerID := towerID
+    PathGui := Gui("+AlwaysOnTop +Border", "Path Selection")
+    PathGui.SetFont("s12 Bold c000000", UIFont())
+    PathGui.Add("Text", "x25 y20 w350", "Tower " towerID)
+    PathGui.SetFont("s11 w400 c000000", UIFont())
+    PathGui.Add("Text", "x25 y+10 w350", "Choose an upgrade path")
+    PathGui.Add("Text", "x25 y+10 w350",
+        "Right-click the tower indicator to change this later.`nEnter the FIRST path-specific upgrade level (Juggernaut/Pursuit/Kingpin = 4, Hacker = 5)."
+    )
+    PathGui.SetFont("s10 w600 c000000")
+    b1 := PathGui.Add("Button", "x25 y+25 w165 h40", "Path 1 (Top)")
+    b1.OnEvent("Click", (*) => SelectPath(PathGui, 1))
+    b2 := PathGui.Add("Button", "x+10 w165 h40", "Path 2 (Bottom)")
+    b2.OnEvent("Click", (*) => SelectPath(PathGui, 2))
+    bc := PathGui.Add("Button", "x25 y+10 w340 h35", "Cancel")
+    bc.OnEvent("Click", (*) => PathGui.Destroy())
+    PathGui.Show("w390 h280")
+    WinWaitClose("ahk_id " PathGui.Hwnd)
 }
 
 SelectPath(pathGui, pathNum) {
     global Towers, ActivePathSelectTowerID
     pathGui.Destroy()
     towerID := ActivePathSelectTowerID
-    if (towerID = "")
+    if (towerID = "" || !Towers.Has(towerID))
         return
-    box := InputBox("Enter the level where the paths appear:", "Level", "w300 h130", "")
-    if (box.Result = "Cancel" || !IsInteger(box.Value))
+
+    knownBranchLevel := KnownPathBranchLevel(towerID)
+    defaultBranchLevel := (knownBranchLevel > 0) ? String(knownBranchLevel) : ""
+
+    box := InputBox("Enter the FIRST path-specific upgrade level:", "Path starts at level", "w340 h140", defaultBranchLevel)
+    if (box.Result = "Cancel" || !IsInteger(box.Value) || Integer(box.Value) < 1)
         return
+
+    branchLevel := Integer(box.Value)
     Towers[towerID].path := pathNum
-    Towers[towerID].pathLevel := Integer(box.Value)
+    Towers[towerID].pathLevel := branchLevel
     UpdateTowerIndicator(towerID)
-    LogToConsole("Tower " towerID " set to path " pathNum " from level " box.Value)
+    LogToConsole("Tower " towerID " set to path " pathNum " starting at level " branchLevel)
 }
 
 TestWebhook(ctrl, *) {
@@ -4420,14 +4478,14 @@ CheckWebhookLink2(ctrl, *) {
 ShowFAQ(*) {
     ModernMsgBox("FAQ",
         "[SCREEN AND SYSTEM SETTINGS]`n" .
-        "- Screen Resolution: Works strictly in 1920x1080.`n" .
-        "- Windows Scale: Must be set to 100%.`n" .
+        "- Screen Resolution: 1920x1080 is recommended; client coordinates are saved and normalized for replay.`n" .
+        "- Windows Scale: 100% is recommended for best image accuracy.`n" .
         "- Taskbar: Must be visible.`n`n" .
         "[ROBLOX AND GAME SETTINGS]`n" .
         "- UI Scale: Set to Large.`n" .
         "- Screen Shake: Must be DISABLED.`n" .
         "- Roblox Chat: Close the chat before starting the macro.`n" .
-        "- Set 'Prefer Vertical Upgrades' to Disabled.`n" .
+        "- Set 'Prefer Vertical Upgrades' to Enabled.`n" .
         "- Fonts: Do not use custom fonts.`n`n" .
         "[COMMANDER ISSUES]`n" .
         "- Auto Chain: Enter 'Commander1', 'Commander2', etc., when placing them.", "OK")
@@ -4550,7 +4608,7 @@ LoadStrategyFile(file) {
             tid := Trim(m[1])
             if (Towers.Has(tid) && m[2] != "") {
                 Towers[tid].path := m[2]
-                Towers[tid].pathLevel := (m[3] != "") ? m[3] : 4
+                Towers[tid].pathLevel := ResolvePathBranchLevel(tid, (m[3] != "") ? m[3] : 0)
             }
         }
     }
@@ -4674,7 +4732,7 @@ RunStrategy(stratFile := "", skipRestart := false) {
 PlayStrategy() {
     global canUseAbility, MultiplayerEnabled, StateFile
 
-    MacroPhase("playing", 2400000)
+    MacroPhase("playing", 900000)
     IniWrite(A_TickCount, StateFile, "State", "TimeWhenStartedPlaying")
     SetTimer(UseAbilities, 750)
     if (MultiplayerEnabled) {
@@ -4684,6 +4742,7 @@ PlayStrategy() {
     i := 1
     while (i <= RecordedSteps.Length) {
         step := RecordedSteps[i]
+        MacroPhase("playing_step", 900000)
         isMacroStep := RegExMatch(step, "i)^(Click|Send|Sleep)\s*\(")
 
         if RegExMatch(step,
@@ -4695,13 +4754,17 @@ PlayStrategy() {
             escapedID := RegExReplace(currentID, "([\.\^\$\*\+\?\(\)\[\]\{\}\|])", "\$1")
             countUpgrades := (m[3] != "") ? Integer(m[3]) : 1
             currentPath := (m[4] != "") ? Integer(m[4]) : 0
-            currentpathLevel := (m[5] != "") ? Integer(m[5]) : 4
+            currentpathLevel := ResolvePathBranchLevel(currentID, (m[5] != "") ? Integer(m[5]) : 0)
 
             lookAhead := i + 1
             while (lookAhead <= RecordedSteps.Length) {
                 nextStep := RecordedSteps[lookAhead]
                 if RegExMatch(nextStep, "i)UpgradeTower\s*\(\s*" escapedID "\s*(?:,\s*(?:false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)", &
                     mN) {
+                    nextPath := (mN[2] != "") ? Integer(mN[2]) : 0
+                    nextPathLevel := ResolvePathBranchLevel(currentID, (mN[3] != "") ? Integer(mN[3]) : 0)
+                    if (nextPath != currentPath || (nextPath != 0 && nextPathLevel != currentpathLevel))
+                        break
                     countUpgrades += (mN[1] != "") ? Integer(mN[1]) : 1
                     lookAhead++
                 } else {
@@ -4729,6 +4792,7 @@ PlayStrategy() {
 
     Click(ScaleX(unfocusX), ScaleY(unfocusY))
     LogToConsole("All strategy steps completed...")
+    MacroPhase("waiting_result", 7200000)
     loop {
         canUseAbility := true
         LastOpenedTowerID := ""
@@ -4739,7 +4803,7 @@ PlayStrategy() {
 }
 
 ExecuteStep(step) {
-    global Commander, unfocusX, unfocusY
+    global Commander, unfocusX, unfocusY, StrategyWidth, StrategyHeight
     step := RegExReplace(step, "\s*;.*$", "")
     step := Trim(step)
     if (step = "")
@@ -4752,12 +4816,12 @@ ExecuteStep(step) {
         "i)UpgradeTower\s*\(\s*([^,]+?)\s*(?:,\s*(false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)", &
         m) {
         UpgradeTower(Trim(m[1]), (m[2] = "true"), (m[3] != "") ? Integer(m[3]) : 1, (m[4] != "") ? Integer(m[4]) : 0, (
-            m[5] != "") ? Integer(m[5]) : 4)
+            m[5] != "") ? Integer(m[5]) : 0)
         return
     }
 
     if RegExMatch(step, "i)CloneTower\s*\(\s*([^,]+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", &m) {
-        CloneTower(Trim(m[1]), Integer(m[2]), Integer(m[3]), Integer(m[4]))
+        CloneTower(Trim(m[1]), sX(Integer(m[2]), StrategyWidth), sY(Integer(m[3]), StrategyHeight), Integer(m[4]))
         return
     }
 
@@ -4771,7 +4835,7 @@ ExecuteStep(step) {
     }
 
     if RegExMatch(step, "i)CloneTower\s*\(\s*([^,]+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", &m) {
-        CloneTower(Trim(m[1]), Integer(m[2]), Integer(m[3]), 0)
+        CloneTower(Trim(m[1]), sX(Integer(m[2]), StrategyWidth), sY(Integer(m[3]), StrategyHeight), 0)
         return
     }
     if RegExMatch(step, "i)ActivateRaiseTheDead\s*\(\s*(\d+)\s*\)", &m) {
@@ -4784,7 +4848,7 @@ ExecuteStep(step) {
     }
 
     if RegExMatch(step, "i)BrawlerReposition\s*\(\s*([^,]+?)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", &m) {
-        BrawlerReposition(Trim(m[1]), Integer(m[2]), Integer(m[3]))
+        BrawlerReposition(Trim(m[1]), sX(Integer(m[2]), StrategyWidth), sY(Integer(m[3]), StrategyHeight))
         return
     }
 
@@ -4796,7 +4860,7 @@ ExecuteStep(step) {
     }
     if RegExMatch(step, "i)^Click\s*\(\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*(.+?))?\s*\)$", &m) {
         button := InStr(m[3], "Right") ? "Right" : "Left"
-        Click(ScaleX(m[1]) " " ScaleY(m[2]) " " button)
+        Click(sX(m[1], StrategyWidth) " " sY(m[2], StrategyHeight) " " button)
         return
     }
     if RegExMatch(step, 'i)^Send\s*\(\s*"([^"]+)"\s*,\s*hold:=(\d+)\s*\)$', &m) {
@@ -4806,7 +4870,13 @@ ExecuteStep(step) {
         return
     }
     if RegExMatch(step, "i)^Sleep\s*\(\s*(\d+)\s*\)$", &m) {
-        Sleep(Integer(m[1]))
+        strategySleepMs := Integer(m[1])
+        ; A recorded wait is intentional progress, not a frozen macro. Give the
+        ; watchdog a budget derived from the step itself, then restore the normal
+        ; per-step stall budget after the wait finishes.
+        MacroPhase("strategy_sleep", Max(300000, strategySleepMs + 120000))
+        Sleep(strategySleepMs)
+        MacroPhase("playing_step", 900000)
         return
     }
     if RegExMatch(step, "i)Commander\s*:=\s*true") {
@@ -4831,7 +4901,11 @@ LowerGraphics() {
 
 EquipTowers(towers) {
     MacroPhase("equipping_towers", 300000)
-    getRobloxPos(, , &rw, &rh)
+    if !getRobloxPos(, , &rw, &rh) {
+        RuntimeLogWarn("autoequip_geometry_missing", "Auto Equip could not resolve Roblox client geometry")
+        SafeReload()
+        return false
+    }
 
     savedCloseX := 0
     savedCloseY := 0
@@ -4937,7 +5011,7 @@ EquipTowers(towers) {
 
     StartTime := A_TickCount
     loop {
-        resBar := AdvancedImageSearch("Resources\searchbar_items.png", 0, 0, Round(rh * 0.5), Round(rh * 0.5))
+        resBar := AdvancedImageSearch("Resources\searchbar_items.png", 0, 0, Round(rw * 0.5), Round(rh * 0.5))
         if (resBar.status == "success" && resBar.score > 0.67) {
             srchX := resBar.x + 30
             srchY := resBar.y
@@ -4946,6 +5020,11 @@ EquipTowers(towers) {
         if (A_TickCount - StartTime > 4000)
             break
         Sleep(400)
+    }
+
+    if (resBar.status != "success" || resBar.score <= 0.67) {
+        RuntimeLogWarn("autoequip_searchbar_fallback", "Auto Equip search bar template was not found; using scaled fallback",
+            "width=" rw "; height=" rh "; x=" srchX "; y=" srchY)
     }
 
     Click(srchX, srchY)
@@ -4966,7 +5045,7 @@ EquipTowers(towers) {
     StartTime := A_TickCount
     loop {
         getRobloxPos(, , &w, &h)
-        baseScale := h / 1009
+        baseScale := GetClientTemplateScale(h)
 
         resAlign := AdvancedImageSearch("Resources\equip.png", X1, Y1, W, H, 0.5 * baseScale, 2, 0.025)
 
@@ -5006,7 +5085,7 @@ EquipTowers(towers) {
             H := rh - Y1
 
             getRobloxPos(, , &w, &h)
-            baseScale := h / 1009
+            baseScale := GetClientTemplateScale(h)
 
             resUnequip := AdvancedImageSearch("Resources\unequip.png", X1, Y1, W, H, 0.3 * baseScale, 1.4, 0.025)
             if (resUnequip.status == "success" && resUnequip.score > 0.63) {
@@ -5040,6 +5119,15 @@ EquipTowers(towers) {
     loop parse, towers, "," {
         ActivateRoblox()
         tower := Trim(A_LoopField)
+        if (tower = "")
+            continue
+
+        if !getRobloxPos(, , &rw, &rh) {
+            RuntimeLogWarn("autoequip_geometry_lost", "Roblox client geometry disappeared while equipping",
+                "tower=" tower)
+            SafeReload()
+            return false
+        }
 
         goldtower := RegExMatch(tower, "i)\b(Golden|G\.|G)\b") ? true : false
         regulartower := RegExMatch(tower, "i)\b(Regular|R\.|R)\b") ? true : false
@@ -5050,6 +5138,8 @@ EquipTowers(towers) {
         Click(srchX, srchY)
         Sleep(150)
 
+        Send("^a")
+        Send("{Backspace}")
         SendText(towerToEnter)
         Sleep(500)
         Click(srchX + 10, ScaleY(409))
@@ -5061,16 +5151,17 @@ EquipTowers(towers) {
         H := rh - Y1
 
         TowerStart := A_TickCount
+        towerEquipped := false
         loop {
-            getRobloxPos(, , &w, &h)
-            baseScale := h / 1009
+            baseScale := GetClientTemplateScale(rh)
 
             resEquip := AdvancedImageSearch("Resources\equip.png", X1, Y1, W, H, 0.5 * baseScale, 1.4, 0.025)
 
             if (resEquip.status == "success" && resEquip.score > 0.4) {
-                if (PixelSearch(&eX, &eY, resEquip.x - 40, resEquip.y - 25, resEquip.x + 40, resEquip.y + 25, 0x45DC4A,
-                    7)) {
+                if (PixelSearch(&eX, &eY, resEquip.x - ScaleX(40), resEquip.y - ScaleY(25),
+                    resEquip.x + ScaleX(40), resEquip.y + ScaleY(25), 0x45DC4A, 7)) {
                     Click(resEquip.x, resEquip.y)
+                    towerEquipped := true
 
                     if (goldtower) {
                         GoldStart := A_TickCount
@@ -5115,6 +5206,14 @@ EquipTowers(towers) {
                 break
             Sleep(400)
         }
+
+        if !towerEquipped {
+            RuntimeLogWarn("autoequip_tower_timeout", "Tower equip control was not confirmed within bounded retries",
+                "tower=" tower "; elapsed_ms=" (A_TickCount - TowerStart))
+            LogToConsole("Failed to equip tower '" tower "' reliably. Reloading...", true, false)
+            SafeReload()
+            return false
+        }
         Sleep(400)
     }
     X1 := Round(rw * 0.2)
@@ -5131,6 +5230,7 @@ EquipTowers(towers) {
 
     LogToConsole("Successfully equipped towers: " towers, true, false)
     IniWrite(1, StateFile, "State", "Equipped")
+    return true
 }
 
 CheckRestart() {
@@ -5523,6 +5623,56 @@ TryClickArcadeTarget(target, w, h) {
     return false
 }
 
+TryClickDifficultyTarget(target, w, h) {
+    cardX := Round(w * 0.22)
+    cardY := Round(h * 0.06)
+    cardW := Round(w * 0.62)
+    cardH := Round(h * 0.76)
+
+    imagePath := "Resources/" target ".png"
+    if FileExist(imagePath) {
+        res := AdvancedImageSearch(imagePath, cardX, cardY, cardW, cardH)
+        if (res.status = "success" && res.score >= 0.67) {
+            RuntimeLogInfo("difficulty_image_select", "Selecting difficulty by image", "target=" target "; score=" res.score)
+            Click(res.x, res.y)
+            return true
+        }
+    }
+
+    ; OCR fallback tolerates changed card artwork while staying inside the game
+    ; card panel (never the macro log/console). OCR uses SCREEN coordinates.
+    try {
+        if !GetRobloxScreenClientRect(&screenX, &screenY, &screenW, &screenH)
+            return false
+
+        langCode := "en-US"
+        for availableLang in StrSplit(OCR.GetAvailableLanguages(), "`n", "`r") {
+            if (availableLang != "" && SubStr(availableLang, 1, 2) = "en") {
+                langCode := availableLang
+                break
+            }
+        }
+
+        ocrResult := OCR.FromRect(
+            screenX + Round(screenW * 0.22),
+            screenY + Round(screenH * 0.06),
+            Round(screenW * 0.62),
+            Round(screenH * 0.76),
+            { lang: langCode, scale: 1.45, grayscale: 1 }
+        )
+        match := ocrResult.FindString(target, { CaseSense: false, IgnoreLinebreaks: true })
+        if (match) {
+            RuntimeLogInfo("difficulty_text_select", "Selecting difficulty by OCR", "target=" target)
+            match.Click()
+            return true
+        }
+    } catch Error as difficultyOcrErr {
+        RuntimeLogWarn("difficulty_ocr_error", "Difficulty OCR targeting failed",
+            "target=" target "; error=" difficultyOcrErr.Message)
+    }
+    return false
+}
+
 WaitForLobbyLoad() {
     global difficulty, MultiplayerEnabled, PlayerRole
 
@@ -5665,32 +5815,56 @@ JoinGame() {
         }
         Sleep(300)
     } else {
-        startTime := A_TickCount
-        ; Absolute deadline for the whole difficulty-selection phase. It must be
-        ; initialized ONCE, outside the loop. Re-initializing it every iteration
-        ; made the recovery reload unreachable, so any missed difficulty template
-        ; became an unrecoverable hang (the "Joining <mode>..." stall).
-        difficultyDeadline := A_TickCount
+        difficultyStart := A_TickCount
+        difficultyDeadline := difficultyStart + 60000
+        lastPlayRetry := 0
+        firstModeScrollAt := difficultyStart + 1500
+        lastModeScroll := difficultyStart
+        modeScrollAttempts := 0
+
         loop {
             getRobloxPos(, , &w, &h)
-            if (A_TickCount - startTime > 20000) {
-                res := AdvancedImageSearch("Resources\Play.png", x1, y1, x2, y2)
-                if (res.status == "success" && res.score > 0.7) {
-                    Click(res.x, res.y)
-                    startTime := A_TickCount
-                    difficultyDeadline := A_TickCount
-                }
-            }
-            if (A_TickCount - difficultyDeadline > 60000) {
+            elapsedDifficulty := A_TickCount - difficultyStart
+            if (A_TickCount >= difficultyDeadline) {
                 LogToConsole("Could not select difficulty '" difficulty "' within 60s. Reloading...", true)
-                RuntimeLogWarn("difficulty_select_timeout", "Difficulty card never matched", "difficulty=" difficulty)
+                RuntimeLogWarn("difficulty_select_timeout", "Difficulty card never matched",
+                    "difficulty=" difficulty "; scrolls=" modeScrollAttempts)
                 SafeReload()
+                return
+            }
+
+            if TryClickDifficultyTarget(difficulty, w, h) {
                 break
             }
-            res := AdvancedImageSearch("Resources/" difficulty ".png", 0, 0, w, h)
-            if (res.status = "success" && res.score >= 0.7) {
-                Click(res.x, res.y)
-                break
+
+            ; Frost and other standard cards may sit below the first viewport in
+            ; the current Play UI. Scroll in a bounded way and retry both image
+            ; and OCR targeting on each viewport.
+            if (A_TickCount >= firstModeScrollAt && A_TickCount - lastModeScroll >= 650 && modeScrollAttempts < 12) {
+                ActivateRoblox()
+                MouseMove(Round(w * 0.78), Round(h * 0.78), 0)
+                SendEvent("{WheelDown 4}")
+                lastModeScroll := A_TickCount
+                modeScrollAttempts++
+                RuntimeLogInfo("difficulty_scroll_retry", "Scrolling the bounded mode-card panel",
+                    "difficulty=" difficulty "; attempt=" modeScrollAttempts)
+            }
+
+            ; If the Play screen bounced closed, re-open it, but NEVER reset the
+            ; absolute difficulty deadline. The previous PR reset that deadline
+            ; and could still hang forever on "Entering/Joining Easy...".
+            if (elapsedDifficulty > 15000 && (lastPlayRetry = 0 || A_TickCount - lastPlayRetry >= 5000)) {
+                playX := Round(w * 0.25)
+                playY := Round(h * 0.66)
+                playW := Round(w * 0.5)
+                playH := Round(h * 0.34)
+                resPlay := AdvancedImageSearch("Resources\Play.png", playX, playY, playW, playH)
+                if (resPlay.status == "success" && resPlay.score > 0.7) {
+                    RuntimeLogInfo("difficulty_play_recovery", "Reopening Play without extending the mode deadline",
+                        "difficulty=" difficulty "; elapsed_ms=" elapsedDifficulty)
+                    Click(resPlay.x, resPlay.y)
+                }
+                lastPlayRetry := A_TickCount
             }
             Sleep(100)
         }
@@ -6400,23 +6574,46 @@ CheckTheMapF() {
 
         LogToConsole("Checking the map... (Make sure you have the lowest graphics)")
 
-        getRobloxPos(, , &w, &h)
         FoundMap := false
-        loop 2 {
-            res := AdvancedImageSearch("Resources\Maps\" gamemap ".png", 0, 0, w, h)
+        mapDeadline := A_TickCount + 12000
+        mapSamples := 0
+        cameraRecoveries := 0
+        lastMapScore := 0
 
-            if (res.score > 0.62) {
+        while (A_TickCount < mapDeadline && mapSamples < 16) {
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("map_geometry_missing", "Roblox client geometry disappeared during map detection",
+                    "map=" gamemap)
+                break
+            }
+
+            mapSamples++
+            res := AdvancedImageSearch("Resources\Maps\" gamemap ".png", 0, 0, w, h)
+            lastMapScore := res.HasProp("score") ? res.score : 0
+
+            if (res.status = "success" && lastMapScore > 0.62) {
                 FoundMap := true
                 break
             }
 
-            Sleep(1250)
+            ; A noisy first viewport is not a reload condition. Re-establish the
+            ; deterministic camera twice during the same absolute deadline.
+            if (cameraRecoveries < 2 && (mapSamples = 4 || mapSamples = 9)) {
+                AlignCamera(false, false, false)
+                cameraRecoveries++
+                RuntimeLogInfo("map_camera_recovery", "Realigned camera after transient map misses",
+                    "map=" gamemap "; recovery=" cameraRecoveries "; samples=" mapSamples)
+            }
+            Sleep(650)
         }
 
         if (!FoundMap) {
+            RuntimeLogWarn("map_detection_failed", "Configured map image was not detected",
+                "map=" gamemap "; score=" lastMapScore "; samples=" mapSamples "; camera_recoveries=" cameraRecoveries)
             LogToConsole("Can't detect the map! Reloading script...", true)
             Sleep 300
             SafeReload()
+            return
         }
     }
 
@@ -6471,35 +6668,21 @@ ApplyModifiers() {
 }
 
 FindReadyButton(&foundX, &foundY) {
-    getRobloxPos(, , &w, &h)
-
-    ; Bounded search region shared by both detection methods.
+    if !getRobloxPos(, , &w, &h) {
+        foundX := 0
+        foundY := 0
+        return false
+    }
     rx := Round(w * 0.4)
     ry := Round(h * 0.05)
     rw := Round(w * 0.3)
     rh := Round(h * 0.3)
 
     result := AdvancedImageSearch("Resources/ready_gs.png", rx, ry, rw, rh)
-
-    ; Every backend now returns Roblox CLIENT coordinates, which is what mouse
-    ; input uses. No origin correction is applied here on purpose.
     if (result.status = "success" && result.score > 0.7) {
         foundX := result.x
         foundY := result.y
         return true
-    }
-
-    ; Backend-independent fallback. Template matching depends on the native
-    ; image-search backend and on the template still matching the live TDS art;
-    ; the Ready button's green is neither. Bounded to the same region so this
-    ; cannot click arbitrary green pixels elsewhere on screen, and the caller
-    ; re-checks after clicking anyway.
-    try {
-        if PixelSearch(&gx, &gy, rx, ry, rx + rw, ry + rh, 0x2BEB00, 2) {
-            foundX := gx
-            foundY := gy
-            return true
-        }
     }
 
     foundX := 0
@@ -6510,10 +6693,13 @@ FindReadyButton(&foundX, &foundY) {
 ClickReady() {
     global readyX, readyY
 
-    loop 5 {
+    readyDeadline := A_TickCount + 8000
+    attempts := 0
+    while (A_TickCount < readyDeadline && attempts < 6) {
+        attempts++
         if !FindReadyButton(&readyX, &readyY) {
-            LogToConsole("Ready button image not found, retrying...")
-            Sleep(200)
+            LogToConsole("Ready button image not found (attempt " attempts "/6), retrying...")
+            Sleep(300)
             continue
         }
 
@@ -6522,22 +6708,35 @@ ClickReady() {
         MouseClick()
         Sleep 250
 
-        if !FindReadyButton(&checkX, &checkY) {
-            Sleep(200)
+        ; Require two consecutive bounded misses after a click. A single noisy
+        ; frame is not enough evidence that the match started.
+        disappearedSamples := 0
+        loop 3 {
             if !FindReadyButton(&checkX, &checkY) {
-                LogToConsole("Successfully started the match by clicking the ready button.")
-                return
+                disappearedSamples++
+                if (disappearedSamples >= 2) {
+                    LogToConsole("Successfully started the match by clicking the ready button.")
+                    RuntimeLogInfo("ready_click_confirmed", "Ready disappeared after a template-based click",
+                        "attempt=" attempts)
+                    return true
+                }
+            } else {
+                disappearedSamples := 0
+                readyX := checkX
+                readyY := checkY
             }
+            Sleep(200)
         }
 
-        readyX := checkX
-        readyY := checkY
         LogToConsole("Ready button is still visible, retrying...")
-        Sleep(150)
+        Sleep(250)
     }
 
     LogToConsole("Failed to confirm the Ready button after multiple attempts. Reloading...", true)
+    RuntimeLogWarn("ready_click_timeout", "Ready could not be clicked and confirmed within bounded retries",
+        "attempts=" attempts)
     SafeReload()
+    return false
 }
 
 waitReady() {
@@ -6918,6 +7117,8 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
         return false
     }
 
+    effectivePathLevel := ResolvePathBranchLevel(towerID, pathLevel)
+
     targetX := Towers[towerID].x
     targetY := Towers[towerID].y
 
@@ -7011,7 +7212,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
         region := [upgAX, upgAY, upgAW, upgAH]
 
-        if (path != 0 && nextLevel > pathLevel && pathLevel != 0) {
+        if IsPathSpecificUpgrade(towerID, nextLevel, path, effectivePathLevel) {
             if (path = 2) {
                 if (doResV2) {
                     region := [resV2.x + ScaleX(20), resV2.y - ScaleY(95), ScaleX(80), ScaleY(70)]
@@ -7041,7 +7242,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
         if (isGreen && canBeUpgraded) {
             canUseAbility := false
             if (UseHForUpgrade) {
-                if (path != 0 && nextLevel > pathLevel && pathLevel != 0) {
+                if IsPathSpecificUpgrade(towerID, nextLevel, path, effectivePathLevel) {
                     if (path = 1) {
                         SendEvent("{" UpgradeTowerGKey "}")
                     } else if (path = 2) {
@@ -7058,6 +7259,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
             Towers[towerID].level += 1
             upgradesDone++
+            MacroPhase("playing_upgrade_progress", 900000)
             LogToConsole("Tower " towerID " upgraded to level " Towers[towerID].level " (" upgradesDone "/" totalUpgrades ")"
             )
             UpdateTowerIndicator(towerID)
@@ -7176,15 +7378,33 @@ CheckPopups(*) {
 }
 
 UseAbilities(*) {
+    global canUseAbility, canBeUpgraded, needtocheckTowerUI
+    static callbackActive := false
+
+    if (callbackActive || !canUseAbility)
+        return
+
+    callbackActive := true
+    try {
+        UseAbilitiesPass()
+    } catch Error as abilityErr {
+        RuntimeLogWarn("ability_timer_error", "Ability timer pass failed safely", "error=" abilityErr.Message)
+    } finally {
+        ; The timer entered only while abilities were available, so restoring
+        ; these flags cannot release a lock owned by an interrupted runtime step.
+        callbackActive := false
+        canUseAbility := true
+        canBeUpgraded := true
+        needtocheckTowerUI := true
+    }
+}
+
+UseAbilitiesPass() {
     global ChainKey, BeatKey, CaravanKey, CancelPlacementKey, TimeScaleMultiplier, AutoSkip, AbilitySpam
     global autoChain, autoCaravan, autoDropTheBeat, Commander, unfocusX, unfocusY, canUseAbility
     global LastOpenedTowerID, Towers, TimescaleActive, needtocheckTowerUI
     global canBeUpgraded
     static LastChainTime := 0, LastDropTime := 0, LastCaravanTime := 0
-
-    if (!canUseAbility) {
-        return
-    }
 
     multiplier := 1
     if (TimescaleActive) {
@@ -7330,82 +7550,104 @@ UseAbilities(*) {
 }
 
 SetDJTrack(track) {
-    global Towers, unfocusX, unfocusY, LastOpenedTowerID, UseTimeScale, TimeScaleMode
+    global Towers, unfocusX, unfocusY, LastOpenedTowerID
     global canUseAbility, needtocheckTowerUI, PotatoMode
+
     if (!Towers.Has("DJ")) {
         LogToConsole("DJ tower not found!")
-        return
+        return false
     }
+
+    cleanTrack := StrReplace(track, Chr(34), "")
+    cleanTrack := StrReplace(cleanTrack, "'", "")
+    trackName := Format("{:L}", Trim(cleanTrack))
+    trackImage := "Resources\" trackName ".png"
+    if (trackName = "" || !FileExist(trackImage)) {
+        LogToConsole("Unknown DJ track/color: " track, true)
+        RuntimeLogWarn("dj_track_invalid", "DJ track image is unavailable", "track=" trackName)
+        return false
+    }
+
     LogToConsole("Setting DJ track to " track "...")
     canUseAbility := false
     needtocheckTowerUI := true
+    mouseCaptured := false
 
-    cleanTrack := StrReplace(track, '"', '')
-    cleanTrack := StrReplace(cleanTrack, "'", "")
-    trackName := Format("{:L}", cleanTrack)
+    try {
+        MouseGetPos(&originalMouseX, &originalMouseY)
+        mouseCaptured := true
 
-    if (LastOpenedTowerID != "DJ") {
-        Click(Towers["DJ"].x, Towers["DJ"].y)
-        LastOpenedTowerID := "DJ"
-    }
-
-    Sleep(200)
-
-    upgTime := A_TickCount
-
-    loop {
-        getRobloxPos(&rx, &ry, &w, &h)
-        startTime := A_TickCount
-
-        openedSuccessfully := false
-        StartTime := A_TickCount
-
-        if (PotatoMode) {
-            if (A_TickCount - upgTime > 600) {
-                needtocheckTowerUI := true
-                upgTime := A_TickCount
-            }
-        } else {
-            needtocheckTowerUI := true
+        if (LastOpenedTowerID != "DJ") {
+            Click(Towers["DJ"].x, Towers["DJ"].y)
+            LastOpenedTowerID := "DJ"
         }
+        Sleep(200)
 
-        if (needtocheckTowerUI) {
-            openedSuccessfully := waitForTowerUI(&resv2, &resv1)
-
-            if (!openedSuccessfully) {
-                variation := Random(-10, 10)
-                Click(Towers["DJ"].x, Towers["DJ"].y + ScaleY(variation))
-                Sleep(400)
-                continue
+        deadline := A_TickCount + 25000
+        attempts := 0
+        loop {
+            attempts++
+            if (A_TickCount >= deadline) {
+                LogToConsole("Could not change DJ track to " track " within 25 seconds.", true)
+                RuntimeLogWarn("dj_track_timeout", "DJ track control was not reliably detected",
+                    "track=" trackName "; attempts=" attempts)
+                return false
             }
-        }
 
-        DJTrack := resV2 := AdvancedImageSearch("Resources\" trackName ".png", 0, 0, w, h, 0.5, 1.5, 0.05)
-        if (DJTrack.score > 0.6) {
-            MouseGetPos(&cx, &cy)
-            MouseClick(, DJTrack.x, DJTrack.y)
-
-            Sleep 400
             getRobloxPos(, , &w, &h)
-            x1 := Round(w * 0.2)
-            y1 := Round(h * 0.18)
-            x2 := Round(w * 0.7)
-            y2 := Round(h * 0.3)
-            if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/please_wait.png") ||
-            ReadMessage(["please", "wait"])) {
-                LogToConsole("Need to wait before swithcing the track. Waiting 5 seconds...")
-                Sleep(4500)
+            towerUiTimeout := (PotatoMode = 1) ? 1800 : 1200
+            retryDelay := (PotatoMode = 1) ? 450 : 300
+            openedSuccessfully := waitForTowerUI(&resv2, &resv1, towerUiTimeout)
+            if (!openedSuccessfully) {
+                variation := Random(-8, 8)
+                Click(Towers["DJ"].x, Towers["DJ"].y + ScaleY(variation))
+                LastOpenedTowerID := "DJ"
+                Sleep(retryDelay)
                 continue
-            } else {
-                LogToConsole("Successfully changed DJ track to " track)
             }
 
-            Sleep 10
-            MouseMove(cx, cy)
+            DJTrack := AdvancedImageSearch(trackImage, 0, 0, w, h, 0.5, 1.5, 0.05)
+            if (DJTrack.status = "success" && DJTrack.score > 0.6) {
+                Click(DJTrack.x, DJTrack.y)
+                Sleep(400)
+
+                getRobloxPos(, , &w, &h)
+                x1 := Round(w * 0.2)
+                y1 := Round(h * 0.18)
+                x2 := Round(w * 0.7)
+                y2 := Round(h * 0.3)
+                if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/please_wait.png") ||
+                ReadMessage(["please", "wait"])) {
+                    LogToConsole("DJ track is on cooldown. Waiting and retrying...")
+                    remainingMs := deadline - A_TickCount
+                    if (remainingMs <= 250)
+                        continue
+                    Sleep(Min(4500, remainingMs - 100))
+                    needtocheckTowerUI := true
+                    continue
+                }
+
+                LogToConsole("Successfully changed DJ track to " track)
+                RuntimeLogInfo("dj_track_changed", "DJ track click completed without cooldown",
+                    "track=" trackName "; attempts=" attempts)
+                return true
+            }
+
+            if (Mod(attempts, 3) = 0) {
+                Click(ScaleX(unfocusX), ScaleY(unfocusY))
+                Sleep(150)
+                Click(Towers["DJ"].x, Towers["DJ"].y)
+                LastOpenedTowerID := "DJ"
+            }
+            needtocheckTowerUI := true
+            Sleep(250)
         }
-        break
+    } finally {
+        canUseAbility := true
+        needtocheckTowerUI := true
+        if mouseCaptured
+            MouseMove(originalMouseX, originalMouseY)
     }
-    canUseAbility := true
 }
 
 UpdateTowerIndicator(towerID) {

@@ -82,6 +82,20 @@ loop {
 
     loopCounter++
 
+    if (Mod(loopCounter, 5) == 0 && !ProcessExist(MainPID)) {
+        ; Main may disappear because the user intentionally stopped the macro.
+        ; Re-read Running inside this exact process-missing branch so the older
+        ; periodic check below cannot race an intentional exit into a restart.
+        runningAfterMainExit := Integer(IniRead(StateFile, "State", "Running", 0))
+        if (!runningAfterMainExit)
+            ExitApp()
+
+        RuntimeLogError("main_process_missing", "Main process exited while the strategy was marked running",
+            "main_pid=" MainPID)
+        RestartMain()
+        ExitApp()
+    }
+
     if (Mod(loopCounter, 15) == 0) {
         if !Integer(IniRead(StateFile, "State", "Running", 0)) {
             ExitApp()
