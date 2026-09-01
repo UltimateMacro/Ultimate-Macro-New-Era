@@ -31,9 +31,9 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 - **Windows 10/11**
 - **AutoHotkey v2.0**
-- Required resolution: **1920x1080**
-- Windows display scaling must be set to **100%** for the macro to work properly
-- Windows taskbar must not be hidden
+- Recommended resolution: **1920x1080** (recorded coordinates are normalized for other supported client sizes)
+- Recommended Windows display scaling: **100%**
+- Windows taskbar should remain visible for the canonical layout
 - Recommended Roblox FPS: **60**
 - TDS UI Scale: **Large**
 - TDS Screen Shake: **Disabled**

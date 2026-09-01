@@ -10,8 +10,9 @@ Run from the repository root in PowerShell:
 
 ```powershell
 pwsh ./tools/sync_dependencies.ps1
-python -m py_compile tests/test_source_contracts.py tests/validate_repo.py tests/lint_strategies.py
+python -m py_compile tests/test_source_contracts.py tests/test_reported_runtime_fixes.py tests/validate_repo.py tests/lint_strategies.py
 python tests/test_source_contracts.py .
+python tests/test_reported_runtime_fixes.py .
 python tests/validate_repo.py .
 python tests/lint_strategies.py .
 pwsh ./tools/validate_powershell.ps1
@@ -52,6 +53,16 @@ preflight on Windows with read-only repository permissions.
 4. Sanity-check two other image-driven actions such as Equip and Restart.
 5. Record whether the expected GDI+ fallback was active; the optional OpenCV
    DLL is deliberately not part of this QA candidate.
+
+### Reported-bug regression matrix
+
+1. Auto Equip: run at 1920x1080, then one non-default supported client size; verify the items/search/equip flow does not stall.
+2. Matchmaking: run Easy and Frost. Frost must be selectable after bounded scrolling even if image matching misses; leaving the target unavailable must recover within 60 seconds.
+3. Path tower: record Juggernaut **Bottom Path**, enter first path level **4**, replay, and confirm level 4 takes the bottom branch. Right-click the indicator and verify the path can be changed and re-saved.
+4. DJ: record Green → Purple → Red changes and replay them; temporarily trigger the track cooldown and confirm the macro retries instead of silently continuing.
+5. Cross-resolution: record raw Click + Clone + Brawler reposition at one supported client size and replay at another; destinations must remain aligned.
+6. Move the Roblox window away from the desktop origin and verify Ready, map OCR/image check, reward OCR and disconnect handling still target Roblox.
+7. Leave a normal match running after the final recorded step for >40 minutes; the watchdog must not restart it merely because the old broad playing phase expired.
 
 ### Strategy execution
 
