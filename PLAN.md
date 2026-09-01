@@ -1,3 +1,66 @@
+# Reported runtime QA follow-up — 2026-09-01
+
+Target: continue `qa/reported-runtime-fixes` after local commit `55dfaf3` and
+publish only that QA branch to the `origin` fork for a PR into `dev`. Never
+merge or push directly to `main`; preserve Darksen as Original Creator and the
+GPL-3.0 attribution.
+
+## Follow-up findings and constraints
+
+- `Resources/Strats/2_Absolute_Zero.strat` is the third obsolete bundled Frost
+  strategy. It must remain deleted together with the two Frost defaults already
+  removed by `55dfaf3`; no Frost strategy may be restored automatically until a
+  developer or tester supplies and validates a new official strategy.
+- The official runtime package requires the reviewed
+  `lib/ImageSearch/opencv_world500.dll` and
+  `lib/ImageSearch/vcruntime140.dll` files. Their approved SHA-256 values are
+  `7bc06231bf3cfd287e0b6853a78f78e00ceb58266f3cb49642f428ea6f4d1518`
+  and `d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7`.
+- Community strategy refresh must remain enabled in extracted official
+  releases, but must not contact or mirror `main` when `A_ScriptDir\.git` is a
+  directory (normal checkout) or a file (linked Git worktree).
+- `Resources/Strats/SUICIDE_MINIGUNNER_GEM_EXP_FARM.strat` is outside the
+  change scope. Preserve its bytes and line endings.
+- Numbers-for-Hotbar OFF behavior and the AutoHotkey 2.0.12/2.0.26 difference
+  remain manual QA items; source validation will use the immutable verified
+  AutoHotkey 2.0.26 toolchain.
+
+## Follow-up atomic commit plan
+
+1. `docs: revise reported runtime QA follow-up plan`
+   - Record the corrected three-strategy and required-DLL packaging policy.
+   - Record the Git checkout/worktree refresh boundary and remaining manual QA.
+2. `fix: skip community strategy sync in Git checkouts`
+   - Detect both `.git` directories and linked-worktree `.git` files before any
+     community network request.
+   - Preserve the six-hour transactional refresh unchanged for release trees.
+   - Add regression contracts for both development checkout forms and release
+     behavior.
+3. `build: finalize reported runtime package contents`
+   - Commit the two exact reviewed DLLs and their required hashes.
+   - Retire `2_Absolute_Zero.strat`, completing the exact three-file Frost
+     cleanup without touching any unrelated `.strat` file.
+   - Update packaging/repository validation contracts for the final inventory.
+4. `docs: record final runtime packaging and QA gates`
+   - Update `CHANGELOG.md`, dependency policy, testing notes, and this plan with
+     the final package behavior and validation evidence.
+
+## Follow-up verification gates
+
+- Run dependency sync, Python compilation, all Python contract/validator/lint
+  entrypoints, PowerShell parser validation, the updater smoke suite, and
+  AutoHotkey 2.0.26 `/Validate`.
+- Run `git diff --check`, confirm both DLL hashes from the committed objects,
+  confirm the exact remaining strategy inventory, and verify
+  `SUICIDE_MINIGUNNER_GEM_EXP_FARM.strat` is byte-identical to `55dfaf3`.
+- Confirm Darksen/Original Creator and GPL-3.0 notices remain present.
+- Push only `qa/reported-runtime-fixes` to `origin`, then create a PR targeting
+  `dev` without merging it. Manual Roblox QA remains required for Hotbar OFF,
+  live image/timing behavior, and comparison with the bundled AutoHotkey 2.0.12
+  runtime.
+
+---
+
 # Reported runtime QA hotfix — 2026-09-01
 
 Target: PR #30 head `36542adc5c63d384a9a4ad71b780c8d3afd120f8`, branch
