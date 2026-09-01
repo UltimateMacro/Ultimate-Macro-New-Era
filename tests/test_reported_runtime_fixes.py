@@ -317,6 +317,21 @@ def validate_packaging(root: Path, validator: str, workflow: str) -> None:
             "CI must execute the reported-runtime contracts")
 
 
+def validate_community_strategy_sync(main: str) -> None:
+    community = region(main, "IsGitDevelopmentCheckout(rootDir) {", "global FrameX := 30")
+    checkout_guard = region(main, "IsGitDevelopmentCheckout(rootDir) {", "LoadedStrats := []")
+
+    require('FileExist(rootDir "\\.git")' in checkout_guard,
+            "community sync must detect both .git directories and worktree files")
+    require("DirExist(" not in checkout_guard,
+            "a directory-only development guard would miss linked Git worktrees")
+    guard = "needUpdate := !IsGitDevelopmentCheckout(A_ScriptDir)"
+    require(guard in community, "release-only community sync guard is missing")
+    require(community.find(guard) < community.find("if (needUpdate) {") <
+            community.find("https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era"),
+            "Git checkout detection must happen before any community request")
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     main_source = read(root / "Main.ahk")
@@ -330,6 +345,7 @@ def main() -> int:
     validate_matchmaking_ready_map(main_source, validator)
     validate_paths(main_source)
     validate_dj_watchdog_and_pr30(main_source, watchdog_source)
+    validate_community_strategy_sync(main_source)
     validate_packaging(root, validator, workflow)
 
     print("reported runtime hotfix contracts: PASS")

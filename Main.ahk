@@ -877,8 +877,15 @@ global Tab1_Line2 := MainGui.Add("Progress", "x30 y248 w640 h1 Background333333"
 if !DirExist(StratsDir)
     DirCreate(StratsDir)
 
+IsGitDevelopmentCheckout(rootDir) {
+    ; A normal checkout stores repository metadata in a .git directory. A
+    ; linked worktree stores a .git file instead. Official release archives
+    ; contain neither, so only those installs receive automatic strategies.
+    return FileExist(rootDir "\.git") != ""
+}
+
 LoadedStrats := []
-needUpdate := true
+needUpdate := !IsGitDevelopmentCheckout(A_ScriptDir)
 lastUpdate := IniRead(StateFile, "Cache", "LastUpdateTime", "0")
 
 if (lastUpdate != "0") {

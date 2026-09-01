@@ -196,7 +196,21 @@ def validate_ready_detection(main: str) -> None:
     assert "SafeReload()" in ready, "unconfirmed Ready clicks must fail safely"
 
 def validate_community_strategy_update(main: str) -> None:
-    community = region(main, "if (needUpdate) {", "global FrameX := 30")
+    community = region(
+        main, "IsGitDevelopmentCheckout(rootDir) {", "global FrameX := 30"
+    )
+    checkout_guard = region(main, "IsGitDevelopmentCheckout(rootDir) {", "LoadedStrats := []")
+
+    assert 'FileExist(rootDir "\\.git")' in checkout_guard, (
+        "normal checkouts and linked worktrees must both disable community sync"
+    )
+    assert "DirExist(" not in checkout_guard, (
+        "a directory-only guard would miss linked Git worktrees"
+    )
+    assert "needUpdate := !IsGitDevelopmentCheckout(A_ScriptDir)" in community
+    assert community.index("needUpdate := !IsGitDevelopmentCheckout(A_ScriptDir)") < (
+        community.index("if (needUpdate) {")
+    ), "the development guard must run before the community request block"
 
     assert (
         "UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main"
