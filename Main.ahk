@@ -55,6 +55,7 @@ if (A_PtrSize == 4) {
 #Include submacros\updater.ahk
 #Include lib\Discord.ahk
 #Include lib\RuntimeLog.ahk
+#Include lib\auto_settings.ahk
 
 BootstrapPinnedSourceDependencies() {
     ocrPath := A_ScriptDir "\lib\OCR.ahk"
@@ -185,6 +186,9 @@ global BotEnabled := IniRead(BotSettings, "Settings", "Enabled", 0)
 global ChannelID := IniRead(BotSettings, "Settings", "Channel", "")
 global UserID := IniRead(BotSettings, "Settings", "UserID", "")
 ;
+global AutoEquip := IniRead(SettingsFile, "Options", "AutoEquip", 0)
+global AutoConfigureSettings := IniRead(SettingsFile, "Options", "AutoConfigureSettings", 1)
+;
 global UseRestartBtn := IniRead(SettingsFile, "Options", "UseRestartBtn", "1")
 global UsePlayAgainBtn := IniRead(SettingsFile, "Options", "UsePlayAgainBtn", "1")
 global RotateStrategies := IniRead(SettingsFile, "Options", "RotateStrategies", 0)
@@ -228,6 +232,10 @@ SendMode("Event")
 SetDefaultMouseSpeed(DefaultMouseSpeed)
 SetMouseDelay(MouseDelay)
 SetKeyDelay(KeyDelay)
+
+if (AutoConfigureSettings) {
+    ApplyMacroSettings()
+}
 
 global LogLines := []
 global OverlayHWND := 0
@@ -891,6 +899,9 @@ SwapUnitCtrl.OnEvent("Change", (*) => (
 MainGui.SetFont("s9 w400 cFFFFFF")
 global AutoEquipCtrl := MainGui.Add("Checkbox", "x357 y190 vAutoEquip 0x200 Checked" AutoEquip, "Auto Equip Towers")
 AutoEquipCtrl.OnEvent("Click", EnableAutoEquip)
+
+global AutoConfigCtrl := MainGui.Add("Checkbox", "x490 y190 vAutoConfigureSettings 0x200 Checked" AutoConfigureSettings, "Auto Configure Settings")
+AutoConfigCtrl.OnEvent("Click", EnableAutoConfig)
 
 MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Community Strategies")
@@ -2125,7 +2136,7 @@ ShowTabContent(tab) {
     global ChildGui
     if (tab = "Tab1") {
         for ctrl in [Tab1_Section1, Tab1_Line1, Tab1_Lbl1, Strategy1Ctrl, Tab1_Btn1, Tab1_Btn2,
-            Tab1_Lbl2, Strategy2Ctrl, Tab1_Btn3, Tab1_Btn4, RotateStrategiesCtrl, AutoEquipCtrl, Tab1_Section2,
+            Tab1_Lbl2, Strategy2Ctrl, Tab1_Btn3, Tab1_Btn4, RotateStrategiesCtrl, AutoEquipCtrl, AutoConfigCtrl, Tab1_Section2,
             Tab1_Line2,
             Tab1_Start, Tab1_Stop]
             ctrl.Visible := true
@@ -2334,10 +2345,12 @@ EnableStratRotation(*) {
         SwapAmount := SwapAmountCtrl.Text
         SwapUnit := SwapUnitCtrl.Text
         AutoEquipCtrl.Move(357, 190)
+	AutoConfigCtrl.Move(490, 190)
         IniWrite(SwapAmount, SettingsFile, "Options", "SwapAmount")
         IniWrite(SwapUnit, SettingsFile, "Options", "SwapUnit")
     } else {
         AutoEquipCtrl.Move(155, 190)
+	AutoConfigCtrl.Move(285, 190)
     }
 }
 
@@ -2347,6 +2360,19 @@ EnableAutoEquip(*) {
     v := MainGui.Submit(false)
     AutoEquip := v.AutoEquip
     IniWrite(AutoEquip, SettingsFile, "Options", "AutoEquip")
+}
+
+EnableAutoConfig(*) {
+    global AutoConfigureSettings
+    v := MainGui.Submit(false)
+    AutoConfigureSettings := v.AutoConfigureSettings
+    IniWrite(AutoConfigureSettings, SettingsFile, "Options", "AutoConfigureSettings")
+    
+    if (AutoConfigureSettings) {
+        ApplyMacroSettings()
+    } else {
+        RestoreOriginalSettings()
+    }
 }
 
 SelectStrat1(ctrl, *) {
@@ -8730,11 +8756,30 @@ KillSubmacros() {
 }
 
 HandleExit(ExitReason, ExitCode) {
-    global StateFile, SettingsFile, RunningStrategy
+    global StateFile, SettingsFile, RunningStrategy, AutoConfigureSettings
 
     ; Never leave a mouse button or movement key latched down for the user.
     try ReleaseHeldInput()
-
+    
+    if (AutoConfigureSettings) {
+        ; If Roblox is currently open, run the helper script in the background
+        if (ProcessExist("RobloxPlayerBeta.exe")) {
+            ; Use the bundled AHK executable to launch the helper script
+            helperExe := A_ScriptDir "\submacros\" (A_PtrSize == 4 ? "AutoHotkey32.exe" : "AutoHotkey64.exe")
+            helperScript := A_ScriptDir "\lib\auto_settings.ahk"
+            
+            if FileExist(helperExe) && FileExist(helperScript) {
+                Run('"' helperExe '" /restart "' helperScript '"')
+            } else {
+                ; Fallback just in case the executable is missing
+                RestoreOriginalSettings()
+            }
+        } else {
+            ; Roblox is already closed, safe to restore immediately
+            RestoreOriginalSettings()
+        }
+    }
+	
     try KillSubmacros()
     catch Error as err
         RuntimeLogWarn("watchdog_exit_cleanup_failed", "Watchdog cleanup failed during Main exit",
