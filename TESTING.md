@@ -126,6 +126,23 @@ Use only disposable test credentials and remove them afterward.
    must return to fallback handling before OCR capture, and watchdog cleanup
    must not crash.
 
+### Watchdog PID lifecycle
+
+1. With TimeScale OFF, start a normal strategy and stop it. Repeat at least
+   three times and confirm there is no `VarUnset` dialog and at most one
+   watchdog process for this checkout remains while the strategy is running.
+2. Repeat with TimeScale 2x. Exercise Restart, Play Again, and reconnect paths
+   where practical; these transitions must not change TimeScale behavior or
+   accumulate watchdog processes.
+3. Close Main while a strategy is active. Confirm its watchdog exits and that a
+   watchdog launched from a different checkout or extracted release is not
+   terminated.
+4. Inspect `%APPDATA%\Ultimate_Macro\Logs\ultimate-macro.log`. Normal cycles
+   should show `watchdog_started` and `watchdog_stopped`. Capture any
+   `watchdog_start_failed`, `watchdog_cleanup_failed`,
+   `watchdog_cleanup_scan_failed`, or `watchdog_exit_cleanup_failed` event with
+   its details if a failure occurs.
+
 ### Transactional updater
 
 Use a disposable extracted release copy, never this Git checkout.

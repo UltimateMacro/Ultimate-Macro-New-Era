@@ -324,6 +324,59 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
             "Arcade search bounds must pass width/height, not bottom-right coordinates")
 
 
+def validate_watchdog_pid_lifecycle(main: str) -> None:
+    start = region(main, "startWatchdog() {", "KillSubmacros() {")
+    cleanup = region(main, "KillSubmacros() {", "HandleExit(ExitReason, ExitCode) {")
+    handle_exit = region(main, "HandleExit(ExitReason, ExitCode) {", "CleanupGdip(exitReason, exitCode) {")
+
+    require('global watchdogPID := ""' in main,
+            "watchdog PID must retain an explicit startup initializer")
+    require("newWatchdogPID := 0" in start and "&newWatchdogPID" in start,
+            "watchdog launch must use an initialized local output PID")
+    require("&watchdogPID" not in start,
+            "Run must not mutate the shared watchdog PID directly")
+    run_index = start.find("Run(command, , , &newWatchdogPID)")
+    publish_index = start.find("watchdogPID := newWatchdogPID")
+    require(0 <= run_index < publish_index,
+            "the shared watchdog PID must be published only after Run succeeds")
+    require('RuntimeLogInfo("watchdog_started"' in start,
+            "successful watchdog launches must be diagnosable")
+    require('watchdogPID := ""' in start and
+            'RuntimeLogError("watchdog_start_failed"' in start and
+            "return false" in start,
+            "failed watchdog launches must restore a known idle state")
+
+    require('if (IsSet(watchdogPID) && watchdogPID != "")' in cleanup,
+            "cleanup must guard the shared PID before reading it")
+    clear_index = cleanup.find('watchdogPID := ""')
+    tracked_index = cleanup.find('if (trackedPID != "")')
+    require(0 <= clear_index < tracked_index,
+            "cleanup must publish the idle state before process operations")
+    require('if (watchdogPID != "")' not in cleanup,
+            "cleanup must not contain an unguarded shared PID read")
+    require(r'A_ScriptDir "\submacros\watchdog.ahk"' in cleanup and
+            "InStr(normalizedCmd, targetScript)" in cleanup,
+            "fallback cleanup must remain scoped to this checkout's watchdog path")
+    for event in ("watchdog_stopped", "watchdog_cleanup_failed", "watchdog_cleanup_scan_failed"):
+        require(event in cleanup, f"cleanup diagnostic is missing: {event}")
+
+    require("global StateFile, SettingsFile, RunningStrategy" in handle_exit,
+            "OnExit must explicitly bind its running-state global")
+    require("try KillSubmacros()" in handle_exit,
+            "OnExit must attempt watchdog cleanup independently of strategy state")
+    require("if (IsSet(RunningStrategy) && RunningStrategy)" in handle_exit,
+            "OnExit must tolerate the startup initialization window")
+    require("if (RunningStrategy)" not in handle_exit,
+            "OnExit must not read an uninitialized running state")
+    require("watchdog_exit_cleanup_failed" in handle_exit,
+            "OnExit cleanup failures must be diagnosable")
+
+    require("KillSubmacros()" in start,
+            "watchdog launch must clean up a prior instance first")
+    require("KillSubmacros()\n    startWatchdog()" in main,
+            "the real repeated cleanup/start lifecycle must remain covered")
+
+
 def validate_packaging(root: Path, validator: str, workflow: str) -> None:
     obsolete = {
         "Resources/Strats/2_Absolute_Zero.strat",
@@ -413,6 +466,7 @@ def main() -> int:
     validate_matchmaking_ready_map(main_source, validator)
     validate_paths(main_source)
     validate_dj_watchdog_and_pr30(main_source, watchdog_source)
+    validate_watchdog_pid_lifecycle(main_source)
     validate_community_strategy_sync(main_source)
     validate_packaging(root, validator, workflow)
 

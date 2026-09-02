@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Watchdog PID cleanup raising `VarUnset` after an incomplete launch, repeated
+  cleanup/start cycle, or an early Main exit. Launch now publishes only a
+  successful local PID, while cleanup is idempotent, path-scoped, and logged.
 - Multi-scale portable image detection when optional OpenCV binaries are absent.
 - Frost and standard difficulty selection with bounded scroll + OCR fallback.
 - The resettable Easy/difficulty timeout that could still hang indefinitely.
