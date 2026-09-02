@@ -124,6 +124,48 @@ def validate_equip_and_resolution(main: str) -> None:
             "recording must warn when window DPI is non-recommended")
 
 
+def validate_hotbar_mouse_selection(main: str) -> None:
+    helper = region(main, "SelectHotbarSlotByClick(slotNumber) {", "ScaleX(baseX, Width :=")
+    recording = region(main, "PlaceTowerHK(*) {", "UpgradeTowerHK(*) {")
+    spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "SellTower(towerID) {")
+
+    require("global Slots :=" not in main and "Click(Slots[" not in main,
+            "hotbar clicks must not use startup-cached slot coordinates")
+    require("static baseXBySlot := [800, 880, 960, 1040, 1120]" in helper,
+            "the shared helper must retain the canonical five-slot x positions")
+    require("getRobloxPos(, , &clientWidth, &clientHeight)" in helper,
+            "hotbar selection must snapshot current Roblox client dimensions")
+    require("clientWidth <= 0 || clientHeight <= 0" in helper,
+            "invalid client geometry must be rejected before clicking")
+    require("baseXBySlot[slot] * (clientWidth / 1920.0)" in helper and
+            "960 * (clientHeight / 1009.0)" in helper,
+            "hotbar positions must scale from the established 1920x1009 client plane")
+    require('RuntimeLogInfo("hotbar_slot_resolved"' in helper,
+            "successful mouse slot resolution must emit runtime diagnostics")
+    for field in ('"slot=" slot', '"; x=" slotX', '"; y=" slotY',
+                  '"; client_width=" clientWidth', '"; client_height=" clientHeight'):
+        require(field in helper, f"hotbar diagnostics are missing: {field}")
+    require("Click(slotX, slotY)" in helper,
+            "hotbar selection must pass explicit numeric x/y Click arguments")
+    require("ScaleX(" not in helper and "ScaleY(" not in helper,
+            "one client snapshot must drive both hotbar coordinates")
+
+    require(recording.count("SelectHotbarSlotByClick(slot)") == 1,
+            "recording must use the shared dynamic mouse slot helper")
+    require(spawn.count("SelectHotbarSlotByClick(slotNumber)") == 1,
+            "SpawnTower must use the shared dynamic mouse slot helper")
+    require('Send("{" slot "}")' in recording and 'Send("{" slotNumber "}")' in spawn,
+            "the passing Numbers ON keyboard paths must remain intact")
+    require(spawn.find("loop {") < spawn.find("SelectHotbarSlotByClick(slotNumber)"),
+            "each placement retry must resolve fresh client dimensions")
+
+    def resolve(slot: int, width: int, height: int) -> tuple[int, int]:
+        return round([800, 880, 960, 1040, 1120][slot - 1] * width / 1920), round(960 * height / 1009)
+
+    require(resolve(1, 1920, 1009) == (800, 960), "canonical slot scaling changed")
+    require(resolve(5, 1280, 720) == (747, 685), "cross-resolution slot scaling changed")
+
+
 def validate_matchmaking_ready_map(main: str, validator: str) -> None:
     join = region(main, "JoinGame() {", "CreateParty(x, y) {")
     difficulty = region(main, "TryClickDifficultyTarget(target, w, h) {", "WaitForLobbyLoad() {")
@@ -367,6 +409,7 @@ def main() -> int:
 
     validate_image_fallback(main_source, image_source)
     validate_equip_and_resolution(main_source)
+    validate_hotbar_mouse_selection(main_source)
     validate_matchmaking_ready_map(main_source, validator)
     validate_paths(main_source)
     validate_dj_watchdog_and_pr30(main_source, watchdog_source)

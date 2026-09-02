@@ -1,3 +1,41 @@
+# Hotbar OFF mouse-selection follow-up — 2026-09-02
+
+Target: fix only the reproducible `Use Numbers for Hotbar = OFF` selection
+failure after `dac4ba46dfe9b7d914a210019ee7e94c903f919e` on
+`qa/reported-runtime-fixes`. Preserve the passing keyboard path byte-for-byte,
+Darksen attribution, GPL-3.0, and all unrelated runtime behavior.
+
+## Finding and atomic commit plan
+
+- The global `Slots` array resolves client-scaled coordinates once during
+  startup, before Roblox geometry is guaranteed to exist, and then reuses those
+  stale values during placement. Recording and replay both consume that cache.
+- Add one shared Hotbar OFF helper that validates slots 1–5, takes one current
+  Roblox CLIENT-width/height snapshot at selection time, scales the canonical
+  1920x1009 hotbar coordinates, emits structured slot/x/y/dimension diagnostics,
+  and calls `Click(x, y)` with explicit numeric arguments.
+- Route both recording and `SpawnTower` mouse selection through the helper.
+  Do not change either `Send("{" slot "}")` keyboard-selection statement.
+- Add focused regression contracts for dynamic resolution, CLIENT semantics,
+  logging, explicit numeric click arguments, shared recording/replay behavior,
+  and removal of the startup-cached `Slots` array.
+- Update the changelog and manual QA matrix in the same atomic commit:
+  `fix: resolve hotbar click coordinates at placement time`.
+
+## Verification gates
+
+- Run dependency sync, every Python contract/validator/lint entrypoint,
+  PowerShell parsing, updater smoke tests, and AutoHotkey `/Validate` using both
+  the approved bundled 2.0.12 binary and verified official 2.0.26.
+- Run `git diff --check`, inspect the complete post-`dac4ba4` diff, prove the
+  keyboard path is unchanged, and recheck protected strategy bytes, DLL hashes,
+  Darksen attribution, and GPL-3.0.
+- Commit once after all gates pass and push only
+  `qa/reported-runtime-fixes` to private `origin`. Never push to `dev`, `main`,
+  or `upstream`.
+
+---
+
 # Reported runtime QA follow-up — 2026-09-01
 
 Target: continue `qa/reported-runtime-fixes` after local commit `55dfaf3` and

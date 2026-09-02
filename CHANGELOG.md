@@ -15,6 +15,10 @@
 - Watchdog phase semantics for long healthy matches after strategy steps finish.
 - Automatic community-strategy refresh changing files inside Git checkouts and
   linked worktrees. Extracted official releases continue to refresh normally.
+- Hotbar mouse selection using coordinates cached before Roblox client geometry
+  was available. Hotbar OFF recording and replay now share placement-time,
+  client-scaled numeric clicks with structured diagnostics; Hotbar ON is
+  unchanged.
 
 ### Packaging
 

@@ -100,6 +100,24 @@ def validate_strategy_geometry(main: str) -> None:
     assert not re.search(r"(?m)^global\s+StrategyHeight\s*:=\s*1090\b", main)
 
 
+def validate_hotbar_mouse_selection(main: str) -> None:
+    helper = region(main, "SelectHotbarSlotByClick(slotNumber) {", "ScaleX(baseX, Width :=")
+    recording = region(main, "PlaceTowerHK(*) {", "UpgradeTowerHK(*) {")
+    spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "SellTower(towerID) {")
+
+    assert "global Slots :=" not in main
+    assert "Click(Slots[" not in main
+    assert "getRobloxPos(, , &clientWidth, &clientHeight)" in helper
+    assert "baseXBySlot[slot] * (clientWidth / 1920.0)" in helper
+    assert "960 * (clientHeight / 1009.0)" in helper
+    assert 'RuntimeLogInfo("hotbar_slot_resolved"' in helper
+    assert "Click(slotX, slotY)" in helper
+    assert recording.count("SelectHotbarSlotByClick(slot)") == 1
+    assert spawn.count("SelectHotbarSlotByClick(slotNumber)") == 1
+    assert 'Send("{" slot "}")' in recording
+    assert 'Send("{" slotNumber "}")' in spawn
+
+
 def validate_bitmap_ownership(main: str, watchdog: str, discord: str) -> None:
     assert 'SendScreenshot(, "' not in watchdog, (
         "watchdog screenshot callers must allocate and own their bitmap explicitly"
@@ -378,6 +396,7 @@ def validate(root: Path) -> None:
     validate_dependency_bootstrap_portability(root)
     validate_settings_contracts(main)
     validate_strategy_geometry(main)
+    validate_hotbar_mouse_selection(main)
     validate_bitmap_ownership(main, watchdog, discord)
     validate_watchdog_result_fallbacks(watchdog)
     validate_watchdog_conditions_and_formatting(watchdog)

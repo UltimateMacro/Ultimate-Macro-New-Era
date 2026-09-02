@@ -242,14 +242,6 @@ global OverlayY := 820
 global StrategyWidth := 1920
 global StrategyHeight := 1080
 
-global Slots := [
-    ScaleX(800) ", " ScaleY(960),
-    ScaleX(880) ", " ScaleY(960),
-    ScaleX(960) ", " ScaleY(960),
-    ScaleX(1040) ", " ScaleY(960),
-    ScaleX(1120) ", " ScaleY(960)
-]
-
 global readyX := 0
 global readyY := 0
 
@@ -573,6 +565,36 @@ DetectUpgrade(*) {
             }
         }
     }
+}
+
+SelectHotbarSlotByClick(slotNumber) {
+    static baseXBySlot := [800, 880, 960, 1040, 1120]
+
+    try slot := Integer(slotNumber)
+    catch Error {
+        RuntimeLogWarn("hotbar_slot_invalid", "Mouse hotbar selection received a non-numeric slot",
+            "slot=" slotNumber)
+        return false
+    }
+
+    if (slot < 1 || slot > baseXBySlot.Length) {
+        RuntimeLogWarn("hotbar_slot_invalid", "Mouse hotbar selection received an out-of-range slot",
+            "slot=" slot)
+        return false
+    }
+
+    if !getRobloxPos(, , &clientWidth, &clientHeight) || clientWidth <= 0 || clientHeight <= 0 {
+        RuntimeLogWarn("hotbar_slot_geometry_missing", "Mouse hotbar selection could not resolve Roblox client geometry",
+            "slot=" slot "; client_width=" clientWidth "; client_height=" clientHeight)
+        return false
+    }
+
+    slotX := Round(baseXBySlot[slot] * (clientWidth / 1920.0))
+    slotY := Round(960 * (clientHeight / 1009.0))
+    RuntimeLogInfo("hotbar_slot_resolved", "Resolved mouse hotbar selection in Roblox client coordinates",
+        "slot=" slot "; x=" slotX "; y=" slotY "; client_width=" clientWidth "; client_height=" clientHeight)
+    Click(slotX, slotY)
+    return true
 }
 
 ScaleX(baseX, Width := 1920) {
@@ -2772,8 +2794,7 @@ StopRecord(ctrl, *) {
 }
 
 PlaceTowerHK(*) {
-    global Recording, Towers, RecordedSteps, ActiveRTowerID, CachedMenuUI, isUiPositionSaved, UseNumbersForHotbar,
-        Slots
+    global Recording, Towers, RecordedSteps, ActiveRTowerID, CachedMenuUI, isUiPositionSaved, UseNumbersForHotbar
 
     if (!Recording) {
         pureKey := RegExReplace(PlaceTowerKey, "[\^+!#]")
@@ -2823,8 +2844,9 @@ PlaceTowerHK(*) {
 
     if UseNumbersForHotbar {
         Send("{" slot "}")
-    } else {
-        Click(Slots[slot])
+    } else if !SelectHotbarSlotByClick(slot) {
+        LogToConsole("Recording placement cancelled because hotbar slot " slot " could not be resolved.")
+        return
     }
 
     Sleep(30)
@@ -6934,7 +6956,7 @@ getSlots() {
 }
 
 SpawnTower(X, Y, slotNumber, towerID) {
-    global Towers, LastOpenedTowerID, CancelPlacementKey, canUseAbility, UseNumbersForHotbar, Slots
+    global Towers, LastOpenedTowerID, CancelPlacementKey, canUseAbility, UseNumbersForHotbar
     LogToConsole("Placing tower " towerID " (slot " slotNumber ") at x:" X " y:" Y "...")
 
     X := sX(X, StrategyWidth)
@@ -6964,8 +6986,10 @@ SpawnTower(X, Y, slotNumber, towerID) {
 
         if UseNumbersForHotbar {
             Send("{" slotNumber "}")
-        } else {
-            Click(Slots[slotNumber])
+        } else if !SelectHotbarSlotByClick(slotNumber) {
+            LogToConsole("Hotbar slot " slotNumber " could not be resolved; retrying placement...")
+            Sleep(500)
+            continue
         }
 
         Sleep((PotatoMode = 1) ? 100 : 30)

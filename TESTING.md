@@ -81,9 +81,17 @@ preflight on Windows with read-only repository permissions.
 
 ### Pending input/runtime compatibility
 
-1. Turn **Use Numbers for Hotbar** OFF, record and replay placement/upgrade
-   actions, and confirm non-number input still selects the intended slots.
-2. Run the same short smoke strategy under the bundled AutoHotkey 2.0.12 and
+1. Turn **Use Numbers for Hotbar** OFF and run `SpawnTower` with Soldier in slot
+   1. Confirm the slot highlights, a placement ghost appears, the tower is
+   placed, and its following upgrades complete. Repeat once after resizing or
+   moving the Roblox window, and verify the runtime log records
+   `hotbar_slot_resolved` with slot, x/y, and current client width/height.
+2. With **Use Numbers for Hotbar** still OFF, record a slot-1 Soldier placement,
+   save it, and replay it. Confirm recording and replay select the same hotbar
+   slot dynamically and place at the intended client-relative coordinates.
+3. Turn **Use Numbers for Hotbar** back ON and rerun the same strategy. Confirm
+   keyboard selection remains unchanged and placement/upgrades still pass.
+4. Run the same short smoke strategy under the bundled AutoHotkey 2.0.12 and
    the validation baseline 2.0.26. Record any parsing, timing, input, or image
    backend difference; this comparison is not settled by source validation.
 
