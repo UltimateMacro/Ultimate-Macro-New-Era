@@ -70,6 +70,7 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 - ziadod
 - kronoxxv
 - banana.dev
+- itzshovel
 
 **Development Contributor**
 - 4riff

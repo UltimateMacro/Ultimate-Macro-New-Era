@@ -3,12 +3,17 @@
 ; Persistent runtime/crash logging for Ultimate Macro.
 ; Logs are intentionally local-only and redact common secret formats before write.
 
+global RuntimeLogStoreMaxBytes := 2097152
+
 global RuntimeLogState := {
     Installed: false,
     Component: "Unknown",
     Version: "",
     Dir: "",
     SessionFile: "",
+    StoreFile: "",
+    StoreArchive: "",
+    StoreBytes: 0,
     StartTick: 0
 }
 
@@ -30,6 +35,13 @@ RuntimeLogInstall(component := "Main", version := "") {
     stamp := FormatTime(, "yyyyMMdd-HHmmss")
     pid := DllCall("Kernel32\GetCurrentProcessId", "UInt")
     sessionFile := logDir "\" safeComponent "-" stamp "-pid" pid ".log"
+    storeFile := logDir "\ultimate-macro.log"
+
+    storeBytes := 0
+    try {
+        if FileExist(storeFile)
+            storeBytes := FileGetSize(storeFile)
+    }
 
     RuntimeLogState := {
         Installed: true,
@@ -37,6 +49,10 @@ RuntimeLogInstall(component := "Main", version := "") {
         Version: version,
         Dir: logDir,
         SessionFile: sessionFile,
+        StoreFile: storeFile,
+        StoreArchive: logDir "\ultimate-macro.previous.log",
+        StoreBytes: storeBytes,
+        StoreWrites: 0,
         StartTick: A_TickCount
     }
 
@@ -64,6 +80,10 @@ RuntimeLogError(event, message := "", details := "") {
     RuntimeLogWrite("ERROR", event, message, details)
 }
 
+RuntimeLogConsole(text) {
+    return RuntimeLogWrite("LOG", "console", text)
+}
+
 RuntimeLogWrite(level, event, message := "", details := "") {
     global RuntimeLogState
 
@@ -83,11 +103,120 @@ RuntimeLogWrite(level, event, message := "", details := "") {
 
         line := StrReplace(StrReplace(line, "`r", " "), "`n", " ")
         FileAppend(line "`n", RuntimeLogState.SessionFile, "UTF-8")
+        RuntimeLogStoreAppend(line)
         return true
     } catch {
         ; Logging must never crash the macro or recurse through OnError.
         return false
     }
+}
+
+RuntimeLogStoreAppend(line) {
+    global RuntimeLogState, RuntimeLogStoreMaxBytes
+
+    if (!RuntimeLogState.Installed || RuntimeLogState.StoreFile = "")
+        return false
+
+    entry := line "`n"
+    entryBytes := StrPut(entry, "UTF-8") - 1
+
+    ; StoreBytes only counts this process. Re-stat periodically so a co-writer's
+    ; growth is seen, and always before rotating so we never move a file the
+    ; other process just rotated.
+    if (++RuntimeLogState.StoreWrites >= 64) {
+        RuntimeLogState.StoreWrites := 0
+        RuntimeLogSyncStoreSize()
+    }
+
+    if (RuntimeLogState.StoreBytes + entryBytes > RuntimeLogStoreMaxBytes) {
+        RuntimeLogSyncStoreSize()
+        if (RuntimeLogState.StoreBytes + entryBytes > RuntimeLogStoreMaxBytes)
+            RuntimeLogRotateStore()
+    }
+
+    ; One retry: Main and the watchdog share the store.
+    loop 2 {
+        try {
+            FileAppend(entry, RuntimeLogState.StoreFile, "UTF-8")
+            RuntimeLogState.StoreBytes += entryBytes
+            return true
+        }
+    }
+
+    return false
+}
+
+RuntimeLogSyncStoreSize() {
+    global RuntimeLogState
+
+    try {
+        RuntimeLogState.StoreBytes := FileExist(RuntimeLogState.StoreFile)
+            ? FileGetSize(RuntimeLogState.StoreFile)
+            : 0
+    } catch {
+        ; Keep the running count if the file cannot be measured right now.
+    }
+}
+
+RuntimeLogRotateStore() {
+    global RuntimeLogState, RuntimeLogStoreMaxBytes
+
+    if (RuntimeLogState.StoreFile = "" || !FileExist(RuntimeLogState.StoreFile))
+        return
+
+    ; Confirmed against the file, so a peer that already rotated cannot have its
+    ; archive overwritten by a second, nearly empty rotation.
+    if (RuntimeLogState.StoreBytes < RuntimeLogStoreMaxBytes)
+        return
+
+    try {
+        FileMove(RuntimeLogState.StoreFile, RuntimeLogState.StoreArchive, true)
+        RuntimeLogState.StoreBytes := 0
+    } catch {
+        ; A locked archive must not stop logging. Back off one cycle so the next
+        ; write appends instead of retrying the move on every line.
+        RuntimeLogState.StoreBytes := 0
+    }
+}
+
+RuntimeLogClear() {
+    global RuntimeLogState
+
+    if (RuntimeLogState.Dir = "" || !DirExist(RuntimeLogState.Dir))
+        return 0
+
+    removed := 0
+    Loop Files, RuntimeLogState.Dir "\*.log", "F" {
+        try {
+            FileDelete(A_LoopFileFullPath)
+            removed += 1
+        }
+    }
+
+    RuntimeLogState.StoreBytes := 0
+    RuntimeLogState.StoreWrites := 0
+    RuntimeLogWrite("INFO", "logs_cleared", "Stored logs cleared by the user", "removed=" removed)
+
+    return removed
+}
+
+; Total size of everything RuntimeLogClear() would delete.
+RuntimeLogStoredBytes() {
+    global RuntimeLogState
+
+    total := 0
+    if (RuntimeLogState.Dir = "" || !DirExist(RuntimeLogState.Dir))
+        return total
+
+    Loop Files, RuntimeLogState.Dir "\*.log", "F"
+        total += A_LoopFileSize
+
+    return total
+}
+
+RuntimeLogStorePath() {
+    global RuntimeLogState
+    return RuntimeLogState.StoreFile
 }
 
 RuntimeLogOnError(err, mode) {
@@ -149,15 +278,31 @@ RuntimeLogRedact(value) {
     ; Discord webhook URLs contain a secret token in the path.
     text := RegExReplace(
         text,
-        "i)https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9._-]+",
+        "i)https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/(?:v\d{1,2}/)?webhooks/[0-9]+/[A-Za-z0-9._-]+",
         "[REDACTED_DISCORD_WEBHOOK]"
     )
 
-    ; Avoid leaking common key/value secret fields into tester evidence.
+    ; Roblox private-server links are shared credentials for a VIP server.
     text := RegExReplace(
         text,
-        "i)\b(BotToken|Authorization|WebhookLink|Token)\s*[:=]\s*[^;|\s]+",
+        "i)(privateServerLinkCode=|share\?code=|linkCode=)[A-Za-z0-9]{16,}",
+        "$1[REDACTED]"
+    )
+
+    ; Avoid leaking common key/value secret fields into tester evidence. The
+    ; optional scheme word matters: without it "Authorization: Bearer <token>"
+    ; only redacted the word Bearer and left the token in the log.
+    text := RegExReplace(
+        text,
+        "i)\b(Bot[_-]?Token|Authorization|Webhook[_-]?Link|Webhook[_-]?Url|Api[_-]?Key|Token|Secret|Password)\b\s*[:=]\s*[\x22\x27]?(?:Bearer|Bot|Basic)?\s*[^\s;|\x22\x27]+",
         "$1=[REDACTED]"
+    )
+
+    ; Bare bot tokens and JWTs, which carry no key to match on.
+    text := RegExReplace(
+        text,
+        "[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}",
+        "[REDACTED_TOKEN]"
     )
 
     return text
@@ -170,7 +315,10 @@ RuntimeLogPrune(maxAgeDays := 14) {
 
     try {
         Loop Files, RuntimeLogState.Dir "\*.log", "F" {
-            if (A_LoopFileFullPath = RuntimeLogState.SessionFile)
+            ; The persistent store is pruned by size, never by age.
+            if (A_LoopFileFullPath = RuntimeLogState.SessionFile
+                || A_LoopFileFullPath = RuntimeLogState.StoreFile
+                || A_LoopFileFullPath = RuntimeLogState.StoreArchive)
                 continue
             try {
                 if (DateDiff(A_Now, A_LoopFileTimeModified, "Days") > maxAgeDays)
