@@ -8769,7 +8769,6 @@ HandleExit(ExitReason, ExitCode) {
             helperScript := A_ScriptDir "\lib\auto_settings.ahk"
             
             if FileExist(helperExe) && FileExist(helperScript) {
-                ; Changed /force to /restart (the correct AHK v2 switch to suppress prompts)
                 Run('"' helperExe '" /restart "' helperScript '"')
             } else {
                 ; Fallback just in case the executable is missing
