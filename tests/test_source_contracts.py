@@ -100,6 +100,24 @@ def validate_strategy_geometry(main: str) -> None:
     assert not re.search(r"(?m)^global\s+StrategyHeight\s*:=\s*1090\b", main)
 
 
+def validate_hotbar_mouse_selection(main: str) -> None:
+    helper = region(main, "SelectHotbarSlotByClick(slotNumber) {", "ScaleX(baseX, Width :=")
+    recording = region(main, "PlaceTowerHK(*) {", "UpgradeTowerHK(*) {")
+    spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "SellTower(towerID) {")
+
+    assert "global Slots :=" not in main
+    assert "Click(Slots[" not in main
+    assert "getRobloxPos(, , &clientWidth, &clientHeight)" in helper
+    assert "baseXBySlot[slot] * (clientWidth / 1920.0)" in helper
+    assert "960 * (clientHeight / 1009.0)" in helper
+    assert 'RuntimeLogInfo("hotbar_slot_resolved"' in helper
+    assert "Click(slotX, slotY)" in helper
+    assert recording.count("SelectHotbarSlotByClick(slot)") == 1
+    assert spawn.count("SelectHotbarSlotByClick(slotNumber)") == 1
+    assert 'Send("{" slot "}")' in recording
+    assert 'Send("{" slotNumber "}")' in spawn
+
+
 def validate_bitmap_ownership(main: str, watchdog: str, discord: str) -> None:
     assert 'SendScreenshot(, "' not in watchdog, (
         "watchdog screenshot callers must allocate and own their bitmap explicitly"
@@ -177,16 +195,40 @@ def validate_watchdog_retry_lifecycle(watchdog: str) -> None:
 
 def validate_ready_detection(main: str) -> None:
     ready = region(main, "FindReadyButton(&foundX, &foundY)", "activateTimescale()")
-    assert 'AdvancedImageSearch("Resources/ready_gs.png"' in ready
-    assert "PixelSearch" not in ready, "Ready must not click a generic green pixel"
-    assert "loop 5" in ready, "Ready click retries must remain bounded"
-    assert ready.count("FindReadyButton(") >= 5, (
+    template_index = ready.find('AdvancedImageSearch("Resources/ready_gs.png"')
+    assert template_index >= 0, "Ready must be detected by template first"
+
+    assert "PixelSearch" not in ready, (
+        "Ready clicks must be based on the bounded template, not a generic green pixel"
+    )
+    assert re.search(r"(?m)^\s*rx := Round\(w \* 0\.4\)", ready), (
+        "the bounded Ready region must remain anchored to the Roblox client"
+    )
+    assert re.search(r"(?m)^\s*rw := Round\(w \* 0\.3\)", ready)
+
+    assert "readyDeadline := A_TickCount + 8000" in ready
+    assert "attempts < 6" in ready, "Ready click retries must remain bounded"
+    assert ready.count("FindReadyButton(") >= 3, (
         "Ready must be detected before a click and rechecked after it"
     )
     assert "SafeReload()" in ready, "unconfirmed Ready clicks must fail safely"
 
 def validate_community_strategy_update(main: str) -> None:
-    community = region(main, "if (needUpdate) {", "global FrameX := 30")
+    community = region(
+        main, "IsGitDevelopmentCheckout(rootDir) {", "global FrameX := 30"
+    )
+    checkout_guard = region(main, "IsGitDevelopmentCheckout(rootDir) {", "LoadedStrats := []")
+
+    assert 'FileExist(rootDir "\\.git")' in checkout_guard, (
+        "normal checkouts and linked worktrees must both disable community sync"
+    )
+    assert "DirExist(" not in checkout_guard, (
+        "a directory-only guard would miss linked Git worktrees"
+    )
+    assert "needUpdate := !IsGitDevelopmentCheckout(A_ScriptDir)" in community
+    assert community.index("needUpdate := !IsGitDevelopmentCheckout(A_ScriptDir)") < (
+        community.index("if (needUpdate) {")
+    ), "the development guard must run before the community request block"
 
     assert (
         "UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main"
@@ -354,6 +396,7 @@ def validate(root: Path) -> None:
     validate_dependency_bootstrap_portability(root)
     validate_settings_contracts(main)
     validate_strategy_geometry(main)
+    validate_hotbar_mouse_selection(main)
     validate_bitmap_ownership(main, watchdog, discord)
     validate_watchdog_result_fallbacks(watchdog)
     validate_watchdog_conditions_and_formatting(watchdog)

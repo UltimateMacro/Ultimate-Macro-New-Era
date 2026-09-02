@@ -64,6 +64,12 @@ APPROVED_BINARIES = {
     "lib/imagesearch/msvcp140.dll": (
         "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"
     ),
+    "lib/imagesearch/opencv_world500.dll": (
+        "7bc06231bf3cfd287e0b6853a78f78e00ceb58266f3cb49642f428ea6f4d1518"
+    ),
+    "lib/imagesearch/vcruntime140.dll": (
+        "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
+    ),
     "submacros/autohotkey32.exe": (
         "05fcaf6f09b9fe4b85887f75183310d34166a0b854ca0907b497808be7b8f87d"
     ),
@@ -298,6 +304,7 @@ def validate_ci_workflow(root: Path, errors: list[str]) -> None:
         "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
         "./tools/sync_dependencies.ps1",
         "python tests/test_source_contracts.py .",
+        "python tests/test_reported_runtime_fixes.py .",
         "python tests/validate_repo.py .",
         "python tests/lint_strategies.py .",
         "./tools/validate_powershell.ps1",
@@ -325,11 +332,6 @@ def validate(root: Path) -> tuple[list[str], list[str]]:
     validate_dependency_bootstrap(root, errors)
     validate_updater(root, errors)
     validate_ci_workflow(root, errors)
-
-    if not (root / "lib" / "ImageSearch" / "opencv_world500.dll").is_file():
-        warnings.append(
-            "opencv_world500.dll is intentionally absent; runtime image search must use the GDI+ fallback"
-        )
 
     return errors, warnings
 

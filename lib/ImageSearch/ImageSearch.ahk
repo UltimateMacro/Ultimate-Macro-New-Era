@@ -1,4 +1,4 @@
-﻿#Requires AutoHotkey v2.0
+#Requires AutoHotkey v2.0
 
 #Include %A_LineFile%/../../Gdip_All.ahk
 #Include %A_LineFile%/../../Gdip_ImageSearch.ahk
@@ -25,58 +25,65 @@ GetImageSearchBackendInfo() {
     }
 }
 
-AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0, maxScale := 0.0, scaleStep := 0.05) {
+; Resolve the image-search backend once. Native OpenCV is optional: when it
+; is unavailable the portable GDI+ fallback below performs bounded multi-scale
+; matching and preserves the same CLIENT-coordinate contract.
+EnsureImageSearchBackend() {
     global ImageSearchBackendState
+    static isInitialized := false
     static hOpenCV := 0
     static hModule := 0
-    static isInitialized := false
-    static useFallback := false
 
-    if (!isInitialized) {
-        SplitPath(A_LineFile, , &dir)
-        opencvPath := dir "\opencv_world500.dll"
-        dllPath := dir "\image_search.dll"
+    if isInitialized
+        return ImageSearchBackendState.nativeAvailable
 
-        if !FileExist(dllPath) {
-            useFallback := true
-            ImageSearchBackendState.backend := "GDI+ fallback"
-            ImageSearchBackendState.reason := "image_search.dll is missing"
-        } else if !FileExist(opencvPath) {
-            useFallback := true
-            ImageSearchBackendState.backend := "GDI+ fallback"
-            ImageSearchBackendState.reason := "opencv_world500.dll is missing"
-        } else {
-            oldDllDir := ""
-            try {
-                DllCall("Kernel32.dll\SetDllDirectory", "Str", dir)
-                hOpenCV := DllCall("Kernel32.dll\LoadLibraryW", "Str", opencvPath, "Ptr")
-                hModule := DllCall("Kernel32.dll\LoadLibraryW", "Str", dllPath, "Ptr")
-            } finally {
-                DllCall("Kernel32.dll\SetDllDirectoryW", "Ptr", 0)
-            }
+    SplitPath(A_LineFile, , &dir)
+    opencvPath := dir "\opencv_world500.dll"
+    dllPath := dir "\image_search.dll"
 
-            if (!hOpenCV || !hModule) {
-                useFallback := true
-                if hOpenCV {
-                    DllCall("Kernel32.dll\FreeLibrary", "Ptr", hOpenCV)
-                    hOpenCV := 0
-                }
-                if hModule {
-                    DllCall("Kernel32.dll\FreeLibrary", "Ptr", hModule)
-                    hModule := 0
-                }
-                ImageSearchBackendState.backend := "GDI+ fallback"
-                ImageSearchBackendState.reason := "native image-search dependencies failed to load"
-            } else {
-                ImageSearchBackendState.backend := "OpenCV native"
-                ImageSearchBackendState.reason := "native dependencies loaded"
-                ImageSearchBackendState.nativeAvailable := true
-            }
+    if !FileExist(dllPath) {
+        ImageSearchBackendState.backend := "GDI+ fallback"
+        ImageSearchBackendState.reason := "image_search.dll is missing"
+    } else if !FileExist(opencvPath) {
+        ImageSearchBackendState.backend := "GDI+ fallback"
+        ImageSearchBackendState.reason := "opencv_world500.dll is missing"
+    } else {
+        try {
+            DllCall("Kernel32.dll\SetDllDirectoryW", "Str", dir)
+            hOpenCV := DllCall("Kernel32.dll\LoadLibraryW", "Str", opencvPath, "Ptr")
+            hModule := DllCall("Kernel32.dll\LoadLibraryW", "Str", dllPath, "Ptr")
+        } finally {
+            DllCall("Kernel32.dll\SetDllDirectoryW", "Ptr", 0)
         }
 
-        ImageSearchBackendState.initialized := true
-        isInitialized := true
+        if (!hOpenCV || !hModule) {
+            if hOpenCV {
+                DllCall("Kernel32.dll\FreeLibrary", "Ptr", hOpenCV)
+                hOpenCV := 0
+            }
+            if hModule {
+                DllCall("Kernel32.dll\FreeLibrary", "Ptr", hModule)
+                hModule := 0
+            }
+            ImageSearchBackendState.backend := "GDI+ fallback"
+            ImageSearchBackendState.reason := "native image-search dependencies failed to load"
+        } else {
+            ImageSearchBackendState.backend := "OpenCV native"
+            ImageSearchBackendState.reason := "native dependencies loaded"
+            ImageSearchBackendState.nativeAvailable := true
+        }
     }
+
+    ImageSearchBackendState.initialized := true
+    isInitialized := true
+    return ImageSearchBackendState.nativeAvailable
+}
+
+AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0, maxScale := 0.0, scaleStep := 0.05) {
+    global ImageSearchBackendState
+
+    EnsureImageSearchBackend()
+    useFallback := !ImageSearchBackendState.nativeAvailable
 
     hwnd := GetRobloxHWND()
     if !hwnd
@@ -118,14 +125,6 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
             scale := NumGet(structResult, 24, "Float")
 
             if ((status >= 1 && status <= 4) && score >= 0.0) {
-                ; JoinGame requires >= 0.67 for SpecialMode.png. A weak native
-                ; match is therefore still a miss for that flow; scroll the new
-                ; vertically-scrollable Play menu and let its existing loop retry.
-                if (IsSpecialModeTemplate(templatePath) && score < 0.67) {
-                    if MaybeScrollSpecialModeSearch(templatePath, widthC, heightC)
-                        return ImageSearchError("special-mode menu scrolled; retrying", score)
-                }
-
                 ; The native DLL historically returns coordinates relative to the
                 ; searched Roblox client. Keep that established contract here.
                 return {
@@ -137,28 +136,21 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
                     h: Integer(h),
                     scale: Round(Float(scale), 4),
                     backend: "OpenCV native",
+                    degraded: false,
+                    scoreKind: "confidence",
                     message: "success"
                 }
             }
 
-            if MaybeScrollSpecialModeSearch(templatePath, widthC, heightC)
-                return ImageSearchError("special-mode menu scrolled; retrying", score)
-
             return ImageSearchError("Native image search returned code " status, score)
         } catch Error as err {
+            ; Demote to the fallback for the rest of the session. The loaded
+            ; modules are intentionally left mapped: another thread may still be
+            ; inside a native call, and unloading underneath it would crash.
             useFallback := true
             ImageSearchBackendState.backend := "GDI+ fallback"
             ImageSearchBackendState.reason := "native call failed: " err.Message
             ImageSearchBackendState.nativeAvailable := false
-
-            if hOpenCV {
-                DllCall("Kernel32.dll\FreeLibrary", "Ptr", hOpenCV)
-                hOpenCV := 0
-            }
-            if hModule {
-                DllCall("Kernel32.dll\FreeLibrary", "Ptr", hModule)
-                hModule := 0
-            }
         }
     }
 
@@ -187,42 +179,70 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
         if (searchX2 <= searchX1 || searchY2 <= searchY1)
             return ImageSearchError("Invalid image-search bounds")
 
-        outputList := ""
-        result := Gdip_ImageSearch(
-            pBitmapHaystack,
-            pBitmapTemplate,
-            &outputList,
-            searchX1,
-            searchY1,
-            searchX2,
-            searchY2,
-            40
-        )
+        ; The portable fallback must honor the scale contract used by callers.
+        ; Search the current-client scale first, then nearby fractional scales
+        ; in distance order; canonical 1.0 is retained when it is in range.
+        ; This keeps common sizes usable without an 80 MB optional binary.
+        scaleCandidates := BuildImageSearchScaleCandidates(baseScale, minScale, maxScale, scaleStep)
 
-        if (result > 0 && outputList != "") {
-            firstMatch := StrSplit(StrSplit(outputList, "`n")[1], ",")
-            matchX := Integer(firstMatch[1])
-            matchY := Integer(firstMatch[2])
-            centerX := matchX + Integer(tW / 2)
-            centerY := matchY + Integer(tH / 2)
+        for candidateScale in scaleCandidates {
+            scaledW := Max(1, Round(tW * candidateScale))
+            scaledH := Max(1, Round(tH * candidateScale))
+            if (scaledW > searchX2 - searchX1 || scaledH > searchY2 - searchY1)
+                continue
 
-            return {
-                status: "success",
-                score: 1.0,
-                x: centerX,
-                y: centerY,
-                w: Integer(tW),
-                h: Integer(tH),
-                scale: 1.0,
-                backend: "GDI+ fallback",
-                message: "success (GDI+ fallback)"
+            pCandidate := pBitmapTemplate
+            disposeCandidate := false
+
+            if (scaledW != tW || scaledH != tH) {
+                pCandidate := Gdip_ResizeBitmap(pBitmapTemplate, scaledW, scaledH, 7)
+                if !pCandidate
+                    continue
+                disposeCandidate := true
+            }
+
+            outputList := ""
+            result := 0
+            try {
+                result := Gdip_ImageSearch(
+                    pBitmapHaystack,
+                    pCandidate,
+                    &outputList,
+                    searchX1,
+                    searchY1,
+                    searchX2,
+                    searchY2,
+                    40
+                )
+            } finally {
+                if disposeCandidate
+                    Gdip_DisposeImage(pCandidate)
+            }
+
+            if (result > 0 && outputList != "") {
+                firstMatch := StrSplit(StrSplit(outputList, "`n")[1], ",")
+                matchX := Integer(firstMatch[1])
+                matchY := Integer(firstMatch[2])
+                centerX := matchX + Integer(scaledW / 2)
+                centerY := matchY + Integer(scaledH / 2)
+
+                return {
+                    status: "success",
+                    score: 1.0,
+                    x: centerX,
+                    y: centerY,
+                    w: Integer(scaledW),
+                    h: Integer(scaledH),
+                    scale: candidateScale,
+                    backend: "GDI+ fallback",
+                    degraded: true,
+                    scoreKind: "binary",
+                    message: "success (GDI+ fallback)"
+                }
             }
         }
 
-        if MaybeScrollSpecialModeSearch(templatePath, widthC, heightC)
-            return ImageSearchError("special-mode menu scrolled; retrying")
-
-        return ImageSearchError("image not found via GDI+ fallback")
+        return ImageSearchError("image not found via multi-scale GDI+ fallback")
     } finally {
         if pBitmapHaystack
             Gdip_DisposeImage(pBitmapHaystack)
@@ -232,48 +252,57 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
     }
 }
 
-IsSpecialModeTemplate(templatePath) {
-    SplitPath(templatePath, &templateName)
-    return (templateName = "SpecialMode.png")
+BuildImageSearchScaleCandidates(baseScale, minScale, maxScale, scaleStep) {
+    if (scaleStep <= 0)
+        scaleStep := 0.05
+
+    minScale := Max(0.1, minScale)
+    maxScale := Max(minScale, maxScale)
+    preferred := Min(maxScale, Max(minScale, baseScale))
+    scales := []
+
+    ; Gdip_ImageSearch is comparatively expensive: each distinct scale can
+    ; resize the template and scan the whole requested region. Keep one small
+    ; total candidate budget, ordered outward from the current client scale.
+    maxCandidates := 12
+    maxOffsetSteps := 10
+    AddImageSearchScaleCandidate(scales, preferred)
+
+    offset := scaleStep
+    loop maxOffsetSteps {
+        ; Reserve the final slot for canonical 1.0 when it is in range.
+        if (scales.Length >= maxCandidates - 1)
+            break
+
+        lower := preferred - offset
+        upper := preferred + offset
+        added := false
+
+        if (lower >= minScale) {
+            AddImageSearchScaleCandidate(scales, lower)
+            added := true
+        }
+        if (scales.Length < maxCandidates - 1 && upper <= maxScale) {
+            AddImageSearchScaleCandidate(scales, upper)
+            added := true
+        }
+        if (!added && lower < minScale && upper > maxScale)
+            break
+        offset += scaleStep
+    }
+
+    if (1.0 >= minScale && 1.0 <= maxScale)
+        AddImageSearchScaleCandidate(scales, 1.0)
+    return scales
 }
 
-MaybeScrollSpecialModeSearch(templatePath, clientWidth, clientHeight) {
-    ; TDS' current Play/Survival UI is vertically scrollable. In older layouts the
-    ; Special Mode entry was visible immediately, so JoinGame() only searched the
-    ; current viewport. If the template is not visible, gently scroll the menu and
-    ; let the caller's existing retry loop search again. This is deliberately
-    ; limited to SpecialMode.png so normal gameplay/image searches are unaffected.
-    static lastScrollTick := 0
-    static scrollAttempts := 0
-    static previousTemplate := ""
-
-    SplitPath(templatePath, &templateName)
-
-    if (templateName != previousTemplate) {
-        if (templateName != "SpecialMode.png")
-            scrollAttempts := 0
-        previousTemplate := templateName
+AddImageSearchScaleCandidate(scales, value) {
+    normalized := Round(value, 4)
+    for existing in scales {
+        if (Abs(existing - normalized) < 0.005)
+            return
     }
-
-    if (templateName != "SpecialMode.png")
-        return false
-
-    if (A_TickCount - lastScrollTick < 650)
-        return false
-
-    if (scrollAttempts >= 10)
-        return false
-
-    try {
-        ActivateRoblox()
-        MouseMove(Round(clientWidth * 0.78), Round(clientHeight * 0.78), 0)
-        SendEvent("{WheelDown 4}")
-        lastScrollTick := A_TickCount
-        scrollAttempts++
-        return true
-    } catch {
-        return false
-    }
+    scales.Push(normalized)
 }
 
 ImageSearchError(message, score := 0) {
@@ -282,6 +311,8 @@ ImageSearchError(message, score := 0) {
         status: "error",
         message: message,
         score: score,
-        backend: ImageSearchBackendState.backend
+        backend: ImageSearchBackendState.backend,
+        degraded: (ImageSearchBackendState.backend = "GDI+ fallback"),
+        scoreKind: (ImageSearchBackendState.backend = "GDI+ fallback") ? "binary" : "confidence"
     }
 }

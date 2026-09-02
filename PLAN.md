@@ -1,3 +1,185 @@
+# Hotbar OFF mouse-selection follow-up — 2026-09-02
+
+Target: fix only the reproducible `Use Numbers for Hotbar = OFF` selection
+failure after `dac4ba46dfe9b7d914a210019ee7e94c903f919e` on
+`qa/reported-runtime-fixes`. Preserve the passing keyboard path byte-for-byte,
+Darksen attribution, GPL-3.0, and all unrelated runtime behavior.
+
+## Finding and atomic commit plan
+
+- The global `Slots` array resolves client-scaled coordinates once during
+  startup, before Roblox geometry is guaranteed to exist, and then reuses those
+  stale values during placement. Recording and replay both consume that cache.
+- Add one shared Hotbar OFF helper that validates slots 1–5, takes one current
+  Roblox CLIENT-width/height snapshot at selection time, scales the canonical
+  1920x1009 hotbar coordinates, emits structured slot/x/y/dimension diagnostics,
+  and calls `Click(x, y)` with explicit numeric arguments.
+- Route both recording and `SpawnTower` mouse selection through the helper.
+  Do not change either `Send("{" slot "}")` keyboard-selection statement.
+- Add focused regression contracts for dynamic resolution, CLIENT semantics,
+  logging, explicit numeric click arguments, shared recording/replay behavior,
+  and removal of the startup-cached `Slots` array.
+- Update the changelog and manual QA matrix in the same atomic commit:
+  `fix: resolve hotbar click coordinates at placement time`.
+
+## Verification gates
+
+- Run dependency sync, every Python contract/validator/lint entrypoint,
+  PowerShell parsing, updater smoke tests, and AutoHotkey `/Validate` using both
+  the approved bundled 2.0.12 binary and verified official 2.0.26.
+- Run `git diff --check`, inspect the complete post-`dac4ba4` diff, prove the
+  keyboard path is unchanged, and recheck protected strategy bytes, DLL hashes,
+  Darksen attribution, and GPL-3.0.
+- Commit once after all gates pass and push only
+  `qa/reported-runtime-fixes` to private `origin`. Never push to `dev`, `main`,
+  or `upstream`.
+
+---
+
+# Reported runtime QA follow-up — 2026-09-01
+
+Target: continue `qa/reported-runtime-fixes` after local commit `55dfaf3` and
+publish only that QA branch to the `origin` fork for a PR into `dev`. Never
+merge or push directly to `main`; preserve Darksen as Original Creator and the
+GPL-3.0 attribution.
+
+## Follow-up findings and constraints
+
+- `Resources/Strats/2_Absolute_Zero.strat` is the third obsolete bundled Frost
+  strategy. It must remain deleted together with the two Frost defaults already
+  removed by `55dfaf3`; no Frost strategy may be restored automatically until a
+  developer or tester supplies and validates a new official strategy.
+- The official runtime package requires the reviewed
+  `lib/ImageSearch/opencv_world500.dll` and
+  `lib/ImageSearch/vcruntime140.dll` files. Their approved SHA-256 values are
+  `7bc06231bf3cfd287e0b6853a78f78e00ceb58266f3cb49642f428ea6f4d1518`
+  and `d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7`.
+- Community strategy refresh must remain enabled in extracted official
+  releases, but must not contact or mirror `main` when `A_ScriptDir\.git` is a
+  directory (normal checkout) or a file (linked Git worktree).
+- `Resources/Strats/SUICIDE_MINIGUNNER_GEM_EXP_FARM.strat` is outside the
+  change scope. Preserve its bytes and line endings.
+- Numbers-for-Hotbar OFF behavior and the AutoHotkey 2.0.12/2.0.26 difference
+  remain manual QA items; source validation will use the immutable verified
+  AutoHotkey 2.0.26 toolchain.
+
+## Follow-up atomic commit plan
+
+1. `docs: revise reported runtime QA follow-up plan`
+   - Record the corrected three-strategy and required-DLL packaging policy.
+   - Record the Git checkout/worktree refresh boundary and remaining manual QA.
+2. `fix: skip community strategy sync in Git checkouts`
+   - Detect both `.git` directories and linked-worktree `.git` files before any
+     community network request.
+   - Preserve the six-hour transactional refresh unchanged for release trees.
+   - Add regression contracts for both development checkout forms and release
+     behavior.
+3. `build: finalize reported runtime package contents`
+   - Commit the two exact reviewed DLLs and their required hashes.
+   - Retire `2_Absolute_Zero.strat`, completing the exact three-file Frost
+     cleanup without touching any unrelated `.strat` file.
+   - Update packaging/repository validation contracts for the final inventory.
+4. `docs: record final runtime packaging and QA gates`
+   - Update `CHANGELOG.md`, dependency policy, testing notes, and this plan with
+     the final package behavior and validation evidence.
+
+## Follow-up verification gates
+
+- Run dependency sync, Python compilation, all Python contract/validator/lint
+  entrypoints, PowerShell parser validation, the updater smoke suite, and
+  AutoHotkey 2.0.26 `/Validate`.
+- Run `git diff --check`, confirm both DLL hashes from the committed objects,
+  confirm the exact remaining strategy inventory, and verify
+  `SUICIDE_MINIGUNNER_GEM_EXP_FARM.strat` is byte-identical to `55dfaf3`.
+- Confirm Darksen/Original Creator and GPL-3.0 notices remain present.
+- Push only `qa/reported-runtime-fixes` to `origin`, then create a PR targeting
+  `dev` without merging it. Manual Roblox QA remains required for Hotbar OFF,
+  live image/timing behavior, and comparison with the bundled AutoHotkey 2.0.12
+  runtime.
+
+## Follow-up execution status
+
+- [x] Plan revised in `08ec33c`.
+- [x] Git checkout/worktree community refresh blocked with regression contracts
+  in `6363085`; extracted releases retain the existing refresh path.
+- [x] Three-strategy Frost cleanup and both hash-pinned runtime DLLs finalized
+  in `40b820e`.
+- [x] Changelog, dependency policy, README, testing matrix, and validation plan
+  updated for final QA handoff.
+- [ ] Manual Roblox validation remains open for Numbers for Hotbar OFF, live
+  image/timing scenarios, and AutoHotkey 2.0.12 versus 2.0.26 behavior.
+
+---
+
+# Reported runtime QA hotfix — 2026-09-01
+
+Target: PR #30 head `36542adc5c63d384a9a4ad71b780c8d3afd120f8`, branch
+`qa/reported-runtime-fixes`, local QA only. Preserve the partially-applied fixes;
+do not push, merge, stash, reset, or replace the checkout wholesale.
+
+## Audit findings that constrain the implementation
+
+- The Easy/mode loop still needed one deadline created outside the retry loop;
+  Play rediscovery may recover the menu but must never reset that deadline.
+- Native OpenCV remains optional. The existing GDI+ bitmap helpers can provide
+  bounded multi-scale matching without shipping another unreviewed binary.
+- Image capture is SCREEN-based, while all returned matches and mouse actions
+  in Main are Roblox CLIENT-based. Window origin must not be added to results.
+- Auto Equip's search-bar region reused `rh` as its width. Scale candidates
+  must remain fractional at 1366x768 and 1280x720.
+- Existing bundled strategies demonstrate the legacy path convention:
+  Juggernaut stores `3` and Hacker stores `4` (last shared level). New recordings
+  must store `4`/`5` as the first path-specific level, while replay translates
+  only the known legacy defaults. Custom tower IDs retain their supplied value.
+- There are exactly three path-branch decisions to unify: recorder region,
+  replay region, and replay hotkey. All currently use `nextLevel > pathLevel`.
+- The partial DJ regression test starts at `SetDJTrack(track)` and can match a
+  call. Tests must extract the definition marker `SetDJTrack(track) {`.
+- Recording currently captures valid geometry at start but writes the geometry
+  seen at save time. Persist the recording-start client size instead.
+- PR #30's useful stale-ID, SellTower cleanup, Arcade region, bounded-upgrade,
+  Support Caravan, watchdog/resource and coordinate fixes remain subject to the
+  final contract/security/runtime review.
+
+## Atomic local commit plan
+
+1. `fix: stabilize runtime detection and recovery`
+   - Complete the absolute mode-selection deadline and bounded Play recovery.
+   - Harden GDI+ multi-scale fallback metadata/candidates and client/screen
+     bounds, Auto Equip geometry, map stabilization, Ready verification, Frost
+     image/OCR scrolling, watchdog progress phases, and recording geometry.
+   - Normalize raw Click, CloneTower, BrawlerReposition and existing SpawnTower
+     replay exactly once from saved strategy dimensions.
+2. `fix: correct path tower and DJ behavior`
+   - Introduce one path-level resolver shared by all three decision sites.
+   - Store the new first-path-specific semantic in recordings while translating
+     the known legacy 3/4 values for old Juggernaut/Pursuit/Kingpin/Hacker files.
+   - Make DJ UI reopening, track search, cooldown handling and state restoration
+     bounded and truthful.
+3. `test: cover reported runtime regressions`
+   - Replace brittle string checks with function-body extraction and assert every
+     requested deadline, coordinate, scale, path, state/resource and deletion
+     contract. Add the suite to CI without weakening existing contracts.
+4. `docs: document QA fixes and manual validation`
+   - Update README, TESTING, CHANGELOG and dependency notes with path semantics,
+     supported/recommended resolutions, optional OpenCV behavior and Roblox QA.
+5. `chore: remove outdated frost strategies`
+   - Delete only the two exact tracked default Frost `.strat` files in its own
+     commit after runtime/tests/docs pass. No wildcard or user-strategy cleanup.
+
+## Verification gates
+
+- Compile and run all Python contracts/validators and strategy lint.
+- Parse all PowerShell, run updater smoke tests, and validate all AHK entrypoints
+  with a locally installed or immutable hash-verified AutoHotkey v2 binary.
+- Run `git diff --check`, inspect every final hunk, verify no relevant legacy
+  path comparison remains, and confirm the only `.strat` deletions are the two
+  named obsolete Frost defaults.
+- Document Windows/Roblox-only acceptance separately; automated checks cannot
+  validate live TDS artwork, input timing, DPI virtualization or camera state.
+
+---
+
 # Selective pre-QA port plan
 
 ## Audit baseline and constraints

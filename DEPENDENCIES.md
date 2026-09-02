@@ -31,11 +31,16 @@ already required by the runtime.
 | --- | --- | --- |
 | `lib/ImageSearch/image_search.dll` | `346d25b9baf582b4cd5550fceaa57f4b1e18f10ae38007ba52ccd07bd790221e` | Existing unsigned upstream binary. Its source/build provenance still needs a separate binary review. |
 | `lib/ImageSearch/msvcp140.dll` | `7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca` | Existing Microsoft-signed runtime, version 14.51.36247.0. Prefer the official Visual C++ Redistributable in a future packaging review. |
+| `lib/ImageSearch/opencv_world500.dll` | `7bc06231bf3cfd287e0b6853a78f78e00ceb58266f3cb49642f428ea6f4d1518` | Required reviewed OpenCV 5.0.0 runtime from the official New Era v1.3.3 package; unsigned. |
+| `lib/ImageSearch/vcruntime140.dll` | `d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7` | Required Microsoft-signed runtime, version 14.51.36247.0, matching the official New Era v1.3.3 package. |
 
-`ImageSearch.ahk` also looks for `opencv_world500.dll`. The runtime deliberately
-falls back to GDI+ when it is absent.
+The native image-search package requires all four listed DLLs. If native
+initialization still fails, the macro uses the reviewed GDI+ fallback, which
+performs bounded multi-scale template matching and preserves client-relative
+coordinates. The fallback is a runtime recovery path, not permission to omit
+required files from an official package.
 
-The FULL reference copy of `opencv_world500.dll` was audited but is not shipped:
+The shipped `opencv_world500.dll` was audited with these details:
 
 - size: 80,108,032 bytes;
 - file/product version: 5.0.0;
@@ -43,13 +48,14 @@ The FULL reference copy of `opencv_world500.dll` was audited but is not shipped:
 - Authenticode: unsigned;
 - byte-for-byte source: the official New Era v1.3.3 `TDS_Macro.zip` asset;
 - upstream OpenCV license: Apache-2.0;
-- unresolved: exact compiler/build recipe and bundled notice provenance.
+- unresolved: exact compiler/build recipe and bundled notice provenance. This
+  remains a release-review item even though the approved binary is required for
+  package completeness.
 
-The FULL `vcruntime140.dll` is also excluded. It is Microsoft-signed version
-14.51.36247.0 with SHA-256
-`d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7`.
-Install the supported Microsoft Visual C++ Redistributable instead of copying
-that file into the QA candidate when the native backend is approved.
+The shipped `vcruntime140.dll` is Microsoft-signed version 14.51.36247.0 with
+the hash listed above. End users should still prefer the supported Microsoft
+Visual C++ Redistributable for system-wide servicing; the package copy is pinned
+to the reviewed official runtime contents.
 
 ## Runtime image provenance
 
