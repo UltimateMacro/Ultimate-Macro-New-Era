@@ -1,6 +1,6 @@
 # Ultimate Macro: The New Era 🚀
 
-> **⚠️ For the recommended ready-to-use package, download `TDS_Macro.zip` from the [official releases](https://github.com/DarksenDev/tds-macro/releases).**
+> **⚠️ For the recommended ready-to-use package, download `TDS_Macro.zip` from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).**
 
 **Ultimate Macro: The New Era** is the continuation of Ultimate Macro, a free and open-source automation tool for **Roblox Tower Defense Simulator**.
 
@@ -22,7 +22,7 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 - Automatic daily and playtime rewards
 - Universal resolution support with improved image detection and OCR
 - Potato Mode and Legacy Mode
-- 1.5x and 2x Timescale support
+- 1.5x and 2x timescale support
 - Discord webhooks with stats, screenshots, and logs
 - Discord Bot remote control
 - And much more
@@ -31,27 +31,35 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 - **Windows 10/11**
 - **AutoHotkey v2.0**
-- Recommended resolution: **1920x1080**
-- Roblox UI Scale: **Large**
-- Screen Shake: **Disabled**
-- Prefer Vertical Upgrades: **Enabled**
+- Recommended resolution: **1920x1080** (recorded coordinates are normalized for other supported client sizes)
+- Recommended Windows display scaling: **100%**
+- Windows taskbar should remain visible for the canonical layout
+- Recommended Roblox FPS: **60**
+- TDS UI Scale: **Large**
+- TDS Screen Shake: **Disabled**
+- TDS Prefer Vertical Upgrades: **Enabled**
 
 ## 📥 Installation
 
-1. Download `TDS_Macro.zip` from the [official releases](https://github.com/DarksenDev/tds-macro/releases), or use **Code → Download ZIP** on the production [`main` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/tree/main)
+1. Download `TDS_Macro.zip` from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases), or use **Code → Download ZIP** on the production [`main` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era)
 2. Extract all files
 3. Install **AutoHotkey v2.0**
 4. Run `Main.ahk`
-5. Configure your strategy and start
+5. Configure your strategy and start the macro
 
 ## 🛠️ Production and development
 
 - **Production/runtime:** the `main` branch contains only the files required to
   run the macro. Official packaged releases are published separately in
-  [`DarksenDev/tds-macro`](https://github.com/DarksenDev/tds-macro/releases).
+  [`UltimateMacro/Ultimate-Macro-New-Era`](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
 - **Development/source:** source tooling, tests, CI configuration, QA guidance,
-  and contributor documentation live on the
+  and contributor documentation are available on the
   [`dev` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/tree/dev).
+- Community strategies refresh automatically only in extracted release trees.
+  Git checkouts and linked worktrees intentionally keep their tracked strategy
+  inventory unchanged; developers update them through reviewed Git changes.
+- Official packages include the hash-pinned native image-search DLLs. Keep the
+  complete `lib/ImageSearch` directory when extracting or copying the macro.
 
 ## 👨‍💻 Development Team
 
@@ -75,7 +83,7 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 Ultimate Macro was originally created and developed by **Darksen**.
 
-If you truly enjoy the macro and want to support darksenn's free work, you can donate [here](https://www.donationalerts.com/r/darksen1). Any support is massively appreciated! 💖
+If you truly enjoy the macro and want to support darksen's free work, you can donate [here](https://www.donationalerts.com/r/darksen1). Any support is greatly appreciated! 💖
 
 The New Era continues his original project and would not exist without his work.
 
