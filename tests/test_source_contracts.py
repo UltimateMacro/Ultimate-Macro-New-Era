@@ -193,6 +193,31 @@ def validate_watchdog_retry_lifecycle(watchdog: str) -> None:
     assert "return true" in send and "return false" in send
 
 
+def validate_watchdog_pid_lifecycle(main: str) -> None:
+    start = region(main, "startWatchdog() {", "KillSubmacros() {")
+    cleanup = region(main, "KillSubmacros() {", "HandleExit(ExitReason, ExitCode) {")
+    handle_exit = region(main, "HandleExit(ExitReason, ExitCode) {", "CleanupGdip(exitReason, exitCode) {")
+
+    assert "newWatchdogPID := 0" in start
+    assert "&newWatchdogPID" in start
+    assert "&watchdogPID" not in start
+    assert start.index("Run(command, , , &newWatchdogPID)") < start.index(
+        "watchdogPID := newWatchdogPID"
+    )
+    assert "watchdog_start_failed" in start and "return false" in start
+
+    assert 'if (IsSet(watchdogPID) && watchdogPID != "")' in cleanup
+    assert cleanup.index('watchdogPID := ""') < cleanup.index('if (trackedPID != "")')
+    assert 'if (watchdogPID != "")' not in cleanup
+    assert r'A_ScriptDir "\submacros\watchdog.ahk"' in cleanup
+    assert "InStr(normalizedCmd, targetScript)" in cleanup
+
+    assert "try KillSubmacros()" in handle_exit
+    assert "if (IsSet(RunningStrategy) && RunningStrategy)" in handle_exit
+    assert "if (RunningStrategy)" not in handle_exit
+    assert "watchdog_exit_cleanup_failed" in handle_exit
+
+
 def validate_ready_detection(main: str) -> None:
     ready = region(main, "FindReadyButton(&foundX, &foundY)", "activateTimescale()")
     template_index = ready.find('AdvancedImageSearch("Resources/ready_gs.png"')
@@ -401,6 +426,7 @@ def validate(root: Path) -> None:
     validate_watchdog_result_fallbacks(watchdog)
     validate_watchdog_conditions_and_formatting(watchdog)
     validate_watchdog_retry_lifecycle(watchdog)
+    validate_watchdog_pid_lifecycle(main)
     validate_roblox_coordinates(roblox)
     validate_ready_detection(main)
     validate_community_strategy_update(main)

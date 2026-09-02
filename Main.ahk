@@ -8650,29 +8650,55 @@ startWatchdog() {
     KillSubmacros()
 
     currentPID := DllCall("GetCurrentProcessId")
-    if (A_PtrSize == 4) {
-        Run('"' A_ScriptDir '\submacros\AutoHotkey32.exe" "' A_ScriptDir '\submacros\watchdog.ahk" ' currentPID, , , &
-            watchdogPID)
-    } else {
-        Run('"' A_ScriptDir '\submacros\AutoHotkey64.exe" "' A_ScriptDir '\submacros\watchdog.ahk" ' currentPID, , , &
-            watchdogPID)
+    watchdogExe := A_ScriptDir "\submacros\" (A_PtrSize == 4 ? "AutoHotkey32.exe" : "AutoHotkey64.exe")
+    watchdogScript := A_ScriptDir "\submacros\watchdog.ahk"
+    command := '"' watchdogExe '" "' watchdogScript '" ' currentPID
+    newWatchdogPID := 0
+
+    try {
+        Run(command, , , &newWatchdogPID)
+        if (!IsSet(newWatchdogPID) || newWatchdogPID = "" || newWatchdogPID <= 0)
+            throw Error("Run did not return a watchdog process ID.")
+
+        watchdogPID := newWatchdogPID
+        RuntimeLogInfo("watchdog_started", "Watchdog process launched",
+            "watchdog_pid=" watchdogPID "; main_pid=" currentPID)
+        return true
+    } catch Error as err {
+        watchdogPID := ""
+        RuntimeLogError("watchdog_start_failed", "Could not launch watchdog; Main will continue without it",
+            "main_pid=" currentPID "; error=" err.Message)
+        return false
     }
 }
 
 KillSubmacros() {
     global watchdogPID
 
+    trackedPID := ""
+    if (IsSet(watchdogPID) && watchdogPID != "")
+        trackedPID := watchdogPID
+
+    ; Publish the idle state before cleanup so repeated calls are idempotent.
+    watchdogPID := ""
+
     ; Prefer the exact PID returned when this installation launched watchdog.
-    if (watchdogPID != "") {
+    if (trackedPID != "") {
         try {
-            if ProcessExist(watchdogPID)
-                ProcessClose(watchdogPID)
+            if ProcessExist(trackedPID) {
+                ProcessClose(trackedPID)
+                RuntimeLogInfo("watchdog_stopped", "Stopped tracked watchdog process",
+                    "watchdog_pid=" trackedPID "; source=tracked_pid")
+            }
+        } catch Error as err {
+            RuntimeLogWarn("watchdog_cleanup_failed", "Could not close tracked watchdog process",
+                "watchdog_pid=" trackedPID "; source=tracked_pid; error=" err.Message)
         }
-        watchdogPID := ""
     }
 
     ; Fallback cleanup is path-scoped so another checkout/instance is untouched.
     targetScript := StrLower(StrReplace(A_ScriptDir "\submacros\watchdog.ahk", "/", "\"))
+    pathClosed := 0
     try {
         for process in ComObjGet("winmgmts:").ExecQuery(
             "SELECT * FROM Win32_Process WHERE Name = 'AutoHotkey64.exe' OR Name = 'AutoHotkey.exe' OR Name = 'AutoHotkey32.exe'"
@@ -8682,21 +8708,39 @@ KillSubmacros() {
                 if (cmd = "")
                     continue
                 normalizedCmd := StrLower(StrReplace(cmd, "/", "\"))
-                if InStr(normalizedCmd, targetScript)
-                    try ProcessClose(process.ProcessId)
+                if InStr(normalizedCmd, targetScript) {
+                    try {
+                        ProcessClose(process.ProcessId)
+                        pathClosed += 1
+                    } catch Error as err {
+                        RuntimeLogWarn("watchdog_cleanup_failed", "Could not close path-scoped watchdog process",
+                            "watchdog_pid=" process.ProcessId "; source=path_scan; error=" err.Message)
+                    }
+                }
             }
         }
+    } catch Error as err {
+        RuntimeLogWarn("watchdog_cleanup_scan_failed", "Could not scan for path-scoped watchdog processes",
+            "target=" targetScript "; error=" err.Message)
     }
+
+    if (pathClosed > 0)
+        RuntimeLogInfo("watchdog_stopped", "Stopped path-scoped watchdog process",
+            "count=" pathClosed "; source=path_scan")
 }
 
 HandleExit(ExitReason, ExitCode) {
-    global StateFile, SettingsFile
+    global StateFile, SettingsFile, RunningStrategy
 
     ; Never leave a mouse button or movement key latched down for the user.
     try ReleaseHeldInput()
 
-    if (RunningStrategy) {
-        KillSubmacros()
+    try KillSubmacros()
+    catch Error as err
+        RuntimeLogWarn("watchdog_exit_cleanup_failed", "Watchdog cleanup failed during Main exit",
+            "reason=" ExitReason "; error=" err.Message)
+
+    if (IsSet(RunningStrategy) && RunningStrategy) {
         if (ExitReason = "Close" || ExitReason = "Menu" || ExitReason = "Shutdown" || ExitReason = "Logoff") {
             IniWrite(0, StateFile, "State", "Running")
             IniDelete(StateFile, "State", "Strategy")

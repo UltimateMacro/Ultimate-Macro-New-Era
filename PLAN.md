@@ -1,3 +1,67 @@
+# Watchdog PID lifecycle hotfix — 2026-09-02
+
+Target: local-only `fix/watchdog-pid-unset` from canonical `upstream/dev` at
+`1726fdaa0b6dea91ecc04cfbb5d0a31cc5796012`. Do not commit or push before
+manual Roblox QA approval. Preserve Darksen as Original Creator, GPL-3.0,
+TimeScale behavior, and path-scoped watchdog cleanup.
+
+## Root-cause constraints
+
+- `watchdogPID` has a normal startup initializer, but `startWatchdog()` passes
+  that global directly to `Run(..., &watchdogPID)`. An output-variable failure
+  can therefore leave the shared lifecycle variable unset before later cleanup.
+- `KillSubmacros()` reads the PID without `IsSet`, so repeated cleanup or a
+  cleanup after an incomplete launch can raise `VarUnset` instead of behaving
+  idempotently.
+- `OnExit(HandleExit)` is registered before the later `watchdogPID` and
+  `RunningStrategy` startup initializers execute. Early-exit cleanup must also
+  tolerate that initialization window.
+- `watchdogPID` is the only mutable `Run` output PID in Main. The watchdog's
+  `MainPID` is a required process argument and is not affected by this bug.
+
+## Local change plan
+
+1. Harden `startWatchdog()` with an initialized local output PID, publish it to
+   the global only after a successful launch, and return false with a structured
+   `watchdog_start_failed` log if launch fails.
+2. Make `KillSubmacros()` consume the tracked PID only behind `IsSet`, clear the
+   global before cleanup work, retain the exact-PID and path-scoped fallbacks,
+   and log `watchdog_stopped`, `watchdog_cleanup_failed`, or
+   `watchdog_cleanup_scan_failed` as appropriate.
+3. Make `HandleExit()` attempt idempotent watchdog cleanup regardless of
+   partially initialized running state, protect `RunningStrategy` with `IsSet`,
+   and log `watchdog_exit_cleanup_failed` if the cleanup boundary itself fails.
+4. Extend existing source contracts for initialization, repeated cleanup/start
+   safety, local PID publication, failed-launch recovery, path isolation, and
+   defensive OnExit ordering. Update CHANGELOG/TESTING with exact manual gates.
+
+## Local verification gates
+
+- Run all Python contracts/validators and strategy lint, PowerShell parsing,
+  updater smoke tests, AutoHotkey 2.0.12 and verified 2.0.26 `/Validate`, and
+  `git diff --check`.
+- Inspect every `startWatchdog`, `KillSubmacros`, `HandleExit`, Reload,
+  restart, reconnect, Play Again, start/stop, and watchdog recovery call path.
+- Confirm no TimeScale hunk, no unscoped process termination, no unrelated PID
+  refactor, and no attribution/license change.
+- Stop with uncommitted local changes and provide the manual Roblox matrix plus
+  exact runtime event names. Wait for explicit approval before committing or
+  pushing `fix/watchdog-pid-unset`.
+
+## QA sign-off
+
+- Automated repository, source-contract, strategy, PowerShell, updater, and
+  AutoHotkey 2.0.12/2.0.26 validation passed locally.
+- Manual AutoHotkey 2.0.12 Roblox QA passed with TimeScale OFF and 2x: no
+  `watchdogPID` `VarUnset`, successful stop and completed strategy, exactly one
+  watchdog process, native OpenCV active, and no watchdog failure/cleanup log
+  events.
+- Manual approval to commit and push only `fix/watchdog-pid-unset` was received
+  on 2026-09-02. PR, merge, `dev`, `main`, `upstream`, and Release actions remain
+  out of scope.
+
+---
+
 # Hotbar OFF mouse-selection follow-up — 2026-09-02
 
 Target: fix only the reproducible `Use Numbers for Hotbar = OFF` selection
