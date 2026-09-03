@@ -1100,13 +1100,39 @@ global ChildGui := ""
 global IsRenderingStrategies := false
 global ContentGui := ""
 
+global RenderedBitmaps := []  ; Track all created bitmaps for cleanup
+
+; Add this function to properly dispose of GDI+ bitmaps
+DisposeBitmap(hBitmap) {
+    if (hBitmap) {
+        try {
+            DeleteObject(hBitmap)
+        } catch Error as e {
+            ; Silently ignore disposal errors
+            ; The bitmap may already be disposed or invalid
+        }
+    }
+}
+
+
+CleanupRenderedBitmaps() {
+    global RenderedBitmaps
+    for index, hBitmap in RenderedBitmaps {
+        DisposeBitmap(hBitmap)
+    }
+    RenderedBitmaps := []
+}
+
 SwitchStrategiesTab(mode) {
-    global BtnCommStrats, BtnMyStrats, IsRenderingStrategies
+    global BtnCommStrats, BtnMyStrats, IsRenderingStrategies, ContentGui, RenderedBitmaps
     
     ; Lock to prevent concurrent rendering when spam clicking
     if (IsRenderingStrategies)
         return
     IsRenderingStrategies := true
+    
+    ; Clean up resources before switching
+    CleanupRenderedBitmaps()
     
     if (mode == "Community") {
         BtnCommStrats.IsSelected := true
@@ -1132,7 +1158,13 @@ SwitchStrategiesTab(mode) {
 RenderStrategies(mode := "Community") {
     global ChildGui, ContentGui, MainGui, LoadedStrats, GradientButtons
     global FrameX, FrameY, FrameW, FrameH, ContentH, CurrentScrollPos, SliderH, SliderBG, Slider
-    global StratsDir, RecordingsDir, CurrentTab, ChildHwnd
+    global StratsDir, RecordingsDir, CurrentTab, ChildHwnd, RenderedBitmaps
+
+    ; CRITICAL: Clean up ALL previous GDI+ resources before creating new ones
+    CleanupRenderedBitmaps()
+    
+    ; Clean up GradientButtons references (but don't dispose - they're just text controls)
+    GradientButtons := []
 
     ; Create the persistent ChildGui container only if it doesn't exist yet
     if (!IsSet(ChildGui) || ChildGui == "") {
@@ -1144,7 +1176,10 @@ RenderStrategies(mode := "Community") {
 
     ; Destroy and recreate only the internal ContentGui on tab switch
     if (IsSet(ContentGui) && ContentGui != "") {
-        ContentGui.Destroy()
+        ; Destroy the GUI - this should clean up its controls
+        try ContentGui.Destroy()
+        catch
+        ContentGui := ""
     }
 
     ContentGui := Gui("-Caption +Parent" ChildGui.Hwnd)
@@ -1153,7 +1188,6 @@ RenderStrategies(mode := "Community") {
     width := FrameW - 6
 
     LoadedStrats := []
-    GradientButtons := []
     CurrentScrollPos := 0
 
     targetDir := (mode == "Community") ? StratsDir : RecordingsDir
@@ -1201,10 +1235,17 @@ RenderStrategies(mode := "Community") {
         C1Y := CurrentY
 
         hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
+        RenderedBitmaps.Push(hFrameBg)  ; Track for cleanup
         ContentGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
 
         hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(), 10, 1)
+        RenderedBitmaps.Push(hIconBg)  ; Track for cleanup
         ContentGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
+        
+        ; Track the duplicate - wait, we reused the same bitmap twice. Let's fix that:
+        hIconBg2 := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(), 10, 1)
+        RenderedBitmaps.Push(hIconBg2)  ; Track for cleanup
+        ContentGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg2)
 
         diffImg := "Resources/Strats/images/" strat.difficulty ".png"
         if !FileExist(diffImg) {
@@ -1212,8 +1253,6 @@ RenderStrategies(mode := "Community") {
         } else {
             ContentGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
         }
-
-        ContentGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
 
         coinsCount := 0
         if RegExMatch(strat.income, "i)([\d,]+)\s*coins", &match) {
@@ -1270,6 +1309,7 @@ RenderStrategies(mode := "Community") {
         }
 
         hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty != "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
+        RenderedBitmaps.Push(hgmMode)  ; Track for cleanup
         ContentGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
 
         ContentGui.SetFont("s9 w500 c9CA4B0", UIFont())
@@ -1286,12 +1326,16 @@ RenderStrategies(mode := "Community") {
 
         if (mode == "MyStrats") {
             hBtnNormal := CreateGradientButton(145, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", "Load", UIFont(), 14, 1)
+            RenderedBitmaps.Push(hBtnNormal)
             hBtnHover := CreateGradientButton(145, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", "Load", UIFont(), 14, 1)
+            RenderedBitmaps.Push(hBtnHover)
             
             editColor1 := "0xFF4b5563", editColor2 := "0xFF374151"
             editHover1 := "0xFF6b7280", editHover2 := "0xFF4b5563"
             hEditNormal := CreateGradientButton(70, 38, 8, editColor1, editColor2, "0x40000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
+            RenderedBitmaps.Push(hEditNormal)
             hEditHover := CreateGradientButton(70, 38, 8, editHover1, editHover2, "0x60000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
+            RenderedBitmaps.Push(hEditHover)
 
             picLoadBtn := ContentGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
             dl1 := ContentGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans +0x200 Center", "")
@@ -1308,7 +1352,9 @@ RenderStrategies(mode := "Community") {
             GradientButtons.Push(dlEdit)
         } else {
             hBtnNormal := CreateGradientButton(220, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", "Load", UIFont(), 14, 1)
+            RenderedBitmaps.Push(hBtnNormal)
             hBtnHover := CreateGradientButton(220, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", "Load", UIFont(), 14, 1)
+            RenderedBitmaps.Push(hBtnHover)
             
             picLoadBtn := ContentGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
             dl1 := ContentGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
@@ -1344,7 +1390,9 @@ RenderStrategies(mode := "Community") {
         sliderPos := 0
 
         hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
+        RenderedBitmaps.Push(hSlider)
         hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
+        RenderedBitmaps.Push(hSliderBG)
 
         SliderBG := ContentGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" (ContentH <= FrameH ? FrameH : FrameH + ContentH) " +BackgroundTrans +0x0100", "HBITMAP:*" hSliderBG)
         Slider := ContentGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans +0x0100", "HBITMAP:*" hSlider)
@@ -9039,7 +9087,9 @@ HandleExit(ExitReason, ExitCode) {
 }
 
 CleanupGdip(exitReason, exitCode) {
-    global pToken
+    global pToken, RenderedBitmaps
+    ; Clean up any remaining bitmaps
+    CleanupRenderedBitmaps()
     Gdip_Shutdown(pToken)
 }
 
