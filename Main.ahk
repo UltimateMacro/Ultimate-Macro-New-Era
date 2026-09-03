@@ -1097,8 +1097,17 @@ global SliderH := 30
 global ChildHwnd := 0
 global ChildGui := ""
 
+global IsRenderingStrategies := false
+global ContentGui := ""
+
 SwitchStrategiesTab(mode) {
-    global BtnCommStrats, BtnMyStrats
+    global BtnCommStrats, BtnMyStrats, IsRenderingStrategies
+    
+    ; Lock to prevent concurrent rendering when spam clicking
+    if (IsRenderingStrategies)
+        return
+    IsRenderingStrategies := true
+    
     if (mode == "Community") {
         BtnCommStrats.IsSelected := true
         BtnMyStrats.IsSelected := false
@@ -1114,21 +1123,33 @@ SwitchStrategiesTab(mode) {
         BtnCommStrats.Opt("Background0e0e0f")
         BtnCommStrats.SetFont("cFFFFFF Norm")
     }
+    
     RenderStrategies(mode)
+    
+    IsRenderingStrategies := false
 }
 
 RenderStrategies(mode := "Community") {
-    global ChildGui, MainGui, LoadedStrats, GradientButtons
+    global ChildGui, ContentGui, MainGui, LoadedStrats, GradientButtons
     global FrameX, FrameY, FrameW, FrameH, ContentH, CurrentScrollPos, SliderH, SliderBG, Slider
     global StratsDir, RecordingsDir, CurrentTab, ChildHwnd
 
-    if (ChildGui != "") {
-        ChildGui.Destroy()
+    ; Create the persistent ChildGui container only if it doesn't exist yet
+    if (!IsSet(ChildGui) || ChildGui == "") {
+        ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
+        ChildGui.BackColor := "181818"
+        ChildGui.SetFont("s10 cWhite", UIFont())
+        ChildHwnd := ChildGui.Hwnd
     }
 
-    ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
-    ChildGui.BackColor := "181818"
-    ChildGui.SetFont("s10 cWhite", UIFont())
+    ; Destroy and recreate only the internal ContentGui on tab switch
+    if (IsSet(ContentGui) && ContentGui != "") {
+        ContentGui.Destroy()
+    }
+
+    ContentGui := Gui("-Caption +Parent" ChildGui.Hwnd)
+    ContentGui.BackColor := "181818"
+    ContentGui.SetFont("s10 cWhite", UIFont())
     width := FrameW - 6
 
     LoadedStrats := []
@@ -1143,7 +1164,6 @@ RenderStrategies(mode := "Community") {
         sMap := IniRead(localPath, "Settings", "map", "Unknown")
         sDifficulty := IniRead(localPath, "Settings", "difficulty", "Easy")
         sTowers := IniRead(localPath, "Settings", "requiredTowers", "None")
-        ; Set proper fallbacks for missing [Info] lines when loading your local strats
         sDesc := IniRead(localPath, "Info", "desc", "Local recording.")
         sAuthor := IniRead(localPath, "Info", "author", "You")
         sTitle := IniRead(localPath, "Info", "title", StrReplace(A_LoopFileName, ".strat", ""))
@@ -1181,19 +1201,19 @@ RenderStrategies(mode := "Community") {
         C1Y := CurrentY
 
         hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
-        ChildGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
+        ContentGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
 
         hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(), 10, 1)
-        ChildGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
+        ContentGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
 
         diffImg := "Resources/Strats/images/" strat.difficulty ".png"
         if !FileExist(diffImg) {
             LogToConsole("Missing resource file: " diffImg)
         } else {
-            ChildGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
+            ContentGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
         }
 
-        ChildGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
+        ContentGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
 
         coinsCount := 0
         if RegExMatch(strat.income, "i)([\d,]+)\s*coins", &match) {
@@ -1215,14 +1235,14 @@ RenderStrategies(mode := "Community") {
         if !FileExist(rewardIcon) {
             LogToConsole("Missing resource file: " rewardIcon)
         } else {
-            ChildGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
+            ContentGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
         }
 
-        ChildGui.SetFont("s11 Bold cWhite", UIFont())
-        ChildGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title : "Unknown Strat")
+        ContentGui.SetFont("s11 Bold cWhite", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title : "Unknown Strat")
 
-        ChildGui.SetFont("s9 w500 c7E848E", UIFont())
-        helpDl1 := ChildGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
+        ContentGui.SetFont("s9 w500 c7E848E", UIFont())
+        helpDl1 := ContentGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
         helpDl1.OnEvent("Click", ((t, a, r, m, d) => (*) => StratInfo(t, a, r, m, d))(
             strat.title,
             strat.author,
@@ -1231,11 +1251,11 @@ RenderStrategies(mode := "Community") {
             strat.desc
         ))
 
-        ChildGui.SetFont("s9 w400 cE2E4E7", UIFont())
-        ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers : "None"))
+        ContentGui.SetFont("s9 w400 cE2E4E7", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers : "None"))
 
-        ChildGui.SetFont("s9 w400 c7E848E", UIFont())
-        ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
+        ContentGui.SetFont("s9 w400 c7E848E", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
 
         if (strat.difficulty = "Hardcore") {
             badgeColor1 := "0xFFAB457B", badgeColor2 := "0xFF5C2040"
@@ -1250,11 +1270,11 @@ RenderStrategies(mode := "Community") {
         }
 
         hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty != "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
-        ChildGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
+        ContentGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
 
-        ChildGui.SetFont("s9 w500 c9CA4B0", UIFont())
-        ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time : "Unknown"))
-        ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income : "Unknown"))
+        ContentGui.SetFont("s9 w500 c9CA4B0", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time : "Unknown"))
+        ContentGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income : "Unknown"))
 
         if ((strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore")) {
             loadColor1 := "0xff961ea1", loadColor2 := "0xff5f237a"
@@ -1265,7 +1285,6 @@ RenderStrategies(mode := "Community") {
         }
 
         if (mode == "MyStrats") {
-            ; Split width: 145px for Load, 70px for Edit (5px gap = 220px total)
             hBtnNormal := CreateGradientButton(145, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", "Load", UIFont(), 14, 1)
             hBtnHover := CreateGradientButton(145, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", "Load", UIFont(), 14, 1)
             
@@ -1274,11 +1293,11 @@ RenderStrategies(mode := "Community") {
             hEditNormal := CreateGradientButton(70, 38, 8, editColor1, editColor2, "0x40000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
             hEditHover := CreateGradientButton(70, 38, 8, editHover1, editHover2, "0x60000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
 
-            picLoadBtn := ChildGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
-            dl1 := ChildGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans +0x200 Center", "")
+            picLoadBtn := ContentGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
+            dl1 := ContentGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans +0x200 Center", "")
             
-            picEditBtn := ChildGui.Add("Picture", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans", "HBITMAP:*" hEditNormal)
-            dlEdit := ChildGui.Add("Text", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans +0x200 Center", "")
+            picEditBtn := ContentGui.Add("Picture", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans", "HBITMAP:*" hEditNormal)
+            dlEdit := ContentGui.Add("Text", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans +0x200 Center", "")
             
             dlEdit.SetFont("cFFFFFF s10 Bold", UIFont())
             dlEdit.StratFile := strat.fullPath
@@ -1288,12 +1307,11 @@ RenderStrategies(mode := "Community") {
             dlEdit.ImgHover := hEditHover
             GradientButtons.Push(dlEdit)
         } else {
-            ; Full width (220px) Load button for Community tab
             hBtnNormal := CreateGradientButton(220, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", "Load", UIFont(), 14, 1)
             hBtnHover := CreateGradientButton(220, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", "Load", UIFont(), 14, 1)
             
-            picLoadBtn := ChildGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
-            dl1 := ChildGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
+            picLoadBtn := ContentGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
+            dl1 := ContentGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
         }
 
         dl1.SetFont("cFFFFFF s10 Bold", UIFont())
@@ -1306,9 +1324,9 @@ RenderStrategies(mode := "Community") {
     }
 
     if (LoadedStrats.Length == 0) {
-        ChildGui.SetFont("s12 c7E848E", UIFont())
-        ChildGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
-        ContentH := 220
+        ContentGui.SetFont("s12 c7E848E", UIFont())
+        ContentGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
+        ContentH := FrameH
     }
 
     SliderX := FrameW - 10
@@ -1328,14 +1346,19 @@ RenderStrategies(mode := "Community") {
         hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
         hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
 
-        SliderBG := ChildGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" FrameH + ContentH " +BackgroundTrans +0x0100", "HBITMAP:*" hSliderBG)
-        Slider := ChildGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans +0x0100", "HBITMAP:*" hSlider)
+        SliderBG := ContentGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" (ContentH <= FrameH ? FrameH : FrameH + ContentH) " +BackgroundTrans +0x0100", "HBITMAP:*" hSliderBG)
+        Slider := ContentGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans +0x0100", "HBITMAP:*" hSlider)
 
-        SliderBG.Visible := true
-        Slider.Visible := true
+        if (ContentH <= FrameH) {
+            SliderBG.Visible := false
+            Slider.Visible := false
+        } else {
+            SliderBG.Visible := true
+            Slider.Visible := true
+        }
     }
-
-    ChildHwnd := ChildGui.Hwnd
+    
+    ContentGui.Show("x0 y0 w" FrameW " h" FrameH)
     
     if (CurrentTab == "Tab1") {
         ShowChildGui()
@@ -2188,7 +2211,6 @@ Hoverwatchdog(*) {
         }
     }
 }
-
 HideAllTabContent() {
     global ChildGui, MainGui, SystemHwnds
     for hwnd, ctrl in MainGui {
@@ -2199,7 +2221,9 @@ HideAllTabContent() {
             ctrl.Visible := false
         }
     }
-    ChildGui.Hide()
+    if (IsSet(ChildGui) && ChildGui != "") {
+        ChildGui.Hide()
+    }
 }
 
 ShowTabContent(tab) {
@@ -2302,7 +2326,9 @@ ShowTabContent(tab) {
 
 ShowChildGui() {
     global ChildGui, FrameX, FrameY, FrameW, FrameH, MainGui
-    ChildGui.Show("x" FrameX " y" FrameY " w" FrameW " h" FrameH)
+    if (IsSet(ChildGui) && ChildGui != "") {
+        ChildGui.Show("x" FrameX " y" FrameY " w" FrameW " h" FrameH)
+    }
 }
 
 MoveWindow(ctrl, *) {
@@ -2361,27 +2387,31 @@ EditStratFile(ctrl, *) {
 }
 
 OnMouseWheel(wp, lp, msg, hwnd) {
-    global ChildHwnd, ChildGui
+    global ChildHwnd, ChildGui, ContentGui
     MouseGetPos(, , &maxH, &ctrlH, 2)
 
     parentH := (ctrlH != "") ? DllCall("GetParent", "Ptr", ctrlH, "Ptr") : 0
-    ch := ChildGui.Hwnd
+    
+    ch := (IsSet(ChildGui) && ChildGui != "") ? ChildGui.Hwnd : 0
+    co := (IsSet(ContentGui) && ContentGui != "") ? ContentGui.Hwnd : 0
 
-    if (maxH = ch || ctrlH = ch || parentH = ch) {
-
+    if (ch && (maxH = ch || maxH = co || ctrlH = ch || ctrlH = co || parentH = ch || parentH = co)) {
         dir := ((wp >> 16) & 0xFFFF) > 0x7FFF ? 1 : 0
         loop 3 {
-
             SendMessage(0x0115, dir, 0, , "ahk_id " ch)
         }
     }
 }
 
 OnScroll(wp, lp, msg, hwnd) {
-    global ChildGui, CurrentScrollPos, ContentH, FrameH, SliderH, Slider
+    global ChildGui, ContentGui, CurrentScrollPos, ContentH, FrameH, SliderH, Slider
+    if (!IsSet(ChildGui) || ChildGui == "")
+        return
+        
     ch := ChildGui.Hwnd
     if (hwnd != ch)
         return
+        
     action := wp & 0xFFFF
     if (action = 0) {
         newPos := CurrentScrollPos - 3
@@ -2390,27 +2420,41 @@ OnScroll(wp, lp, msg, hwnd) {
     } else {
         return
     }
+    
     maxScroll := ContentH - FrameH
+    if (maxScroll <= 0)
+        return
+        
     newPos := Max(0, Min(newPos, maxScroll))
+    
     if (newPos != CurrentScrollPos) {
-        DllCall("ScrollWindow", "Ptr", hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
-        CurrentScrollPos := newPos
+        if (IsSet(ContentGui) && ContentGui != "") {
+            DllCall("ScrollWindow", "Ptr", ContentGui.Hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
+            CurrentScrollPos := newPos
 
-        availableTrackSpace := FrameH - SliderH
+            availableTrackSpace := FrameH - SliderH
+            sliderVisualY := Round((newPos / maxScroll) * availableTrackSpace)
 
-        sliderVisualY := Round((newPos / maxScroll) * availableTrackSpace)
-
-        Slider.Move(, sliderVisualY)
-
-        DllCall("UpdateWindow", "Ptr", hwnd)
+            Slider.Move(, sliderVisualY)
+            DllCall("UpdateWindow", "Ptr", ContentGui.Hwnd)
+        }
     }
 }
 
 HandleSliderMouseDown(wParam, lParam, msg, hwnd) {
-    global Slider, SliderBG, ChildGui, FrameH, SliderH, ContentH, CurrentScrollPos
+    global Slider, SliderBG, ContentGui, FrameH, SliderH, ContentH, CurrentScrollPos
 
-    if (!IsSet(Slider) || !Slider || !IsSet(ChildGui))
+    ; Check if required objects exist and are valid
+    if (!IsSet(Slider) || !Slider || !IsSet(SliderBG) || !SliderBG || !IsSet(ContentGui) || ContentGui == "")
         return
+
+    ; Check if the control still exists in the GUI before accessing properties
+    try {
+        ; Try to get the control's position - this will throw if destroyed
+        Slider.GetPos(&sx, &sy, &sw, &sh)
+    } catch {
+        return
+    }
 
     ; Only trigger if clicking the scrollbar area
     if (hwnd != Slider.Hwnd && hwnd != SliderBG.Hwnd)
@@ -2423,7 +2467,7 @@ HandleSliderMouseDown(wParam, lParam, msg, hwnd) {
     CoordMode("Mouse", oldMode)
 
     ; Get exact screen position of the GUI's inner working area
-    WinGetClientPos(&winX, &winY, , , "ahk_id " ChildGui.Hwnd)
+    WinGetClientPos(&winX, &winY, , , "ahk_id " ContentGui.Hwnd)
     
     ; Get the thumb's current internal Y position
     Slider.GetPos(&sx, &sy, &sw, &sh)
@@ -2444,6 +2488,13 @@ HandleSliderMouseDown(wParam, lParam, msg, hwnd) {
         startScroll := CurrentScrollPos
 
         While GetKeyState("LButton", "P") {
+            ; Check if controls still exist during drag
+            try {
+                Slider.GetPos()
+            } catch {
+                break
+            }
+
             oldModeDrag := A_CoordModeMouse
             CoordMode("Mouse", "Screen")
             MouseGetPos(, &currentY)
@@ -2456,12 +2507,16 @@ HandleSliderMouseDown(wParam, lParam, msg, hwnd) {
             newPos := Max(0, Min(newPos, maxScroll))
             
             if (newPos != CurrentScrollPos) {
-                DllCall("ScrollWindow", "Ptr", ChildGui.Hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
-                CurrentScrollPos := newPos
-                
-                sliderVisualY := Round((newPos / maxScroll) * availableTrack)
-                Slider.Move(, sliderVisualY)
-                DllCall("UpdateWindow", "Ptr", ChildGui.Hwnd)
+                try {
+                    DllCall("ScrollWindow", "Ptr", ContentGui.Hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
+                    CurrentScrollPos := newPos
+                    
+                    sliderVisualY := Round((newPos / maxScroll) * availableTrack)
+                    Slider.Move(, sliderVisualY)
+                    DllCall("UpdateWindow", "Ptr", ContentGui.Hwnd)
+                } catch {
+                    break
+                }
             }
             Sleep(10)
         }
@@ -2477,12 +2532,16 @@ HandleSliderMouseDown(wParam, lParam, msg, hwnd) {
         newPos := Max(0, Min(newPos, maxScroll))
         
         if (newPos != CurrentScrollPos) {
-            DllCall("ScrollWindow", "Ptr", ChildGui.Hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
-            CurrentScrollPos := newPos
-            
-            sliderVisualY := Round((newPos / maxScroll) * availableTrack)
-            Slider.Move(, sliderVisualY)
-            DllCall("UpdateWindow", "Ptr", ChildGui.Hwnd)
+            try {
+                DllCall("ScrollWindow", "Ptr", ContentGui.Hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
+                CurrentScrollPos := newPos
+                
+                sliderVisualY := Round((newPos / maxScroll) * availableTrack)
+                Slider.Move(, sliderVisualY)
+                DllCall("UpdateWindow", "Ptr", ContentGui.Hwnd)
+            } catch {
+                return
+            }
         }
     }
 }
