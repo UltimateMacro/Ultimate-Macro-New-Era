@@ -871,8 +871,7 @@ HoverEffect.Push(Tab1_Btn3)
 HoverEffect.Push(Tab1_Btn4)
 
 MainGui.SetFont("s9 w400 cFFFFFF")
-global RotateStrategiesCtrl := MainGui.Add("Checkbox", "x30 y190 vRotateStrategies 0x200 Checked" RotateStrategies,
-    "Strategy Rotation")
+global RotateStrategiesCtrl := MainGui.Add("Checkbox", "x30 y190 vRotateStrategies 0x200 Checked" RotateStrategies, "Strategy Rotation")
 RotateStrategiesCtrl.OnEvent("Click", EnableStratRotation)
 
 MainGui.SetFont("s9 w400 cAAAAAA")
@@ -887,8 +886,7 @@ SwapAmountCtrl.OnEvent("Change", (*) => (
 ))
 
 MainGui.SetFont("s9 w400 c000000")
-global SwapUnitCtrl := MainGui.Add("DropDownList", "x267 y186 w80 Choose" (SwapUnit = "Minutes" ? 2 : 1) " vSwapUnit",
-["Runs", "Minutes"])
+global SwapUnitCtrl := MainGui.Add("DropDownList", "x267 y186 w80 Choose" (SwapUnit = "Minutes" ? 2 : 1) " vSwapUnit", ["Runs", "Minutes"])
 
 SwapUnitCtrl.OnEvent("Change", (*) => (
     IniWrite(SwapUnitCtrl.Text, SettingsFile, "Options", "SwapUnit"),
@@ -904,8 +902,18 @@ global AutoConfigCtrl := MainGui.Add("Checkbox", "x490 y190 vAutoConfigureSettin
 AutoConfigCtrl.OnEvent("Click", EnableAutoConfig)
 
 MainGui.SetFont("s10 w400 c3A86FF", UIFont())
-global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Community Strategies")
+global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Strategies")
 global Tab1_Line2 := MainGui.Add("Progress", "x30 y248 w640 h1 Background333333", 0)
+
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
+global BtnCommStrats := MainGui.Add("Text", "x30 y257 w120 h24 Center Background222222 +Border 0x200", "Community")
+MainGui.SetFont("s10 w400 cFFFFFF", UIFont())
+global BtnMyStrats := MainGui.Add("Text", "x160 y257 w120 h24 Center Background0e0e0f +Border 0x200", "My Strats")
+
+BtnCommStrats.OnEvent("Click", (*) => SwitchStrategiesTab("Community"))
+BtnMyStrats.OnEvent("Click", (*) => SwitchStrategiesTab("MyStrats"))
+HoverEffect.Push(BtnCommStrats)
+HoverEffect.Push(BtnMyStrats)
 
 if !DirExist(StratsDir)
     DirCreate(StratsDir)
@@ -1080,206 +1088,258 @@ if (needUpdate) {
 }
 
 global FrameX := 30
-global FrameY := 260
+global FrameY := 290 ; Shifted down for the toggle buttons
 global FrameW := 640
-global FrameH := 220
+global FrameH := 190 ; Adjusted height
 global ContentH := 400
 global CurrentScrollPos := 0
 global SliderH := 30
 global ChildHwnd := 0
+global ChildGui := ""
 
-ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
-ChildGui.BackColor := "181818"
-ChildGui.SetFont("s10 cWhite", UIFont())
-width := FrameW - 6
-
-loop files, StratsDir "\*.strat" {
-    localPath := A_LoopFileFullPath
-
-    sMap := IniRead(localPath, "Settings", "map", "")
-    sDifficulty := IniRead(localPath, "Settings", "difficulty", "")
-    sTowers := IniRead(localPath, "Settings", "requiredTowers", "")
-    sDesc := IniRead(localPath, "Info", "desc", "")
-    sAuthor := IniRead(localPath, "Info", "author", "")
-    sTitle := IniRead(localPath, "Info", "title", "")
-    sTime := IniRead(localPath, "Info", "time", "")
-    sIncome := IniRead(localPath, "Info", "income", "")
-    sModifiers := IniRead(localPath, "Settings", "modifiers", "")
-
-    LoadedStrats.Push({
-        fileName: A_LoopFileName,
-        map: sMap,
-        difficulty: sDifficulty,
-        towers: sTowers,
-        desc: sDesc,
-        author: sAuthor,
-        title: sTitle,
-        time: sTime,
-        income: sIncome,
-        modifiers: sModifiers
-    })
+SwitchStrategiesTab(mode) {
+    global BtnCommStrats, BtnMyStrats
+    if (mode == "Community") {
+        BtnCommStrats.IsSelected := true
+        BtnMyStrats.IsSelected := false
+        BtnCommStrats.Opt("Background222222")
+        BtnCommStrats.SetFont("c3A86FF Bold")
+        BtnMyStrats.Opt("Background0e0e0f")
+        BtnMyStrats.SetFont("cFFFFFF Norm")
+    } else {
+        BtnCommStrats.IsSelected := false
+        BtnMyStrats.IsSelected := true
+        BtnMyStrats.Opt("Background222222")
+        BtnMyStrats.SetFont("c3A86FF Bold")
+        BtnCommStrats.Opt("Background0e0e0f")
+        BtnCommStrats.SetFont("cFFFFFF Norm")
+    }
+    RenderStrategies(mode)
 }
 
-StartY := 15
-CardH := 115
-CardW := 600
-Gap := 15
+RenderStrategies(mode := "Community") {
+    global ChildGui, MainGui, LoadedStrats, GradientButtons
+    global FrameX, FrameY, FrameW, FrameH, ContentH, CurrentScrollPos, SliderH, SliderBG, Slider
+    global StratsDir, RecordingsDir, CurrentTab, ChildHwnd
 
-ContentH := StartY
-
-for index, strat in LoadedStrats {
-    CurrentY := StartY + ((index - 1) * (CardH + Gap))
-    ContentH := CurrentY + CardH + Gap
-
-    C1X := 10
-    C1Y := CurrentY
-
-    hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
-    ChildGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
-
-    hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(),
-        10, 1)
-    ChildGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
-
-    diffImg := "Resources/Strats/images/" strat.difficulty ".png"
-    if !FileExist(diffImg) {
-        LogToConsole("Missing resource file: " diffImg)
-    } else {
-        ChildGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
+    if (ChildGui != "") {
+        ChildGui.Destroy()
     }
 
-    ChildGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
+    ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
+    ChildGui.BackColor := "181818"
+    ChildGui.SetFont("s10 cWhite", UIFont())
+    width := FrameW - 6
 
-    coinsCount := 0
-    if RegExMatch(strat.income, "i)([\d,]+)\s*coins", &match) {
-        coinsCount := Number(StrReplace(match[1], ","))
+    LoadedStrats := []
+    GradientButtons := []
+    CurrentScrollPos := 0
+
+    targetDir := (mode == "Community") ? StratsDir : RecordingsDir
+
+    loop files, targetDir "\*.strat" {
+        localPath := A_LoopFileFullPath
+
+        sMap := IniRead(localPath, "Settings", "map", "Unknown")
+        sDifficulty := IniRead(localPath, "Settings", "difficulty", "Easy")
+        sTowers := IniRead(localPath, "Settings", "requiredTowers", "None")
+        ; Set proper fallbacks for missing [Info] lines when loading your local strats
+        sDesc := IniRead(localPath, "Info", "desc", "Local recording.")
+        sAuthor := IniRead(localPath, "Info", "author", "You")
+        sTitle := IniRead(localPath, "Info", "title", StrReplace(A_LoopFileName, ".strat", ""))
+        sTime := IniRead(localPath, "Info", "time", "N/A")
+        sIncome := IniRead(localPath, "Info", "income", "N/A")
+        sModifiers := IniRead(localPath, "Settings", "modifiers", "")
+
+        LoadedStrats.Push({
+            fileName: A_LoopFileName,
+            map: sMap,
+            difficulty: sDifficulty,
+            towers: sTowers,
+            desc: sDesc,
+            author: sAuthor,
+            title: sTitle,
+            time: sTime,
+            income: sIncome,
+            modifiers: sModifiers,
+            fullPath: localPath
+        })
     }
 
-    if (strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore") {
-        rewardIcon := "Resources/Strats/images/GemsMediumPile.png"
-    } else {
-        if (coinsCount >= 8000) {
-            rewardIcon := "Resources/Strats/images/CoinsSmallChest.png"
-        } else if (coinsCount >= 6000) {
-            rewardIcon := "Resources/Strats/images/CoinsMediumPile.png"
+    StartY := 15
+    CardH := 115
+    CardW := 600
+    Gap := 15
+
+    ContentH := StartY
+
+    for index, strat in LoadedStrats {
+        CurrentY := StartY + ((index - 1) * (CardH + Gap))
+        ContentH := CurrentY + CardH + Gap
+
+        C1X := 10
+        C1Y := CurrentY
+
+        hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
+        ChildGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
+
+        hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(), 10, 1)
+        ChildGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
+
+        diffImg := "Resources/Strats/images/" strat.difficulty ".png"
+        if !FileExist(diffImg) {
+            LogToConsole("Missing resource file: " diffImg)
         } else {
-            rewardIcon := "Resources/Strats/images/CoinsSmallPile.png"
+            ChildGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
         }
+
+        ChildGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
+
+        coinsCount := 0
+        if RegExMatch(strat.income, "i)([\d,]+)\s*coins", &match) {
+            coinsCount := Number(StrReplace(match[1], ","))
+        }
+
+        if (strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore") {
+            rewardIcon := "Resources/Strats/images/GemsMediumPile.png"
+        } else {
+            if (coinsCount >= 8000) {
+                rewardIcon := "Resources/Strats/images/CoinsSmallChest.png"
+            } else if (coinsCount >= 6000) {
+                rewardIcon := "Resources/Strats/images/CoinsMediumPile.png"
+            } else {
+                rewardIcon := "Resources/Strats/images/CoinsSmallPile.png"
+            }
+        }
+
+        if !FileExist(rewardIcon) {
+            LogToConsole("Missing resource file: " rewardIcon)
+        } else {
+            ChildGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
+        }
+
+        ChildGui.SetFont("s11 Bold cWhite", UIFont())
+        ChildGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title : "Unknown Strat")
+
+        ChildGui.SetFont("s9 w500 c7E848E", UIFont())
+        helpDl1 := ChildGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
+        helpDl1.OnEvent("Click", ((t, a, r, m, d) => (*) => StratInfo(t, a, r, m, d))(
+            strat.title,
+            strat.author,
+            strat.towers,
+            (strat.modifiers != "" ? strat.modifiers : "none"),
+            strat.desc
+        ))
+
+        ChildGui.SetFont("s9 w400 cE2E4E7", UIFont())
+        ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers : "None"))
+
+        ChildGui.SetFont("s9 w400 c7E848E", UIFont())
+        ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
+
+        if (strat.difficulty = "Hardcore") {
+            badgeColor1 := "0xFFAB457B", badgeColor2 := "0xFF5C2040"
+        } else if (strat.difficulty = "Molten") {
+            badgeColor1 := "0xFFE09334", badgeColor2 := "0xFF8F5413"
+        } else if (strat.difficulty = "Frost") {
+            badgeColor1 := "0xff34a9e0", badgeColor2 := "0xff17559c"
+        } else if (strat.difficulty = "Fallen") {
+            badgeColor1 := "0xff17559c", badgeColor2 := "0xff351570"
+        } else {
+            badgeColor1 := "0xb900ff2a", badgeColor2 := "0xff1a5f39"
+        }
+
+        hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty != "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
+        ChildGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
+
+        ChildGui.SetFont("s9 w500 c9CA4B0", UIFont())
+        ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time : "Unknown"))
+        ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income : "Unknown"))
+
+        if ((strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore")) {
+            loadColor1 := "0xff961ea1", loadColor2 := "0xff5f237a"
+            loadHover1 := "0xffea00ff", loadHover2 := "0xff8d32b7"
+        } else {
+            loadColor1 := "0xFF147A6E", loadColor2 := "0xFF214B75"
+            loadHover1 := "0xFF1CB5A2", loadHover2 := "0xFF3272B7"
+        }
+
+        if (mode == "MyStrats") {
+            ; Split width: 145px for Load, 70px for Edit (5px gap = 220px total)
+            hBtnNormal := CreateGradientButton(145, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", "Load", UIFont(), 14, 1)
+            hBtnHover := CreateGradientButton(145, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", "Load", UIFont(), 14, 1)
+            
+            editColor1 := "0xFF4b5563", editColor2 := "0xFF374151"
+            editHover1 := "0xFF6b7280", editHover2 := "0xFF4b5563"
+            hEditNormal := CreateGradientButton(70, 38, 8, editColor1, editColor2, "0x40000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
+            hEditHover := CreateGradientButton(70, 38, 8, editHover1, editHover2, "0x60000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
+
+            picLoadBtn := ChildGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
+            dl1 := ChildGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans +0x200 Center", "")
+            
+            picEditBtn := ChildGui.Add("Picture", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans", "HBITMAP:*" hEditNormal)
+            dlEdit := ChildGui.Add("Text", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans +0x200 Center", "")
+            
+            dlEdit.SetFont("cFFFFFF s10 Bold", UIFont())
+            dlEdit.StratFile := strat.fullPath
+            dlEdit.OnEvent("Click", EditStratFile)
+            dlEdit.PicControl := picEditBtn
+            dlEdit.ImgNormal := hEditNormal
+            dlEdit.ImgHover := hEditHover
+            GradientButtons.Push(dlEdit)
+        } else {
+            ; Full width (220px) Load button for Community tab
+            hBtnNormal := CreateGradientButton(220, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", "Load", UIFont(), 14, 1)
+            hBtnHover := CreateGradientButton(220, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", "Load", UIFont(), 14, 1)
+            
+            picLoadBtn := ChildGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
+            dl1 := ChildGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
+        }
+
+        dl1.SetFont("cFFFFFF s10 Bold", UIFont())
+        dl1.StratFile := strat.fullPath
+        dl1.OnEvent("Click", DownloadStrat)
+        dl1.PicControl := picLoadBtn
+        dl1.ImgNormal := hBtnNormal
+        dl1.ImgHover := hBtnHover
+        GradientButtons.Push(dl1)
     }
 
-    if !FileExist(rewardIcon) {
-        LogToConsole("Missing resource file: " rewardIcon)
-    } else {
-        ChildGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
+    if (LoadedStrats.Length == 0) {
+        ChildGui.SetFont("s12 c7E848E", UIFont())
+        ChildGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
+        ContentH := 220
     }
 
-    ChildGui.SetFont("s11 Bold cWhite", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title :
-        "Unknown Strat")
+    SliderX := FrameW - 10
+    SliderW := 6
 
-    ChildGui.SetFont("s9 w500 c7E848E", UIFont())
-    helpDl1 := ChildGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
-    helpDl1.OnEvent("Click", ((t, a, r, m, d) => (*) => StratInfo(t, a, r, m, d))(
-        strat.title,
-        strat.author,
-        strat.towers,
-        (strat.modifiers != "" ? strat.modifiers : "none"),
-        strat.desc
-    ))
+    if (ContentH > 0) {
+        SliderH := Round(FrameH * (FrameH / ContentH))
 
-    ChildGui.SetFont("s9 w400 cE2E4E7", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers :
-        "None"))
+        if (ContentH <= FrameH) {
+            SliderH := FrameH
+        } else {
+            SliderH := Max(30, SliderH)
+        }
 
-    ChildGui.SetFont("s9 w400 c7E848E", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
-
-    if (strat.difficulty = "Hardcore") {
-        badgeColor1 := "0xFFAB457B", badgeColor2 := "0xFF5C2040"
-    } else if (strat.difficulty = "Molten") {
-        badgeColor1 := "0xFFE09334", badgeColor2 := "0xFF8F5413"
-    } else if (strat.difficulty = "Frost") {
-        badgeColor1 := "0xff34a9e0", badgeColor2 := "0xff17559c"
-    } else if (strat.difficulty = "Fallen") {
-        badgeColor1 := "0xff17559c", badgeColor2 := "0xff351570"
-    } else {
-        badgeColor1 := "0xb900ff2a", badgeColor2 := "0xff1a5f39"
-    }
-
-    hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty !=
-        "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
-    ChildGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
-
-    ChildGui.SetFont("s9 w500 c9CA4B0", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time :
-        "Unknown"))
-    ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income :
-        "Unknown"))
-
-    if ((strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore")) {
-        hBtnNormal := CreateGradientButton(220, 38, 8, "0xff961ea1", "0xff5f237a", "0x40000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-        hBtnHover := CreateGradientButton(220, 38, 8, "0xffea00ff", "0xff8d32b7", "0x60000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-    } else {
-        hBtnNormal := CreateGradientButton(220, 38, 8, "0xFF147A6E", "0xFF214B75", "0x40000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-        hBtnHover := CreateGradientButton(220, 38, 8, "0xFF1CB5A2", "0xFF3272B7", "0x60000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-    }
-
-    picLoadBtn := ChildGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal
-    )
-
-    dl1 := ChildGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
-    dl1.SetFont("cFFFFFF s10 Bold", UIFont())
-
-    dl1.StratFile := strat.fileName
-    dl1.OnEvent("Click", DownloadStrat)
-
-    dl1.PicControl := picLoadBtn
-    dl1.ImgNormal := hBtnNormal
-    dl1.ImgHover := hBtnHover
-    GradientButtons.Push(dl1)
-}
-
-if (LoadedStrats.Length == 0) {
-    ChildGui.SetFont("s12 c7E848E", UIFont())
-    ChildGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
-    ContentH := 220
-}
-
-SliderX := FrameW - 10
-SliderW := 6
-
-if (ContentH > 0) {
-    SliderH := Round(FrameH * (FrameH / ContentH))
-
-    if (ContentH <= FrameH) {
-        SliderH := FrameH
-    } else {
-        SliderH := Max(30, SliderH)
-    }
-
-    if (ContentH > FrameH && CurrentScrollPos > 0) {
-        maxScroll := ContentH - FrameH
-        scrollPercent := CurrentScrollPos / maxScroll
-        sliderPos := Round(scrollPercent * (FrameH - SliderH))
-        sliderPos := Max(0, Min(sliderPos, FrameH - SliderH))
-    } else {
         sliderPos := 0
+
+        hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
+        hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
+
+        SliderBG := ChildGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" FrameH + ContentH " +BackgroundTrans", "HBITMAP:*" hSliderBG)
+        Slider := ChildGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans", "HBITMAP:*" hSlider)
+
+        SliderBG.Visible := true
+        Slider.Visible := true
     }
 
-    hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
-    hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
-
-    global SliderBG := ChildGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" FrameH + ContentH " +BackgroundTrans",
-        "HBITMAP:*" hSliderBG)
-    global Slider := ChildGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans",
-        "HBITMAP:*" hSlider)
-
-    SliderBG.Visible := true
-    Slider.Visible := true
+    ChildHwnd := ChildGui.Hwnd
+    
+    if (CurrentTab == "Tab1") {
+        ShowChildGui()
+    }
 }
 
 OnMessage(0x0115, OnScroll)
@@ -1835,8 +1895,8 @@ SetTimer(() => RemoveInitialFocus(), -50)
 
 global CurrentTab := "Tab1"
 TabCtrl[1].SetFont("cFFFFFF")
+SwitchStrategiesTab("Community")
 ShowTabContent("Tab1")
-ShowChildGui()
 EnableStratRotation()
 
 ; 10ms was 100 sweeps/second of Win32 geometry calls for a purely cosmetic hover
@@ -1902,7 +1962,7 @@ Hoverwatchdog(*) {
     if (!hMain || !WinExist("ahk_id " hMain))
         return
 
-    if (!hChild && IsSet(ChildGui))
+    if (IsSet(ChildGui) && HasProp(ChildGui, "Hwnd"))
         hChild := ChildGui.Hwnd
 
     oldMode := A_CoordModeMouse
@@ -1943,6 +2003,9 @@ Hoverwatchdog(*) {
                     if RegExMatch(ctrl.name, "i)Title") {
                         ctrl.Opt("BackgroundTrans")
                         ctrl.SetFont("c3A86FF Norm")
+                    } else if (HasProp(ctrl, "IsSelected") && ctrl.IsSelected) {
+                        ctrl.Opt("Background222222")
+                        ctrl.SetFont("c3A86FF Bold")
                     } else {
                         ctrl.Opt("Background0E0E0F")
                         ctrl.SetFont("cFFFFFF Norm")
@@ -2027,6 +2090,9 @@ Hoverwatchdog(*) {
                                 if RegExMatch(oldCtrl.name, "i)title") {
                                     oldCtrl.Opt("BackgroundTrans")
                                     oldCtrl.SetFont("c3A86FF Norm")
+                                } else if (HasProp(oldCtrl, "IsSelected") && oldCtrl.IsSelected) {
+                                    oldCtrl.Opt("Background222222")
+                                    oldCtrl.SetFont("c3A86FF Bold")
                                 } else {
                                     oldCtrl.Opt("Background0E0E0F")
                                     oldCtrl.SetFont("cFFFFFF Norm")
@@ -2050,6 +2116,9 @@ Hoverwatchdog(*) {
                     if RegExMatch(ctrl.name, "i)title") {
                         ctrl.Opt("BackgroundTrans")
                         ctrl.SetFont("c3A86FF Norm")
+                    } else if (HasProp(ctrl, "IsSelected") && ctrl.IsSelected) {
+                        ctrl.Opt("Background222222")
+                        ctrl.SetFont("c3A86FF Bold")
                     } else {
                         ctrl.Opt("Background0E0E0F")
                         ctrl.SetFont("cFFFFFF Norm")
@@ -2134,10 +2203,15 @@ HideAllTabContent() {
 
 ShowTabContent(tab) {
     global ChildGui
+    ; Explicitly declare Tab 1 variables as global to prevent #Warn
+    global Tab1_Section1, Tab1_Line1, Tab1_Lbl1, Strategy1Ctrl, Tab1_Btn1, Tab1_Btn2
+    global Tab1_Lbl2, Strategy2Ctrl, Tab1_Btn3, Tab1_Btn4, RotateStrategiesCtrl, AutoEquipCtrl, AutoConfigCtrl
+    global Tab1_Section2, Tab1_Line2, BtnCommStrats, BtnMyStrats, Tab1_Start, Tab1_Stop
+
     if (tab = "Tab1") {
         for ctrl in [Tab1_Section1, Tab1_Line1, Tab1_Lbl1, Strategy1Ctrl, Tab1_Btn1, Tab1_Btn2,
             Tab1_Lbl2, Strategy2Ctrl, Tab1_Btn3, Tab1_Btn4, RotateStrategiesCtrl, AutoEquipCtrl, AutoConfigCtrl, Tab1_Section2,
-            Tab1_Line2,
+            Tab1_Line2, BtnCommStrats, BtnMyStrats,
             Tab1_Start, Tab1_Stop]
             ctrl.Visible := true
         EnableStratRotation()
@@ -2252,7 +2326,12 @@ YouTubeLink(ctrl, *) {
 DownloadStrat(ctrl, *) {
     nm := ctrl.StratFile
 
-    downloadedStrat := A_WorkingDir "\Resources\Strats" (SubStr(nm, 1, 1) = "\" ? nm : "\" nm)
+    ; If it is an absolute path (local recording), use it directly. Otherwise, assume Community relative.
+    if (RegExMatch(nm, "^[a-zA-Z]:\\")) {
+        downloadedStrat := nm
+    } else {
+        downloadedStrat := A_WorkingDir "\Resources\Strats" (SubStr(nm, 1, 1) = "\" ? nm : "\" nm)
+    }
 
     if (Strategy1Ctrl.Value = "") {
         Strategy1Ctrl.Value := downloadedStrat
@@ -2269,6 +2348,15 @@ DownloadStrat(ctrl, *) {
     }
 
     LoadStrategyFile(downloadedStrat)
+}
+
+EditStratFile(ctrl, *) {
+    stratToEdit := ctrl.StratFile
+    if FileExist(stratToEdit) {
+        Run("notepad.exe `"" stratToEdit "`"")
+    } else {
+        MsgBox("Strategy file not found!`n" stratToEdit, "Error", 0x10)
+    }
 }
 
 OnMouseWheel(wp, lp, msg, hwnd) {
