@@ -23,6 +23,27 @@
   client-scaled numeric clicks with structured diagnostics; Hotbar ON is
   unchanged.
 
+### Improved
+
+- Party Mode preflight validation now blocks impossible Host/Member setups before a run starts.
+- Party invites use scaled client offsets, serialized invite typing, fresh member recounts, bounded retries, and explicit host/member watchdog phases.
+- Strategy cards now have a draggable scrollbar in addition to wheel scrolling.
+- Webhook URL validation is debounced instead of issuing a synchronous request on every keystroke.
+- Rotation keeps Auto Equip visibly locked on instead of disabling the checkbox with ambiguous OS styling.
+- Primary action buttons use the existing gradient-button system with real disabled-state click guards.
+- Stop/record cleanup releases named and scan-code inputs and stops recurring runtime timers before teardown.
+- Auto Settings is opt-in for 1.3.4, requires a verified original backup before changing Roblox XML, writes atomically, and restores only after Roblox actually exits.
+- Pending Auto Settings restores survive normal macro shutdown; re-enabling the feature cancels stale restore requests safely.
+- Auto Settings now validates XML with the Windows parser, records versioned
+  backup provenance and SHA-256 identities, and refuses unknown, altered, or
+  superseded restore state without deleting recovery evidence.
+- Auto Settings is applied only after Roblox is confirmed closed at the single
+  pre-launch boundary; generation tokens and an inter-process mutex prevent an
+  older restore helper from overwriting a newly applied configuration.
+- Ordinary F2/recording/strategy cleanup no longer disables the persistent
+  Discord Bot command timer. Scrollbar and debounced webhook timers are now
+  stopped explicitly during GUI/process teardown.
+
 ### Packaging
 
 - Added the reviewed required runtime files
@@ -36,3 +57,6 @@
   `Resources/Strats/FrostModeStrat(Mods)(1.3 fix).strat` because TDS Frost mode
   was reworked. They must stay absent until a developer or tester validates a
   new official strategy; Frost selection and runtime support remain available.
+- Runtime/source and transactional-updater manifests now require the mandatory
+  `lib/auto_settings.ahk` include; incomplete update ZIPs are rejected before
+  the existing installation is moved.

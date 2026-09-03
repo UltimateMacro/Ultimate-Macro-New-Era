@@ -1,3 +1,26 @@
+# Release source consistency remediation — 2026-09-03
+
+Target: current uncommitted `fix/release-source-consistency` candidate at
+`6f6b1aa82b0c97b679fd8687ae92a90e750f1211`. Do not commit, push, open a PR,
+change branches, or run the retained `apply_*.py` generators.
+
+## Approved minimal fix plan
+
+1. Make the Auto Settings XML transform deterministic and fixture-tested with
+   correct AHK/PCRE escaping, Windows XML parsing, and exact managed-node
+   uniqueness checks.
+2. Add versioned backup metadata, SHA-256 identity checks, generation tokens,
+   and a named mutex; preserve and report every unknown or changed state.
+3. Move application to the single Roblox pre-launch boundary and harden early
+   OnExit recovery, scrollbar/debounce teardown, and Discord Bot timer scope.
+4. Require `lib/auto_settings.ahk` in source and updater runtime manifests and
+   prove an incomplete ZIP is rejected without moving the installation.
+5. Run the complete Python, dependency, repository, strategy, PowerShell,
+   updater, AutoHotkey 2.0.12/2.0.26, behavioral-fixture, and diff validation
+   gates. Stop with all changes uncommitted for independent review.
+
+---
+
 # Watchdog PID lifecycle hotfix — 2026-09-02
 
 Target: local-only `fix/watchdog-pid-unset` from canonical `upstream/dev` at

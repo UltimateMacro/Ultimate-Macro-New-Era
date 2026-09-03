@@ -7,6 +7,7 @@ $tempRoot = Join-Path $systemTemp ('UltimateMacro-updater-test-' + [guid]::NewGu
 $serveDir = Join-Path $tempRoot 'serve'
 $payload = Join-Path $tempRoot 'payload'
 $badInstall = Join-Path $tempRoot 'bad-install'
+$missingRuntimeInstall = Join-Path $tempRoot 'missing-runtime-install'
 $goodInstall = Join-Path $tempRoot 'good-install'
 $gitInstall = Join-Path $tempRoot 'git-install'
 $unsafeInstall = Join-Path $tempRoot 'unsafe-install'
@@ -57,6 +58,7 @@ try {
         'lib\JSON.ahk',
         'lib\Roblox.ahk',
         'lib\Discord.ahk',
+        'lib\auto_settings.ahk',
         'submacros\updater.ahk',
         'submacros\update.bat',
         'submacros\watchdog.ahk',
@@ -90,6 +92,18 @@ try {
     Compress-Archive -Path (Join-Path $payload '*') -DestinationPath $zip -Force
     $goodHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
 
+    $missingRuntimePayload = Join-Path $tempRoot 'missing-runtime-payload'
+    Copy-Item -LiteralPath $payload -Destination $missingRuntimePayload -Recurse
+    $missingAutoSettings = [IO.Path]::GetFullPath((Join-Path $missingRuntimePayload 'lib\auto_settings.ahk'))
+    Assert-True ($missingAutoSettings.StartsWith(
+        ([IO.Path]::GetFullPath($missingRuntimePayload).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar),
+        [StringComparison]::OrdinalIgnoreCase
+    )) 'Missing-runtime fixture path escaped its temporary payload root.'
+    Remove-Item -LiteralPath $missingAutoSettings -Force
+    $missingRuntimeZip = Join-Path $serveDir 'missing-auto-settings.zip'
+    Compress-Archive -Path (Join-Path $missingRuntimePayload '*') -DestinationPath $missingRuntimeZip -Force
+    $missingRuntimeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $missingRuntimeZip).Hash.ToLowerInvariant()
+
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $unsafeZip = Join-Path $serveDir 'unsafe.zip'
     $unsafeArchive = [IO.Compression.ZipFile]::Open($unsafeZip, [IO.Compression.ZipArchiveMode]::Create)
@@ -112,6 +126,7 @@ try {
     $unsafeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $unsafeZip).Hash.ToLowerInvariant()
 
     Initialize-Install $badInstall 'original bad install'
+    Initialize-Install $missingRuntimeInstall 'original missing-runtime install'
     Initialize-Install $goodInstall 'original good install'
     Initialize-Install $gitInstall 'developer checkout'
     Initialize-Install $unsafeInstall 'unsafe archive install'
@@ -130,6 +145,7 @@ try {
         '-m', 'http.server', "$port", '--bind', '127.0.0.1', '--directory', $serveDir
     ) -PassThru -WindowStyle Hidden
     $url = "http://127.0.0.1:$port/TDS_Macro.zip"
+    $missingRuntimeUrl = "http://127.0.0.1:$port/missing-auto-settings.zip"
     $unsafeUrl = "http://127.0.0.1:$port/unsafe.zip"
 
     $ready = $false
@@ -167,6 +183,10 @@ try {
     $versionExit = Invoke-SafeUpdater $badInstall $url $goodHash '9.9.9'
     Assert-True ($versionExit -ne 0) 'Version-mismatch update unexpectedly succeeded.'
     Assert-True (Test-Path -LiteralPath (Join-Path $badInstall 'original.txt')) 'Version-mismatch test modified the installation.'
+
+    $missingRuntimeExit = Invoke-SafeUpdater $missingRuntimeInstall $missingRuntimeUrl $missingRuntimeHash '1.2.3'
+    Assert-True ($missingRuntimeExit -ne 0) 'Package missing lib\auto_settings.ahk unexpectedly succeeded.'
+    Assert-True (Test-Path -LiteralPath (Join-Path $missingRuntimeInstall 'original.txt')) 'Missing-runtime test modified the installation.'
 
     $gitExit = Invoke-SafeUpdater $gitInstall $url $goodHash '1.2.3'
     Assert-True ($gitExit -ne 0) 'Developer-checkout update unexpectedly succeeded.'

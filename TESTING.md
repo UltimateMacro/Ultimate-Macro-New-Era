@@ -161,3 +161,26 @@ Use a disposable extracted release copy, never this Git checkout.
 Record environment, commit/release version, Windows version, display scaling,
 Roblox client size, backend, and observed results in the QA sign-off. Redact all
 credentials and private links.
+
+## Ziadod positive-backport QA
+
+Run this after the normal automated suite and before promoting the runtime candidate:
+
+1. **Party OFF baseline** — run a normal solo strategy and confirm matchmaking/abilities/watchdog are unchanged.
+2. **Party validation** — enable Party Mode with missing Member host, missing Host members, and 4 members; each must be blocked before Roblox automation begins.
+3. **Host + 1 member** — create/invite/join, confirm no cancel-invite race while names are being typed, and verify the host proceeds only after the configured member is present.
+4. **Member path** — accept a host invite and confirm the 3-minute timeout reloads cleanly when no invite arrives.
+5. **Rotation UI** — enabling rotation must lock Auto Equip ON; disabling rotation must make it editable again.
+6. **Strategy scrollbar** — wheel scroll still works; dragging/clicking the thumb moves the card list without dragging the main window.
+7. **Webhook validation** — typing a webhook does not perform a request on every character; invalid links keep Enable Webhook locked off and a valid webhook unlocks it.
+8. **Discord Bot regression** — Bot tab, Test Bot, save, and remote-command settings remain present.
+9. **Action buttons** — Start/Stop/Record/Party/Webhook/Bot/Settings buttons show/hover correctly; disabled Record Stop cannot fire.
+10. **Held-input cleanup** — stop during movement/camera/recording and verify no mouse button, WASD, Shift, Ctrl, arrows, or raw scan-code movement remains held.
+11. **Auto Settings opt-in/lifecycle** — a fresh Settings.tds must leave Auto Configure Settings OFF. Enabling it while idle must not change Roblox XML; starting a run must create `.macro_bak` plus `.macro_bak.meta` and apply exactly once immediately before Roblox launches.
+12. **Auto Settings verified restore** — disable while Roblox is running. The verified backup must remain until `RobloxPlayerBeta.exe` exits, then the original SHA-256-identical XML must be restored before the backup and metadata are removed.
+13. **Auto Settings unknown backup** — in a disposable fixture only, present a legacy `.macro_bak` without `.macro_bak.meta`. Confirm the macro refuses to apply/restore/delete it and reports the provenance failure.
+14. **Auto Settings re-enable race** — disable with Roblox open, then re-enable before Roblox exits and launch a new run. Confirm the older helper generation exits without restoring over the new applied state.
+15. **Auto Settings changed-current guard** — after application, alter a disposable copy of the current XML before restore. Confirm restoration fails closed and retains the backup/metadata for manual recovery.
+16. **Discord Bot persistence** — with the Bot configured, press F2 while idle, start/stop recording, start/stop a strategy, and exercise one failure/recovery. A remote status command must still be processed after every ordinary cleanup.
+17. **Scrollbar teardown** — release a drag normally, close the GUI while dragging, and exercise a child-window disappearance. Confirm dragging clears and no 10 ms callback remains active.
+18. **Anti-downgrade** — rerun OpenCV native, TimeScale 2x/watchdog, Hotbar OFF, DJ/abilities, standard difficulty, updater smoke, and Discord Bot checks.

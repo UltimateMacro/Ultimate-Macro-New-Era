@@ -19,6 +19,7 @@ REQUIRED_RUNTIME_FILES = (
     "lib/JSON.ahk",
     "lib/Roblox.ahk",
     "lib/RuntimeLog.ahk",
+    "lib/auto_settings.ahk",
     "submacros/updater.ahk",
     "submacros/update.bat",
     "submacros/safe_update.ps1",

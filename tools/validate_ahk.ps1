@@ -4,7 +4,8 @@ param(
         'submacros/watchdog.ahk',
         'submacros/auto_coa.ahk',
         'submacros/auto_open_consumable.ahk',
-        'submacros/auto_spin.ahk'
+        'submacros/auto_spin.ahk',
+        'tests/test_auto_settings.ahk'
     )
 )
 
@@ -91,6 +92,37 @@ try {
         }
         Write-Host "AutoHotkey validation: PASS ($script)"
     }
+
+    $behavioralScript = [IO.Path]::GetFullPath((Join-Path $repoRoot 'tests/test_auto_settings.ahk'))
+    $behavioralInfo = [Diagnostics.ProcessStartInfo]::new()
+    $behavioralInfo.FileName = $autoHotkey
+    $behavioralInfo.WorkingDirectory = $repoRoot
+    $behavioralInfo.UseShellExecute = $false
+    $behavioralInfo.CreateNoWindow = $true
+    $behavioralInfo.RedirectStandardOutput = $true
+    $behavioralInfo.RedirectStandardError = $true
+    [void]$behavioralInfo.ArgumentList.Add('/ErrorStdOut=UTF-8')
+    [void]$behavioralInfo.ArgumentList.Add($behavioralScript)
+    $behavioralResult = Join-Path $workRoot 'auto-settings-result.txt'
+    [void]$behavioralInfo.ArgumentList.Add($behavioralResult)
+
+    $behavioralProcess = [Diagnostics.Process]::Start($behavioralInfo)
+    if (-not $behavioralProcess.WaitForExit(30000)) {
+        $behavioralProcess.Kill($true)
+        throw 'Auto Settings behavioral fixtures timed out under AutoHotkey 2.0.26.'
+    }
+    $behavioralStdout = $behavioralProcess.StandardOutput.ReadToEnd()
+    $behavioralStderr = $behavioralProcess.StandardError.ReadToEnd()
+    if ($behavioralStdout) { Write-Host $behavioralStdout.TrimEnd() }
+    if ($behavioralStderr) { Write-Host $behavioralStderr.TrimEnd() }
+    $behavioralMessage = if (Test-Path -LiteralPath $behavioralResult -PathType Leaf) {
+        (Get-Content -LiteralPath $behavioralResult -Raw).Trim()
+    }
+    else { '' }
+    if ($behavioralProcess.ExitCode -ne 0 -or $behavioralMessage -ne 'Auto Settings behavioral fixtures: PASS') {
+        throw "Auto Settings behavioral fixtures failed under AutoHotkey 2.0.26 with exit code $($behavioralProcess.ExitCode)."
+    }
+    Write-Host 'AutoHotkey behavioral fixtures: PASS (2.0.26)'
 }
 finally {
     if (Test-Path -LiteralPath $workRoot) {
