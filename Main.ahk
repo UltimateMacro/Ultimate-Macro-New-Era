@@ -1328,8 +1328,8 @@ RenderStrategies(mode := "Community") {
         hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
         hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
 
-        SliderBG := ChildGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" FrameH + ContentH " +BackgroundTrans", "HBITMAP:*" hSliderBG)
-        Slider := ChildGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans", "HBITMAP:*" hSlider)
+        SliderBG := ChildGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" FrameH + ContentH " +BackgroundTrans +0x0100", "HBITMAP:*" hSliderBG)
+        Slider := ChildGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans +0x0100", "HBITMAP:*" hSlider)
 
         SliderBG.Visible := true
         Slider.Visible := true
@@ -1344,6 +1344,7 @@ RenderStrategies(mode := "Community") {
 
 OnMessage(0x0115, OnScroll)
 OnMessage(0x020A, OnMouseWheel)
+OnMessage(0x0201, HandleSliderMouseDown)
 
 MainGui.SetFont("s11 w400 cFFFFFF", UIFont())
 global Tab1_Start := MainGui.Add("Text", "x30 y500 w300 h40 Center Background0e0e0f +Border 0x200", "Start (F1)")
@@ -2402,6 +2403,87 @@ OnScroll(wp, lp, msg, hwnd) {
         Slider.Move(, sliderVisualY)
 
         DllCall("UpdateWindow", "Ptr", hwnd)
+    }
+}
+
+HandleSliderMouseDown(wParam, lParam, msg, hwnd) {
+    global Slider, SliderBG, ChildGui, FrameH, SliderH, ContentH, CurrentScrollPos
+
+    if (!IsSet(Slider) || !Slider || !IsSet(ChildGui))
+        return
+
+    ; Only trigger if clicking the scrollbar area
+    if (hwnd != Slider.Hwnd && hwnd != SliderBG.Hwnd)
+        return
+
+    ; Get absolute screen position of the mouse
+    oldMode := A_CoordModeMouse
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&mouseX, &mouseY)
+    CoordMode("Mouse", oldMode)
+
+    ; Get exact screen position of the GUI's inner working area
+    WinGetClientPos(&winX, &winY, , , "ahk_id " ChildGui.Hwnd)
+    
+    ; Get the thumb's current internal Y position
+    Slider.GetPos(&sx, &sy, &sw, &sh)
+    
+    ; Calculate physical screen boundaries of the thumb
+    thumbTop := winY + sy
+    thumbBot := thumbTop + sh
+
+    maxScroll := ContentH - FrameH
+    if (maxScroll <= 0)
+        return
+    availableTrack := FrameH - SliderH
+
+    ; --- DRAG THUMB LOGIC --- 
+    ; If the mouse is physically inside the vertical space of the thumb
+    if (mouseY >= thumbTop && mouseY <= thumbBot) {
+        startY := mouseY
+        startScroll := CurrentScrollPos
+
+        While GetKeyState("LButton", "P") {
+            oldModeDrag := A_CoordModeMouse
+            CoordMode("Mouse", "Screen")
+            MouseGetPos(, &currentY)
+            CoordMode("Mouse", oldModeDrag)
+
+            deltaY := currentY - startY
+            
+            scrollDelta := (deltaY / availableTrack) * maxScroll
+            newPos := startScroll + scrollDelta
+            newPos := Max(0, Min(newPos, maxScroll))
+            
+            if (newPos != CurrentScrollPos) {
+                DllCall("ScrollWindow", "Ptr", ChildGui.Hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
+                CurrentScrollPos := newPos
+                
+                sliderVisualY := Round((newPos / maxScroll) * availableTrack)
+                Slider.Move(, sliderVisualY)
+                DllCall("UpdateWindow", "Ptr", ChildGui.Hwnd)
+            }
+            Sleep(10)
+        }
+    } 
+    ; --- JUMP LOGIC --- 
+    ; If clicking the track above/below the thumb
+    else {
+        ; Calculate where they clicked relative to the visible window track (ignoring scroll drift)
+        trackClickY := mouseY - winY
+        targetY := trackClickY - (SliderH / 2)
+        
+        newPos := (targetY / availableTrack) * maxScroll
+        newPos := Max(0, Min(newPos, maxScroll))
+        
+        if (newPos != CurrentScrollPos) {
+            DllCall("ScrollWindow", "Ptr", ChildGui.Hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
+            CurrentScrollPos := newPos
+            
+            sliderVisualY := Round((newPos / maxScroll) * availableTrack)
+            Slider.Move(, sliderVisualY)
+            DllCall("UpdateWindow", "Ptr", ChildGui.Hwnd)
+        }
     }
 }
 
