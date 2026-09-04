@@ -53,7 +53,9 @@ if (A_PtrSize == 4) {
 #Include lib\ImageSearch\ImageSearch.ahk
 #Include *i lib\JSON.ahk
 #Include submacros\updater.ahk
+#Include *i lib\Profiles.ahk
 #Include lib\Discord.ahk
+#Include *i lib\DiscordCommands.ahk
 #Include lib\RuntimeLog.ahk
 #Include lib\auto_settings.ahk
 
@@ -147,6 +149,7 @@ global AppDataOpt := A_AppData "\Ultimate_Macro\Options"
 global SettingsFile := AppDataOpt "\Settings.tds"
 global BotSettings := AppDataOpt "\Discord-Bot-Settings.ini"
 global RecordingsDir := A_AppData "\Ultimate_Macro\Recordings"
+global ProfilesDir := A_AppData "\Ultimate_Macro\Profiles"
 global StateFile := A_AppData "\Ultimate_Macro\state.ini"
 
 global StratsDir := A_WorkingDir "\Resources\Strats"
@@ -162,6 +165,8 @@ if !DirExist(AppDataOpt)
     DirCreate(AppDataOpt)
 if !DirExist(RecordingsDir)
     DirCreate(RecordingsDir)
+if !DirExist(ProfilesDir)
+    DirCreate(ProfilesDir)
 
 ;INI READS
 global VipLink := IniRead(SettingsFile, "Options", "VipLink", "")
@@ -185,6 +190,7 @@ global BotToken := IniRead(BotSettings, "Token", "BotToken", "")
 global BotEnabled := IniRead(BotSettings, "Settings", "Enabled", 0)
 global ChannelID := IniRead(BotSettings, "Settings", "Channel", "")
 global UserID := IniRead(BotSettings, "Settings", "UserID", "")
+global BotPrefix := IniRead(BotSettings, "Settings", "Prefix", "!")
 ;
 global AutoEquip := IniRead(SettingsFile, "Options", "AutoEquip", 0)
 global AutoConfigureSettings := IniRead(SettingsFile, "Options", "AutoConfigureSettings", 0)
@@ -1726,6 +1732,12 @@ global Tools_Info := MainGui.Add("Text", "x30 y490 w640 h100 Hidden",
     "Additional utilities for optimizing and simplifying the gameplay and automating repetitive actions. It reduces your suffering."
 )
 
+global Tools_Profiles_Section := MainGui.Add("Text", "x30 y325 w300 h22 Hidden", "Profiles & diagnostics")
+global Tools_Profiles_Line := MainGui.Add("Progress", "x30 y348 w640 h1 Hidden Background333333", 0)
+global ProfileExportBtn := MakeActionButton(MainGui, 30, 365, 200, 38, "Export Profile", ExportProfile, "neutral", true)
+global ProfileImportBtn := MakeActionButton(MainGui, 250, 365, 200, 38, "Import Profile", ImportProfile, "neutral", true)
+global ProfileManagerBtn := MakeActionButton(MainGui, 470, 365, 200, 38, "Manage Profiles", ProfileManager, "neutral", true)
+
 global Auto_COA := MainGui.Add("Picture", "x30 y125 w197 h176 Hidden", "Resources/Gui/auto_coa_preview.png")
 
 Auto_COA.OnEvent("Click", RunAutoAbTool)
@@ -2196,7 +2208,8 @@ ShowTabContent(tab) {
         UpgradeDelayCtrl.Value := UpgradeDelay
 
     } else if (tab = "Tab6") {
-        for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Auto_COA, Auto_Spin, Auto_Consum]
+        for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Tools_Profiles_Section, Tools_Profiles_Line,
+            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, Auto_COA, Auto_Spin, Auto_Consum]
             ShowControl(ctrl)
     } else if (tab = "Tab7") {
         Credit_Content.Visible := true
@@ -9743,7 +9756,7 @@ RunAutoConsumableTool(*) {
     }
 }
 
-ProcessCommands(*) {
+LegacyProcessCommands(*) {
     global command_buffer, UserID, RunningStrategy, ChannelID
 
     Discord.GetCommands(ChannelID)
