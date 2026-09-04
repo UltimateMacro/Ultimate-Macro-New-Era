@@ -22,6 +22,21 @@
   was available. Hotbar OFF recording and replay now share placement-time,
   client-scaled numeric clicks with structured diagnostics; Hotbar ON is
   unchanged.
+- Auto Settings falsely classifying Roblox-normalized XML as foreign when the
+  file's BOM or unrelated serialization changed but every macro-managed value
+  remained correct. Exact applied hashes remain the fast path; a strict
+  managed-node semantic fallback now handles this state without weakening the
+  verified original backup.
+- Auto Settings recovery now fails closed when backup provenance is incomplete,
+  preserving metadata-only or backup-only evidence instead of treating it as a
+  clean state.
+- Persistent `RobloxPlayerBeta.exe --launch-to-tray` processes no longer block
+  a verified restore after gameplay ends. Visible games and process-inspection
+  failures remain active/fail-closed.
+- Terminal Roblox launch, lobby, join, map, ready and TimeScale failures now
+  propagate to the strategy owner before later input can run. Camera alignment
+  also requires a live Roblox HWND and CLIENT geometry and always releases the
+  right mouse button.
 
 ### Improved
 

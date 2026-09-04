@@ -180,7 +180,40 @@ Run this after the normal automated suite and before promoting the runtime candi
 12. **Auto Settings verified restore** — disable while Roblox is running. The verified backup must remain until `RobloxPlayerBeta.exe` exits, then the original SHA-256-identical XML must be restored before the backup and metadata are removed.
 13. **Auto Settings unknown backup** — in a disposable fixture only, present a legacy `.macro_bak` without `.macro_bak.meta`. Confirm the macro refuses to apply/restore/delete it and reports the provenance failure.
 14. **Auto Settings re-enable race** — disable with Roblox open, then re-enable before Roblox exits and launch a new run. Confirm the older helper generation exits without restoring over the new applied state.
-15. **Auto Settings changed-current guard** — after application, alter a disposable copy of the current XML before restore. Confirm restoration fails closed and retains the backup/metadata for manual recovery.
-16. **Discord Bot persistence** — with the Bot configured, press F2 while idle, start/stop recording, start/stop a strategy, and exercise one failure/recovery. A remote status command must still be processed after every ordinary cleanup.
-17. **Scrollbar teardown** — release a drag normally, close the GUI while dragging, and exercise a child-window disappearance. Confirm dragging clears and no 10 ms callback remains active.
-18. **Anti-downgrade** — rerun OpenCV native, TimeScale 2x/watchdog, Hotbar OFF, DJ/abilities, standard difficulty, updater smoke, and Discord Bot checks.
+15. **Auto Settings normalized current** — after application, remove only the
+    UTF-8 BOM or change an unrelated XML node in a disposable copy while all
+    managed values remain at their targets. Confirm another apply succeeds and
+    does not rewrite the unrelated node; then confirm restore reproduces the
+    SHA-256-identical verified original.
+16. **Auto Settings changed-managed guard** — after application, change one
+    managed value unexpectedly. Confirm apply/restore fail closed and retain
+    the current file, backup, and metadata for manual recovery.
+17. **Auto Settings orphan provenance** — separately present metadata-only and
+    backup-only evidence in a disposable fixture. Apply, restore and recovery
+    must fail closed without deleting either artifact.
+18. **Persistent Roblox tray process** — after real gameplay closes, leave
+    `RobloxPlayerBeta.exe --launch-to-tray` alive. Confirm the visible game is
+    no longer classified as active, the exact verified original is restored,
+    and the tray process is not force-killed.
+19. **Runtime terminal failure** — force a Roblox launch or CLIENT-geometry
+    failure. Confirm the failure reaches the strategy owner, later Roblox input
+    does not run, and camera cleanup releases the right mouse button.
+20. **Discord Bot persistence** — with the Bot configured, press F2 while idle, start/stop recording, start/stop a strategy, and exercise one failure/recovery. A remote status command must still be processed after every ordinary cleanup.
+21. **Scrollbar teardown** — release a drag normally, close the GUI while dragging, and exercise a child-window disappearance. Confirm dragging clears and no 10 ms callback remains active.
+22. **Anti-downgrade** — rerun OpenCV native, TimeScale 2x/watchdog, Hotbar OFF, DJ/abilities, standard difficulty, updater smoke, and Discord Bot checks.
+
+### v1.3.4 validated blocker evidence
+
+- **Fresh Auto Settings Roblox E2E — PASS.** A clean original was backed up,
+  managed settings were applied for gameplay, a visible game remained active,
+  the surviving `--launch-to-tray` process was recognized as tray-only after
+  the game closed, and the SHA-256-identical original was restored without
+  killing the tray process.
+- Backup, metadata, restore-request and lifecycle temporary artifacts were
+  cleaned only after verified restoration; the separate forensic recovery
+  artifact was preserved.
+- Automated runtime safety contracts and isolated AutoHotkey behavioral
+  fixtures cover fail-fast propagation, semantic/foreign classification,
+  orphan provenance, repeated generations and tray command-line recognition.
+- Runtime manual QA must still be repeated against the exact cleaned candidate
+  before promotion.
