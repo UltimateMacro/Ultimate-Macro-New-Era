@@ -522,6 +522,68 @@ def validate_positive_backports(main_source: str) -> None:
     for label, marker in anti_downgrade.items():
         require(marker in main_source, f"anti-downgrade contract missing: {label}")
 
+
+def validate_launch_failure_safety(main: str) -> None:
+    run_strategy = region(main, "RunStrategy(stratFile := \"\", skipRestart := false) {", "PlayStrategy() {")
+    check_restart = region(main, "CheckRestart() {", "RunRoblox(doReload := true) {")
+    run_roblox = region(main, "RunRoblox(doReload := true) {", "ExitFullScreen() {")
+    wait_lobby = region(main, "WaitForLobbyLoad() {", "JoinGame() {")
+    join_game = region(main, "JoinGame() {", "InvitePartyMembers(search_bar) {")
+    select_map = region(main, "SelectMap(readyX :=", "CheckTheMapF() {")
+    check_map = region(main, "CheckTheMapF() {", "ApplyModifiers() {")
+    wait_ready = region(main, "waitReady() {", "activateTimescale() {")
+    timescale = region(main, "activateTimescale() {", "AlignCamera(")
+    align_camera = region(main, "AlignCamera(move :=", "getSlots() {")
+    reconnect = region(main, "TryReconnect() {", "CheckPopups(*) {")
+    stop_strategy = region(main, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
+
+    prepare_failure = region(
+        run_roblox,
+        "if !PrepareAutoSettingsForRobloxLaunch(AutoConfigureSettings) {",
+        "Run(DeepLink)",
+    )
+    require("auto_settings_prepare_failed" in prepare_failure and
+            "GetAutoSettingsLastError()" in prepare_failure and
+            "StopStrategy()" in prepare_failure and "return false" in prepare_failure,
+            "Auto Settings launch failure must log detail, stop once, and return failure")
+    require(run_roblox.count("StopStrategy()") == 1 and "StopStrategy()" not in run_strategy,
+            "RunRoblox must remain the single strategy-stop owner after preparation failure")
+    require("SafeReload()\n        return" in stop_strategy,
+            "StopStrategy must not continue after requesting an asynchronous reload")
+
+    require(run_strategy.count("if !RunRoblox()") == run_strategy.count("RunRoblox()") == 2,
+            "every initial/switched RunRoblox call must fail fast")
+    for guarded_call in ("CheckRestart()", "EquipTowers(RequiredTowers)", "JoinGame()",
+                         "waitReady()", "CheckTheMapF()", "activateTimescale()", "ClickReady()"):
+        require(f"if !{guarded_call}" in run_strategy,
+                f"RunStrategy must stop before later interaction when {guarded_call} fails")
+
+    require(check_restart.count("if !RunRoblox()") == check_restart.count("RunRoblox()") == 2,
+            "reward and fresh-client fallback launches must both fail fast")
+    require("return JoinGame()" in check_restart and "if !WaitForLobbyLoad()" in check_restart,
+            "CheckRestart must propagate matchmaking and lobby-load failures")
+    require("if !RunningStrategy\n                return false" in reconnect,
+            "reconnect must stop retrying after RunRoblox has stopped the strategy")
+
+    guard = align_camera[:align_camera.index('Click("Right Down")')]
+    require("GetRobloxHWND()" in guard and "getRobloxPos(&rx, &ry, &rw, &rh, robloxHwnd)" in guard,
+            "AlignCamera must resolve a live HWND and CLIENT geometry before Right Down")
+    require(guard.count("return false") >= 3 and
+            guard.rfind("return false") < guard.find("MouseMove(") and "SendEvent(" not in guard,
+            "AlignCamera failure guards must precede all mouse and keyboard movement")
+    require("finally {\n        Click(\"Right Up\")" in align_camera and
+            align_camera.rstrip().endswith("return true\n}"),
+            "AlignCamera must release Right and report success explicitly")
+
+    for label, body in (("RunRoblox", run_roblox), ("RunStrategy", run_strategy),
+                        ("WaitForLobbyLoad", wait_lobby), ("JoinGame", join_game),
+                        ("SelectMap", select_map), ("CheckTheMapF", check_map),
+                        ("waitReady", wait_ready), ("activateTimescale", timescale)):
+        for match in re.finditer(r"SafeReload\(\)", body):
+            require(re.match(r"\s*return false", body[match.end():]) is not None,
+                    f"{label} continues after SafeReload instead of terminating the logical run")
+
+
 def validate_auto_settings_hardening(
     root: Path, main_source: str, auto_settings_source: str, auto_settings_test: str
 ) -> None:
@@ -718,6 +780,7 @@ def main() -> int:
     validate_dj_watchdog_and_pr30(main_source, watchdog_source)
     validate_watchdog_pid_lifecycle(main_source)
     validate_positive_backports(main_source)
+    validate_launch_failure_safety(main_source)
     validate_auto_settings_hardening(root, main_source, auto_settings_source, auto_settings_test)
     validate_community_strategy_sync(main_source)
     validate_packaging(root, validator, workflow)

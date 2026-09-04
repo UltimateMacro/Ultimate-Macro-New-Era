@@ -2768,6 +2768,7 @@ StopStrategy(*) {
         IniDelete(StateFile, "State", "HeartbeatTimeout")
         RunningStrategy := false
         SafeReload()
+        return
     }
 
     if (Recording) {
@@ -5038,47 +5039,65 @@ RunStrategy(stratFile := "", skipRestart := false) {
 
     if (!switched) {
         if (!skipRestart) {
-            CheckRestart()
+            if !CheckRestart()
+                return false
         } else {
             CloseRoblox()
-            RunRoblox()
+            if !RunRoblox()
+                return false
             if (AutoEquip) {
-                EquipTowers(RequiredTowers)
+                if !EquipTowers(RequiredTowers)
+                    return false
             }
-            JoinGame()
+            if !JoinGame()
+                return false
         }
     } else {
         CloseRoblox()
-        RunRoblox()
-        EquipTowers(RequiredTowers)
+        if !RunRoblox()
+            return false
+        if !EquipTowers(RequiredTowers)
+            return false
 
-        JoinGame()
+        if !JoinGame()
+            return false
     }
 
     if (readyX = 0 && readyY = 0) {
-        waitReady()
+        if !waitReady()
+            return false
     }
 
     if (!IsRestarting) {
-        CheckTheMapF()
+        if !CheckTheMapF()
+            return false
         if (!InArray(SpecialMaps, gamemap) && ResolveArcadeTarget() = "") {
-            AlignCamera()
+            if !AlignCamera() {
+                SafeReload()
+                return false
+            }
         }
     }
 
-    activateTimescale()
+    if !activateTimescale()
+        return false
 
     if (!IsRestarting && ResolveArcadeTarget() != "") {
         ; Arcade/Trial worlds should use the same deterministic camera baseline
         ; before gameplay begins. Align while the Ready screen is still active,
         ; then press Ready only after the camera operation has completed.
         RuntimeLogInfo("arcade_camera_pre_ready", "Aligning Arcade camera before Ready", "target=" ResolveArcadeTarget())
-        AlignCamera()
+        if !AlignCamera() {
+            SafeReload()
+            return false
+        }
     }
 
-    ClickReady()
+    if !ClickReady()
+        return false
 
     PlayStrategy()
+    return true
 }
 
 PlayStrategy() {
@@ -5596,12 +5615,13 @@ CheckRestart() {
         LogToConsole("Navigating to lobby to check playtime rewards...", true, false)
         IsRestarting := false
         CloseRoblox()
-        RunRoblox()
+        if !RunRoblox()
+            return false
         if (shouldEquip && AutoEquip) {
-            EquipTowers(requiredTowers)
+            if !EquipTowers(requiredTowers)
+                return false
         }
-        JoinGame()
-        return
+        return JoinGame()
     }
 
     KillSubmacros()
@@ -5661,7 +5681,7 @@ CheckRestart() {
                 }
                 Sleep(150)
                 startWatchdog()
-                return
+                return true
             }
         }
 
@@ -5677,9 +5697,10 @@ CheckRestart() {
                     Click(resReplay.x, resReplay.y)
                 }
                 Sleep(150)
-                WaitForLobbyLoad()
+                if !WaitForLobbyLoad()
+                    return false
                 startWatchdog()
-                return
+                return true
             }
         }
     }
@@ -5687,11 +5708,13 @@ CheckRestart() {
     startWatchdog()
     IsRestarting := false
     CloseRoblox()
-    RunRoblox()
+    if !RunRoblox()
+        return false
     if (shouldEquip && AutoEquip) {
-        EquipTowers(requiredTowers)
+        if !EquipTowers(requiredTowers)
+            return false
     }
-    JoinGame()
+    return JoinGame()
 }
 
 RunRoblox(doReload := true) {
@@ -5740,6 +5763,7 @@ RunRoblox(doReload := true) {
         if (!robloxopened && doReload) {
             LogToConsole("Roblox not started after 1 minute! Reloading...", true)
             SafeReload()
+            return false
         } else if (!robloxopened && !doReload) {
             return false
         }
@@ -5759,6 +5783,7 @@ RunRoblox(doReload := true) {
             if (A_TickCount - startTime > 60000) {
                 if (doReload) {
                     SafeReload()
+                    return false
                 } else {
                     return false
                 }
@@ -6047,8 +6072,13 @@ WaitForLobbyLoad() {
             if (A_TickCount - startTime > 60000) {
                 CloseRoblox()
                 SafeReload()
+                return false
             }
-            getRobloxPos(, , &w, &h)
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("lobby_load_geometry_missing", "Roblox client geometry disappeared while loading the lobby")
+                SafeReload()
+                return false
+            }
             res := AdvancedImageSearch("Resources/Ready.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.5), Round(h *
                 0.34), 0.6, 1.7)
             if (res.status = "success" && res.score >= 0.7) {
@@ -6057,7 +6087,8 @@ WaitForLobbyLoad() {
             Sleep(100)
         }
         if (!MultiplayerEnabled || PlayerRole = "Host") {
-            SelectMap(res.x, res.y)
+            if !SelectMap(res.x, res.y)
+                return false
         } else {
             Click(Round(w * 0.5), res.y)
             Sleep 250
@@ -6066,6 +6097,7 @@ WaitForLobbyLoad() {
                 ApplyModifiers()
         }
     }
+    return true
 }
 
 JoinGame() {
@@ -6075,13 +6107,17 @@ JoinGame() {
     readyY := 0
     MacroPhase("matchmaking", 240000)
     RuntimeLogInfo("matchmaking_ready_reset", "Reset Ready coordinates before fresh matchmaking join")
-    getRobloxPos(, , &w, &h)
+    if !getRobloxPos(, , &w, &h) {
+        RuntimeLogWarn("matchmaking_geometry_missing", "Roblox client geometry was unavailable before matchmaking")
+        SafeReload()
+        return false
+    }
 
     startTime := A_TickCount
     loop {
         if (A_TickCount - startTime > 80000) {
             SafeReload()
-            break
+            return false
         }
 
         x1 := Round(w * 0.25)
@@ -6102,11 +6138,10 @@ JoinGame() {
             if (MultiplayerEnabled) {
                 if (PlayerRole = "Member") {
                     if !AcceptInvite(res.x, res.y)
-                        return
-                    WaitForLobbyLoad()
-                    return
+                        return false
+                    return WaitForLobbyLoad()
                 } else if !CreateParty(res.x, res.y) {
-                    return
+                    return false
                 }
             }
 
@@ -6131,7 +6166,11 @@ JoinGame() {
         categoryStart := A_TickCount
         categoryOpened := false
         loop {
-            getRobloxPos(, , &w, &h)
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("arcade_category_geometry_missing", "Roblox client geometry disappeared before Arcade selection")
+                SafeReload()
+                return false
+            }
             if TryOpenArcadeCategory(w, h) {
                 categoryOpened := true
                 break
@@ -6144,7 +6183,7 @@ JoinGame() {
         }
         if !categoryOpened {
             SafeReload()
-            return
+            return false
         }
 
         ; Start card scrolling only after the Arcade category is active.
@@ -6152,11 +6191,15 @@ JoinGame() {
         arcadeScrollAttempts := 0
         startTime := A_TickCount
         loop {
-            getRobloxPos(, , &w, &h)
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("arcade_matchmaking_geometry_missing", "Roblox client geometry disappeared during Arcade selection")
+                SafeReload()
+                return false
+            }
             if (A_TickCount - startTime > 35000) {
                 RuntimeLogWarn("arcade_matchmaking_timeout", "Could not find Arcade/Trial card", "target=" arcadeTarget)
                 SafeReload()
-                break
+                return false
             }
 
             if TryClickArcadeTarget(arcadeTarget, w, h)
@@ -6184,14 +6227,18 @@ JoinGame() {
         modeScrollAttempts := 0
 
         loop {
-            getRobloxPos(, , &w, &h)
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("difficulty_geometry_missing", "Roblox client geometry disappeared during difficulty selection")
+                SafeReload()
+                return false
+            }
             elapsedDifficulty := A_TickCount - difficultyStart
             if (A_TickCount >= difficultyDeadline) {
                 LogToConsole("Could not select difficulty '" difficulty "' within 60s. Reloading...", true)
                 RuntimeLogWarn("difficulty_select_timeout", "Difficulty card never matched",
                     "difficulty=" difficulty "; scrolls=" modeScrollAttempts)
                 SafeReload()
-                return
+                return false
             }
 
             if TryClickDifficultyTarget(difficulty, w, h) {
@@ -6235,10 +6282,14 @@ JoinGame() {
     MacroPhase("selecting_party_size", 120000)
     startTime := A_TickCount
     loop {
-        getRobloxPos(, , &w, &h)
+        if !getRobloxPos(, , &w, &h) {
+            RuntimeLogWarn("party_size_geometry_missing", "Roblox client geometry disappeared during party-size selection")
+            SafeReload()
+            return false
+        }
         if (A_TickCount - startTime > 40000) {
             SafeReload()
-            break
+            return false
         }
         if (!MultiplayerEnabled) {
             res := AdvancedImageSearch("Resources/Solo.png", 0, Round(h * 0.2), Round(w * 0.7), Round(h * 0.55))
@@ -6276,7 +6327,7 @@ JoinGame() {
         }
         Sleep(100)
     }
-    WaitForLobbyLoad()
+    return WaitForLobbyLoad()
 }
 
 InvitePartyMembers(search_bar) {
@@ -6619,7 +6670,11 @@ checkCondition(*) {
 SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
     global gamemap, difficulty, modifiers, CheckTheMap, LegacyMode
 
-    getRobloxPos(, , &w, &h)
+    if !getRobloxPos(, , &w, &h) {
+        RuntimeLogWarn("map_select_geometry_missing", "Roblox client geometry was unavailable before map selection")
+        SafeReload()
+        return false
+    }
     readyX := Round(w * 0.5)
 
     MacroPhase("selecting_map", 420000)
@@ -6655,7 +6710,10 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         ActivateRoblox()
         resetCharacter()
         Sleep(7500)
-        AlignCamera(false, false)
+        if !AlignCamera(false, false) {
+            SafeReload()
+            return false
+        }
     }
 
     if (difficulty = "Hardcore" || difficulty = "Voidcore") {
@@ -6681,7 +6739,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if !GetRobloxScreenClientRect(&mapClientX, &mapClientY, &w, &h) {
                 LogToConsole("Cannot resolve Roblox window for map OCR. Reloading...", true)
                 SafeReload()
-                return
+                return false
             }
             FoundSlot := 0
             regions := [[0, 0, Floor(w * 0.3307), Floor(h * 0.6)],
@@ -6721,6 +6779,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if (attempts >= 5) {
                 LogToConsole("Map is not found after 5 attempts! Reloading...", true)
                 SafeReload()
+                return false
             }
 
             if (FoundSlot = 0) {
@@ -6801,8 +6860,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
 
         if !(e_pr.score >= 0.75) {
             LogToConsole("The macro can't see the E prompt (" e_pr.score "), retrying again... ", true)
-            SelectMap(readyX, readyY)
-            return
+            return SelectMap(readyX, readyY)
         }
 
         SendEvent("{sc012 down}")
@@ -6834,7 +6892,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         if (!foundsearchbar) {
             LogToConsole("Can not found the search bar in the override map menu! Reloading..", true)
             SafeReload()
-            return
+            return false
         }
 
         Sleep(100)
@@ -6896,6 +6954,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if (!changedMap) {
                 LogToConsole("Failed to change the map to " gamemap, true)
                 SafeReload()
+                return false
             } else {
                 break
             }
@@ -6946,6 +7005,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if !(e_pr.score >= 0.7) {
                 LogToConsole("The macro can't see the E prompt (" e_pr.score "), reloading... ", true)
                 SafeReload()
+                return false
             }
         }
 
@@ -6956,7 +7016,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
     Sleep(100)
 
     Click(readyX, readyY)
-    waitReady()
+    return waitReady()
 }
 
 CheckTheMapF() {
@@ -6966,7 +7026,10 @@ CheckTheMapF() {
 
     if (ResolveArcadeTarget() = "" && FileExist("Resources\Maps\" . gamemap . ".png") && CheckTheMap = 1 && !InArray(SpecialMaps, gamemap) && !
     RegExMatch(modifiers_str, "i)fog")) {
-        AlignCamera(false, false, false)
+        if !AlignCamera(false, false, false) {
+            SafeReload()
+            return false
+        }
 
         LogToConsole("Checking the map... (Make sure you have the lowest graphics)")
 
@@ -6995,7 +7058,10 @@ CheckTheMapF() {
             ; A noisy first viewport is not a reload condition. Re-establish the
             ; deterministic camera twice during the same absolute deadline.
             if (cameraRecoveries < 2 && (mapSamples = 4 || mapSamples = 9)) {
-                AlignCamera(false, false, false)
+                if !AlignCamera(false, false, false) {
+                    SafeReload()
+                    return false
+                }
                 cameraRecoveries++
                 RuntimeLogInfo("map_camera_recovery", "Realigned camera after transient map misses",
                     "map=" gamemap "; recovery=" cameraRecoveries "; samples=" mapSamples)
@@ -7009,7 +7075,7 @@ CheckTheMapF() {
             LogToConsole("Can't detect the map! Reloading script...", true)
             Sleep 300
             SafeReload()
-            return
+            return false
         }
     }
 
@@ -7018,6 +7084,7 @@ CheckTheMapF() {
 
         %functionName%()
     }
+    return true
 }
 
 ApplyModifiers() {
@@ -7150,6 +7217,7 @@ waitReady() {
             LogToConsole("The ready button hasn't appeared for too long! Reloading the script...", true)
             CloseRoblox()
             SafeReload()
+            return false
         }
         if FindReadyButton(&fx, &fy) {
             readyX := fx
@@ -7159,17 +7227,22 @@ waitReady() {
         Sleep(250)
     }
     startWatchdog()
+    return true
 }
 
 activateTimescale() {
     global UseTimeScale, TimeScaleMode, TimeScaleMultiplier, difficulty, SettingsFile, AutorunStartTime,
         MultiplayerEnabled, TimescaleActive
     if (MultiplayerEnabled) {
-        return
+        return true
     }
 
-    getRobloxPos(&x, &y, &w, &h)
     if (UseTimeScale && ResolveArcadeTarget() = "") {
+        if !getRobloxPos(&x, &y, &w, &h) {
+            RuntimeLogWarn("timescale_geometry_missing", "Roblox client geometry was unavailable before TimeScale input")
+            SafeReload()
+            return false
+        }
         LogToConsole("Applying timescale: " TimeScaleMode ". Please, enable UI Navigation Toggle.")
         Click(Round(w * 0.5), Round(h * 0.5))
 
@@ -7205,6 +7278,7 @@ activateTimescale() {
                 LogToConsole("failed to activate timescale. the macro can't see the confirm/get more button... (" res.score ")",
                     true)
                 SafeReload()
+                return false
             }
 
             timescales := IniRead(StateFile, "State", "Timescale", 0)
@@ -7230,25 +7304,38 @@ activateTimescale() {
         Send("{sc02B}")
         Send("#")
     }
+    return true
 }
 
 AlignCamera(move := true, skipZoom := false, log := true) {
     global MoveEnabled, MoveDirection, MoveDuration, IsRestarting, MouseDelay
     if (IsRestarting)
-        return
+        return false
+    robloxHwnd := GetRobloxHWND()
+    if !robloxHwnd {
+        RuntimeLogWarn("align_camera_window_missing", "Camera alignment skipped because no Roblox window was found")
+        LogToConsole("Cannot align camera: Roblox window is unavailable.", true, false)
+        return false
+    }
+    if !getRobloxPos(&rx, &ry, &rw, &rh, robloxHwnd) {
+        RuntimeLogWarn("align_camera_geometry_missing", "Camera alignment skipped because Roblox CLIENT geometry was unavailable")
+        LogToConsole("Cannot align camera: Roblox client geometry is unavailable.", true, false)
+        return false
+    }
     if (log) {
         LogToConsole("Aligning camera")
     }
     closeChat()
 
-    getRobloxPos(&rx, &ry, &rw, &rh)
-
     MouseMove(rw / 2, rh / 2, 0)
     Click("Right Down")
-    Sleep(50)
-    MouseMove(0, rh, 3 + MouseDelay, "R")
-    Sleep(10)
-    Click("Right Up")
+    try {
+        Sleep(50)
+        MouseMove(0, rh, 3 + MouseDelay, "R")
+        Sleep(10)
+    } finally {
+        Click("Right Up")
+    }
     if (!skipZoom) {
         Sleep(200)
         SendEvent("{o down}")
@@ -7262,6 +7349,7 @@ AlignCamera(move := true, skipZoom := false, log := true) {
         HyperSleep(MoveDuration)
         SendEvent("{" MoveDirection " up}")
     }
+    return true
 }
 
 getSlots() {
@@ -7732,6 +7820,7 @@ isDisconnected() {
 }
 
 TryReconnect() {
+    global RunningStrategy
     attempts := 0
     loop {
         attempts++
@@ -7739,11 +7828,15 @@ TryReconnect() {
         KillSubmacros()
         CloseRoblox()
         if (RunRoblox(false) == false) {
+            ; Auto Settings failure owns the single strategy-stop/reload request.
+            ; A normal transient launch miss may still retry while the run is active.
+            if !RunningStrategy
+                return false
             continue
         } else {
             LogToConsole("Reconnect successful after " attempts " attempts!", true, false)
             startWatchdog()
-            break
+            return true
         }
     }
 }
