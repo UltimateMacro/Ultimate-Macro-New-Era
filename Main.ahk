@@ -1514,8 +1514,9 @@ global BotTokenCtrl := MainGui.Add("Edit", "x30 y155 w640 h24 Hidden vBotToken",
 
 global ChannelIDCtrl := MainGui.Add("Edit", "x30 y273 w310 h24 Hidden vChannelID", ChannelID)
 global WebhookUserIDCtrl2 := MainGui.Add("Edit", "x360 y273 w310 h24 Hidden vWebhookUserID2", UserID)
+global BotPrefixCtrl := MainGui.Add("Edit", "x130 y222 w70 h24 Hidden vBotPrefix Limit1 Center", BotPrefix)
 
-global Tab4_Line3 := MainGui.Add("Progress", "x30 y305 w640 h1 Hidden Background333333", 0)
+global Tab4_Line3 := MainGui.Add("Progress", "x30 y325 w640 h1 Hidden Background333333", 0)
 
 MainGui.SetFont("s9 w400 cFFFFFF")
 global BotEnabledCtrl := MainGui.Add("Checkbox", "x30 y195 Hidden vBotEnabled Checked" BotEnabled, "Enable Bot")
@@ -1528,6 +1529,7 @@ Here you can set up a Discord bot.`nThe Discord bot can be used as a remote cont
 
 MainGui.SetFont("s9 w400 cAAAAAA")
 global bot_token_text := MainGui.Add("Text", "x30 y135 w200 h20 Hidden", "Bot Token:")
+global bot_prefix_text := MainGui.Add("Text", "x30 y225 w95 h20 Hidden BackgroundTrans", "Command prefix:")
 
 global channel_id_text := MainGui.Add("Text", "x30 y253 w200 h20 Hidden BackgroundTrans", "Channel ID:")
 global userid_text := MainGui.Add("Text", "x360 y253 w200 h20 Hidden BackgroundTrans", "User ID:")
@@ -1537,7 +1539,8 @@ MainGui.SetFont("s12 w400 cFFFFFF")
 global Tab4_bot_Btn1 := MakeActionButton(MainGui, 30, 500, 310, 40, "Test Bot", TestBot, "accent", true)
 
 DiscordBotTab.Push(Tab4_Title, Tab4_Line1, Tab4_Line2, BotTokenCtrl, BotEnabledCtrl, Tab4_Btn2, Tab4_bot_Btn1,
-    bot_token_text, WebhookUserIDCtrl2, ChannelIDCtrl, channel_id_text, userid_text, Tab4_Line3, Tab4_Info_Bot)
+    bot_token_text, bot_prefix_text, BotPrefixCtrl, WebhookUserIDCtrl2, ChannelIDCtrl, channel_id_text, userid_text,
+    Tab4_Line3, Tab4_Info_Bot)
 
 ;TAB 5 - SETTINGS ==========================
 
@@ -1720,6 +1723,12 @@ global Tab5_BtnClearLogs := MainGui.Add("Text",
 Tab5_BtnClearLogs.OnEvent("Click", ClearStoredLogs)
 
 HoverEffect.Push(Tab5_BtnClearLogs)
+
+global Tab5_AdvancedBtn := MakeActionButton(MainGui, 30, 500, 180, 40, "Advanced settings", ShowAdvancedSettings, "neutral", true)
+global Tab5_BackBtn := MakeActionButton(MainGui, 170, 500, 180, 40, "Back to settings", ShowMainSettings, "neutral", true)
+global Tab5_AdvancedTitle := MainGui.Add("Text", "x30 y95 w250 h22 Hidden", "Advanced settings")
+global Tab5_AdvancedLine := MainGui.Add("Progress", "x30 y118 w640 h1 Hidden Background333333", 0)
+global Tab5_SaveStatus := MainGui.Add("Text", "x225 y499 w275 h22 Hidden BackgroundTrans", "")
 
 global Tab5_Btn1 := MakeActionButton(MainGui, 30, 500, 640, 40, "Save all settings", SaveAllSettings, "accent", true)
 
@@ -2178,10 +2187,12 @@ ShowTabContent(tab) {
             RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL,
             CollectPlaytimeRewardsCtrl,
             Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl,
-            Tab5_BtnClearLogs, Tab5_Btn1,
+            Tab5_BtnClearLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_SaveStatus, Tab5_Btn1,
             MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown,
             MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown]
             ShowControl(ctrl)
+
+        ShowSettingsPage(false)
 
         ChainKeyCtrl.Value := ChainKey
         BeatKeyCtrl.Value := BeatKey
@@ -2232,6 +2243,78 @@ ShowTabContent(tab) {
 ShowChildGui() {
     global ChildGui, FrameX, FrameY, FrameW, FrameH, MainGui
     ChildGui.Show("x" FrameX " y" FrameY " w" FrameW " h" FrameH)
+}
+
+ShowAdvancedSettings(*) {
+    ShowSettingsPage(true)
+}
+
+ShowMainSettings(*) {
+    ShowSettingsPage(false)
+}
+
+ShowSettingsPage(advanced := false) {
+    global Tab5_Section1, Tab5_Line1, Tab5_Lbl1, ChainKeyCtrl, Tab5_Lbl2, BeatKeyCtrl, Tab5_Lbl3, CaravanKeyCtrl
+    global Tab5_Lbl44, RaiseDeadKeyCtrl, Tab5_Lbl55, Tab5_Lbl56, HologramKeyCtrl, RepoKeyCtrl, Tab5_Lbl99
+    global Tab5_LblUPG, Tab5_LblUPGBTM, CancelPlacementKeyCtrl, UpgradeTowerGCtrl, UpgradeTowerGBCtrl
+    global Tab1_Lbl3, Tab1_Lbl4, TimeScaleModeCtrl, UpgradeDelayCtrl, Tab5_Section2, Tab5_Line2, Tab5_Help6
+    global UseRestartBtnCtrl, Tab5_Help4, UsePlayAgainBtnCtrl, Tab5_Help5, CheckTheMapCtrl, UseNumbersForHotbarCtrl
+    global UseUpgradeHCtrl, Tab5_Help7, Tab5_Help11, Tab5_Help12, Tab5_Section3, Tab5_Line3, PlcTowerTEXT
+    global UpgTowerTEXT, AlignCamTEXT, DjTrackTEXT, SellTowTEXT, DelRecTEXT, RecInputsTEXT, HoloTEXT, RaiseDeadTEXT
+    global PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl, AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl, SellTowerKeyCtrl
+    global DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl
+    global Tab5_BtnClearLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_Btn1, Tab5_SaveStatus
+    global Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl, DebugConsoleCtrl, PotatoModeCtrl
+    global MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown
+    global KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown
+
+    common := [Tab5_Section1, Tab5_Line1, Tab5_Lbl1, ChainKeyCtrl, Tab5_Lbl2, BeatKeyCtrl, Tab5_Lbl3, CaravanKeyCtrl,
+        Tab5_Lbl44, RaiseDeadKeyCtrl, Tab5_Lbl55, Tab5_Lbl56, HologramKeyCtrl, RepoKeyCtrl, Tab5_Lbl99, Tab5_LblUPG,
+        Tab5_LblUPGBTM, CancelPlacementKeyCtrl, UpgradeTowerGCtrl, UpgradeTowerGBCtrl, Tab1_Lbl3, Tab1_Lbl4,
+        TimeScaleModeCtrl, UpgradeDelayCtrl, Tab5_Section2, Tab5_Line2, Tab5_Help6, UseRestartBtnCtrl, Tab5_Help4,
+        UsePlayAgainBtnCtrl, Tab5_Help5, CheckTheMapCtrl, UseNumbersForHotbarCtrl, UseUpgradeHCtrl, Tab5_Help7,
+        Tab5_Help11, Tab5_Help12, Tab5_Section3, Tab5_Line3, PlcTowerTEXT, UpgTowerTEXT, AlignCamTEXT, DjTrackTEXT,
+        SellTowTEXT, DelRecTEXT, RecInputsTEXT, HoloTEXT, RaiseDeadTEXT, PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl,
+        AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl, SellTowerKeyCtrl, DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl,
+        HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl, Tab5_BtnClearLogs]
+    advancedControls := [Tab5_AdvancedTitle, Tab5_AdvancedLine, DebugConsoleCtrl, PotatoModeCtrl, MouseSpeedLbl,
+        MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt,
+        KeyDelayUpDown, Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl]
+    for ctrl in common
+        ctrl.Visible := !advanced
+    for ctrl in advancedControls
+        ctrl.Visible := advanced
+    Tab5_AdvancedBtn.Visible := !advanced
+    Tab5_BackBtn.Visible := advanced
+    Tab5_Btn1.Visible := true
+    Tab5_SaveStatus.Visible := true
+    Tab5_Btn1.Move(370, 500, 300, 40)
+    Tab5_SaveStatus.Move(225, 509, 275, 22)
+    if advanced {
+        Tab5_AdvancedTitle.Move(30, 95, 250, 22)
+        Tab5_AdvancedLine.Move(30, 118, 640, 1)
+        DebugConsoleCtrl.Move(100, 140)
+        PotatoModeCtrl.Move(400, 140)
+        MouseSpeedLbl.Move(100, 190, 95, 20)
+        MouseSpeedTxt.Move(200, 186, 32, 22)
+        MouseSpeedUpDown.Move(220, 186, 16, 22)
+        MouseDelayLbl.Move(300, 190, 90, 20)
+        MouseDelayTxt.Move(395, 186, 32, 22)
+        MouseDelayUpDown.Move(415, 186, 16, 22)
+        KeyDelayLbl.Move(500, 190, 75, 20)
+        KeyDelayTxt.Move(580, 186, 32, 22)
+        KeyDelayUpDown.Move(600, 186, 16, 22)
+        Tab5_Line4.Move(30, 235, 640, 1)
+        Tab5_Lbl4.Move(30, 247, 160, 20)
+        VipLinkCtrl.Move(30, 272, 640, 24)
+        UseVipServerCtrl.Move(100, 307)
+        AlwaysOnTopCtrl.Move(300, 307)
+        LegacyModeCtrl.Move(540, 307)
+        Tab5_BackBtn.Move(170, 500, 180, 40)
+    } else {
+        Tab5_AdvancedBtn.Move(30, 500, 180, 40)
+    }
+    DllCall("RedrawWindow", "ptr", MainGui.Hwnd, "ptr", 0, "ptr", 0, "uint", 0x185)
 }
 
 MoveWindow(ctrl, *) {
@@ -4362,8 +4445,15 @@ TestBot(ctrl, *) {
 
 SaveWebhookSettings(ctrl, *) {
     global WebhookLink, WebhookLink2, WebhookEnabled, SendCurrenciesEnabled, WebhookDebugLogs, WebhookScreenshots,
-        WebhookTriumphScreenshots, WebhookSepatateTriumphScreenshots, UserID, ChannelID, BotEnabled, BotToken
+        WebhookTriumphScreenshots, WebhookSepatateTriumphScreenshots, UserID, ChannelID, BotEnabled, BotToken, BotPrefix
     v := MainGui.Submit(0)
+    nextPrefix := Trim(v.BotPrefix)
+    if (nextPrefix = "")
+        nextPrefix := "!"
+    if (StrLen(nextPrefix) != 1 || RegExMatch(nextPrefix, "[A-Za-z0-9\s]")) {
+        ModernMsgBox("Invalid command prefix", "Use one non-alphanumeric character, such as !, ., or -.", "OK", "WARNING")
+        return
+    }
     WebhookLink := v.WebhookLink
     WebhookLink2 := v.WebhookLink2
     WebhookEnabled := v.WebhookEnabled
@@ -4376,10 +4466,12 @@ SaveWebhookSettings(ctrl, *) {
     BotEnabled := v.BotEnabled
     ChannelID := v.ChannelID
     UserID := v.WebhookUserID2
+    BotPrefix := nextPrefix
     IniWrite(BotToken, BotSettings, "Token", "BotToken")
     IniWrite(BotEnabled, BotSettings, "Settings", "Enabled")
     IniWrite(ChannelID, BotSettings, "Settings", "Channel")
     IniWrite(UserID, BotSettings, "Settings", "UserID")
+    IniWrite(BotPrefix, BotSettings, "Settings", "Prefix")
     IniWrite(WebhookLink, SettingsFile, "Webhook", "Link")
     IniWrite(WebhookLink2, SettingsFile, "Webhook", "Link2")
     IniWrite(WebhookUserID, SettingsFile, "Webhook", "WebhookUserID")

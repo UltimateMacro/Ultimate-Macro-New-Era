@@ -1,0 +1,98 @@
+[Settings]
+map=Wretched Front
+difficulty=Hardcore
+requiredTowers=Crook Boss, Farm, Electroshocker, Scout, Minigunner
+modifiers=
+autoChain=OFF
+autoCaravan=OFF
+autoDropTheBeat=OFF
+autoSkip=ON
+abilitySpam=OFF
+moveEnabled=0
+moveDirection=W
+moveDuration=5000
+
+[DO NOT EDIT]
+width=1920
+height=1009
+
+[Steps]
+SpawnTower(579, 443, 2, Farm1)
+SpawnTower(592, 497, 2, Farm2)
+SpawnTower(614, 555, 2, Farm3)
+UpgradeTower(Farm1)
+UpgradeTower(Farm2)
+UpgradeTower(Farm3)
+SpawnTower(1272, 639, 4, Scout1)
+UpgradeTower(Scout1)
+UpgradeTower(Scout1)
+SpawnTower(647, 612, 2, Farm4)
+UpgradeTower(Farm4)
+SpawnTower(534, 506, 2, Farm5)
+UpgradeTower(Farm5)
+SpawnTower(549, 558, 2, Farm6)
+UpgradeTower(Farm6)
+SpawnTower(1151, 915, 3, Electroshocker1)
+UpgradeTower(Electroshocker1)
+SpawnTower(1207, 918, 3, Electroshocker2)
+SpawnTower(1149, 851, 3, Electroshocker3)
+SpawnTower(1208, 855, 3, Electroshocker4)
+SpawnTower(1156, 673, 5, Minigunner1)
+UpgradeTower(Electroshocker1)
+UpgradeTower(Electroshocker2)
+UpgradeTower(Electroshocker2)
+UpgradeTower(Electroshocker3)
+UpgradeTower(Electroshocker3)
+UpgradeTower(Electroshocker4)
+UpgradeTower(Electroshocker4)
+UpgradeTower(Minigunner1)
+UpgradeTower(Minigunner1)
+UpgradeTower(Electroshocker1)
+SpawnTower(567, 613, 2, Farm7)
+SpawnTower(587, 671, 2, Farm8)
+UpgradeTower(Farm7)
+UpgradeTower(Farm8)
+SpawnTower(524, 668, 2, Farm9)
+UpgradeTower(Farm9)
+SpawnTower(515, 730, 2, Farm10)
+UpgradeTower(Farm10)
+SpawnTower(1092, 908, 1, CrookBoss1)
+SpawnTower(1035, 910, 1, CrookBoss2)
+SpawnTower(978, 909, 1, CrookBoss3)
+SpawnTower(1007, 852, 1, CrookBoss4)
+UpgradeTower(Farm1)
+UpgradeTower(Farm2)
+UpgradeTower(Farm3)
+UpgradeTower(Farm4)
+UpgradeTower(Farm5)
+UpgradeTower(Farm6)
+UpgradeTower(Farm7)
+UpgradeTower(Farm8)
+UpgradeTower(Farm9)
+UpgradeTower(Farm10)
+UpgradeTower(CrookBoss1)
+UpgradeTower(CrookBoss1)
+UpgradeTower(CrookBoss2)
+UpgradeTower(CrookBoss2)
+UpgradeTower(CrookBoss3)
+UpgradeTower(CrookBoss3)
+UpgradeTower(CrookBoss4)
+UpgradeTower(CrookBoss4)
+UpgradeTower(Farm1)
+UpgradeTower(Farm2)
+UpgradeTower(Farm3)
+UpgradeTower(Farm4)
+UpgradeTower(Farm5)
+UpgradeTower(Farm6)
+UpgradeTower(Farm7)
+UpgradeTower(Farm8)
+UpgradeTower(Farm9)
+UpgradeTower(Farm10)
+UpgradeTower(Electroshocker2)
+UpgradeTower(Electroshocker3)
+UpgradeTower(Electroshocker4)
+UpgradeTower(CrookBoss2)
+UpgradeTower(CrookBoss3)
+UpgradeTower(CrookBoss4)
+UpgradeTower(Minigunner1)
+UpgradeTower(CrookBoss1)
