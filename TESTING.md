@@ -161,3 +161,59 @@ Use a disposable extracted release copy, never this Git checkout.
 Record environment, commit/release version, Windows version, display scaling,
 Roblox client size, backend, and observed results in the QA sign-off. Redact all
 credentials and private links.
+
+## Ziadod positive-backport QA
+
+Run this after the normal automated suite and before promoting the runtime candidate:
+
+1. **Party OFF baseline** — run a normal solo strategy and confirm matchmaking/abilities/watchdog are unchanged.
+2. **Party validation** — enable Party Mode with missing Member host, missing Host members, and 4 members; each must be blocked before Roblox automation begins.
+3. **Host + 1 member** — create/invite/join, confirm no cancel-invite race while names are being typed, and verify the host proceeds only after the configured member is present.
+4. **Member path** — accept a host invite and confirm the 3-minute timeout reloads cleanly when no invite arrives.
+5. **Rotation UI** — enabling rotation must lock Auto Equip ON; disabling rotation must make it editable again.
+6. **Strategy scrollbar** — wheel scroll still works; dragging/clicking the thumb moves the card list without dragging the main window.
+7. **Webhook validation** — typing a webhook does not perform a request on every character; invalid links keep Enable Webhook locked off and a valid webhook unlocks it.
+8. **Discord Bot regression** — Bot tab, Test Bot, save, and remote-command settings remain present.
+9. **Action buttons** — Start/Stop/Record/Party/Webhook/Bot/Settings buttons show/hover correctly; disabled Record Stop cannot fire.
+10. **Held-input cleanup** — stop during movement/camera/recording and verify no mouse button, WASD, Shift, Ctrl, arrows, or raw scan-code movement remains held.
+11. **Auto Settings opt-in/lifecycle** — a fresh Settings.tds must leave Auto Configure Settings OFF. Enabling it while idle must not change Roblox XML; starting a run must create `.macro_bak` plus `.macro_bak.meta` and apply exactly once immediately before Roblox launches.
+12. **Auto Settings verified restore** — disable while Roblox is running. The verified backup must remain until `RobloxPlayerBeta.exe` exits, then the original SHA-256-identical XML must be restored before the backup and metadata are removed.
+13. **Auto Settings unknown backup** — in a disposable fixture only, present a legacy `.macro_bak` without `.macro_bak.meta`. Confirm the macro refuses to apply/restore/delete it and reports the provenance failure.
+14. **Auto Settings re-enable race** — disable with Roblox open, then re-enable before Roblox exits and launch a new run. Confirm the older helper generation exits without restoring over the new applied state.
+15. **Auto Settings normalized current** — after application, remove only the
+    UTF-8 BOM or change an unrelated XML node in a disposable copy while all
+    managed values remain at their targets. Confirm another apply succeeds and
+    does not rewrite the unrelated node; then confirm restore reproduces the
+    SHA-256-identical verified original.
+16. **Auto Settings changed-managed guard** — after application, change one
+    managed value unexpectedly. Confirm apply/restore fail closed and retain
+    the current file, backup, and metadata for manual recovery.
+17. **Auto Settings orphan provenance** — separately present metadata-only and
+    backup-only evidence in a disposable fixture. Apply, restore and recovery
+    must fail closed without deleting either artifact.
+18. **Persistent Roblox tray process** — after real gameplay closes, leave
+    `RobloxPlayerBeta.exe --launch-to-tray` alive. Confirm the visible game is
+    no longer classified as active, the exact verified original is restored,
+    and the tray process is not force-killed.
+19. **Runtime terminal failure** — force a Roblox launch or CLIENT-geometry
+    failure. Confirm the failure reaches the strategy owner, later Roblox input
+    does not run, and camera cleanup releases the right mouse button.
+20. **Discord Bot persistence** — with the Bot configured, press F2 while idle, start/stop recording, start/stop a strategy, and exercise one failure/recovery. A remote status command must still be processed after every ordinary cleanup.
+21. **Scrollbar teardown** — release a drag normally, close the GUI while dragging, and exercise a child-window disappearance. Confirm dragging clears and no 10 ms callback remains active.
+22. **Anti-downgrade** — rerun OpenCV native, TimeScale 2x/watchdog, Hotbar OFF, DJ/abilities, standard difficulty, updater smoke, and Discord Bot checks.
+
+### v1.3.4 validated blocker evidence
+
+- **Fresh Auto Settings Roblox E2E — PASS.** A clean original was backed up,
+  managed settings were applied for gameplay, a visible game remained active,
+  the surviving `--launch-to-tray` process was recognized as tray-only after
+  the game closed, and the SHA-256-identical original was restored without
+  killing the tray process.
+- Backup, metadata, restore-request and lifecycle temporary artifacts were
+  cleaned only after verified restoration; the separate forensic recovery
+  artifact was preserved.
+- Automated runtime safety contracts and isolated AutoHotkey behavioral
+  fixtures cover fail-fast propagation, semantic/foreign classification,
+  orphan provenance, repeated generations and tray command-line recognition.
+- Runtime manual QA must still be repeated against the exact cleaned candidate
+  before promotion.

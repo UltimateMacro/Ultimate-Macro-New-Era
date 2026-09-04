@@ -1,3 +1,26 @@
+# Release source consistency remediation — 2026-09-03
+
+Target: current uncommitted `fix/release-source-consistency` candidate at
+`6f6b1aa82b0c97b679fd8687ae92a90e750f1211`. Do not commit, push, open a PR,
+change branches, or run the retained `apply_*.py` generators.
+
+## Approved minimal fix plan
+
+1. Make the Auto Settings XML transform deterministic and fixture-tested with
+   correct AHK/PCRE escaping, Windows XML parsing, and exact managed-node
+   uniqueness checks.
+2. Add versioned backup metadata, SHA-256 identity checks, generation tokens,
+   and a named mutex; preserve and report every unknown or changed state.
+3. Move application to the single Roblox pre-launch boundary and harden early
+   OnExit recovery, scrollbar/debounce teardown, and Discord Bot timer scope.
+4. Require `lib/auto_settings.ahk` in source and updater runtime manifests and
+   prove an incomplete ZIP is rejected without moving the installation.
+5. Run the complete Python, dependency, repository, strategy, PowerShell,
+   updater, AutoHotkey 2.0.12/2.0.26, behavioral-fixture, and diff validation
+   gates. Stop with all changes uncommitted for independent review.
+
+---
+
 # Watchdog PID lifecycle hotfix — 2026-09-02
 
 Target: local-only `fix/watchdog-pid-unset` from canonical `upstream/dev` at
@@ -470,3 +493,28 @@ updater test.
   and reject the retired release lookup/download paths.
 - Run all repository, PowerShell, updater-smoke, and AutoHotkey validation gates.
 - Leave the result uncommitted and unpushed for manual review as requested.
+
+## v1.3.4 final blocker cleanup and validation
+
+Baseline: `03f104bd3f42dd019fe5d9400ae708a25cfe358c` on
+`fix/release-source-consistency`. Keep the result local and uncommitted until
+manual QA/review; do not merge, push, publish, or modify `dev`/`main`.
+
+1. Preserve Auto Settings exact-hash classification and add strict semantic
+   validation of every managed node without rewriting unrelated Roblox XML.
+2. Fail closed and preserve evidence for metadata-only, backup-only, foreign or
+   invalid states. Retain whole-file restore, SHA-256 provenance, the mutex,
+   restore generations, transactional replacement and post-restore verification.
+3. Treat Roblox's persistent `--launch-to-tray` process as inactive only when
+   no visible game session remains. Scope `Win32_Process` inspection to the
+   fail-closed tray classifier and keep inspection failures active.
+4. Preserve runtime fail-fast propagation from Roblox launch through lobby,
+   join, map, ready and TimeScale operations. Require a live HWND and CLIENT
+   geometry before camera input, release right-click in `finally`, and keep
+   stop/reconnect behavior terminal.
+5. Retain the fresh Auto Settings gameplay-to-tray-to-exact-restore E2E result
+   and the focused behavioral/source contracts. Do not claim runtime manual QA
+   until it is repeated against the surgically cleaned candidate.
+6. Run Python compilation/contracts/validators, strategy lint, PowerShell and
+   updater smoke tests, AutoHotkey validation/behavioral fixtures, plus final
+   diff, attribution, license and untracked-exclusion checks.

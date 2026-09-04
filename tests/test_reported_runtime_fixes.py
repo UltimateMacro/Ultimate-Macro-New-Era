@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -378,6 +380,8 @@ def validate_watchdog_pid_lifecycle(main: str) -> None:
 
 
 def validate_packaging(root: Path, validator: str, workflow: str) -> None:
+    safe_updater = read(root / "submacros/safe_update.ps1")
+    updater_smoke = read(root / "tests/safe_updater_smoke.ps1")
     obsolete = {
         "Resources/Strats/2_Absolute_Zero.strat",
         "Resources/Strats/4_FrostModeStrat(Mods)(1.3 fix).strat",
@@ -436,6 +440,30 @@ def validate_packaging(root: Path, validator: str, workflow: str) -> None:
     require("python tests/test_reported_runtime_fixes.py ." in workflow,
             "CI must execute the reported-runtime contracts")
 
+    spec = importlib.util.spec_from_file_location("release_validator_fixture", root / "tests/validate_repo.py")
+    require(spec is not None and spec.loader is not None, "repository validator could not be loaded")
+    validator_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(validator_module)
+    require("lib/auto_settings.ahk" in validator_module.REQUIRED_RUNTIME_FILES,
+            "source/release manifest omits mandatory lib/auto_settings.ahk")
+    require("'lib\\auto_settings.ahk'" in safe_updater,
+            "safe updater payload allowlist omits mandatory lib/auto_settings.ahk")
+    require("missing-auto-settings.zip" in updater_smoke and
+            "Package missing lib\\auto_settings.ahk unexpectedly succeeded." in updater_smoke,
+            "updater smoke test does not reject a package missing auto_settings.ahk")
+    with tempfile.TemporaryDirectory(prefix="ultimate-macro-validator-") as fixture_dir:
+        fixture_root = Path(fixture_dir)
+        for relative in validator_module.REQUIRED_RUNTIME_FILES + validator_module.REQUIRED_QA_FILES:
+            if relative == "lib/auto_settings.ahk":
+                continue
+            target = fixture_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.touch()
+        fixture_errors: list[str] = []
+        validator_module.validate_required_files(fixture_root, fixture_errors)
+        require(fixture_errors == ["required project file is missing: lib/auto_settings.ahk"],
+                "source/release validation did not reject a fixture missing auto_settings.ahk")
+
 
 def validate_community_strategy_sync(main: str) -> None:
     community = region(main, "IsGitDevelopmentCheckout(rootDir) {", "global FrameX := 30")
@@ -452,11 +480,295 @@ def validate_community_strategy_sync(main: str) -> None:
             "Git checkout detection must happen before any community request")
 
 
+
+def validate_positive_backports(main_source: str) -> None:
+    required = {
+        "party preflight validation": "PartySettingsProblem()",
+        "party GUI sync": "SyncPartySettingsFromGui(false)",
+        "party invite race lock": "PartyInviteBusy",
+        "scaled party menu offset": "x + ScaleX(200)",
+        "fresh party member recount": "CountPartyMembersPresent(w, h)",
+        "party host watchdog phase": 'MacroPhase("party_host_wait", 190000)',
+        "party member watchdog phase": 'MacroPhase("party_member_wait", 190000)',
+        "draggable strategy scrollbar": "TryBeginScrollDrag()",
+        "checkbox locking": "SetCheckboxLocked(AutoEquipCtrl, show, 1)",
+        "debounced webhook validation": 'SetTimer(CheckWebhookLink, -700)',
+        "gradient action buttons": "MakeActionButton(MainGui",
+        "runtime timer stop": "StopRuntimeTimers()",
+        "scan-code input release": '"sc011"',
+    }
+    for label, marker in required.items():
+        require(marker in main_source, f"missing positive backport: {label}")
+
+    forbidden = {
+        "synchronous webhook validation on every keystroke": 'WebhookLinkCtrl.OnEvent("Change", CheckWebhookLink)',
+        "OS-disabled AutoEquip rotation control": "AutoEquipCtrl.Enabled := !show",
+    }
+    for label, marker in forbidden.items():
+        require(marker not in main_source, f"regression retained: {label}")
+
+    # Anti-downgrade contracts: the Ziadod snapshot predates these production fixes.
+    anti_downgrade = {
+        "Darksen attribution": "; Ultimate Macro (macro for TDS) by Darksen",
+        "safe updater include": "#Include submacros\\updater.ahk",
+        "Discord bot": "TestBot(ctrl, *)",
+        "ability timer hardening": "UseAbilitiesPass()",
+        "watchdog local PID": "newWatchdogPID := 0",
+        "watchdog IsSet guard": "IsSet(watchdogPID)",
+        "absolute difficulty deadline": "difficultyDeadline := difficultyStart + 60000",
+        "dynamic hotbar click": "SelectHotbarSlotByClick(slotNumber)",
+        "portable image fallback": "image_backend_fallback",
+    }
+    for label, marker in anti_downgrade.items():
+        require(marker in main_source, f"anti-downgrade contract missing: {label}")
+
+
+def validate_launch_failure_safety(main: str) -> None:
+    run_strategy = region(main, "RunStrategy(stratFile := \"\", skipRestart := false) {", "PlayStrategy() {")
+    check_restart = region(main, "CheckRestart() {", "RunRoblox(doReload := true) {")
+    run_roblox = region(main, "RunRoblox(doReload := true) {", "ExitFullScreen() {")
+    wait_lobby = region(main, "WaitForLobbyLoad() {", "JoinGame() {")
+    join_game = region(main, "JoinGame() {", "InvitePartyMembers(search_bar) {")
+    select_map = region(main, "SelectMap(readyX :=", "CheckTheMapF() {")
+    check_map = region(main, "CheckTheMapF() {", "ApplyModifiers() {")
+    wait_ready = region(main, "waitReady() {", "activateTimescale() {")
+    timescale = region(main, "activateTimescale() {", "AlignCamera(")
+    align_camera = region(main, "AlignCamera(move :=", "getSlots() {")
+    reconnect = region(main, "TryReconnect() {", "CheckPopups(*) {")
+    stop_strategy = region(main, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
+
+    prepare_failure = region(
+        run_roblox,
+        "if !PrepareAutoSettingsForRobloxLaunch(AutoConfigureSettings) {",
+        "Run(DeepLink)",
+    )
+    require("auto_settings_prepare_failed" in prepare_failure and
+            "GetAutoSettingsLastError()" in prepare_failure and
+            "StopStrategy()" in prepare_failure and "return false" in prepare_failure,
+            "Auto Settings launch failure must log detail, stop once, and return failure")
+    require(run_roblox.count("StopStrategy()") == 1 and "StopStrategy()" not in run_strategy,
+            "RunRoblox must remain the single strategy-stop owner after preparation failure")
+    require("SafeReload()\n        return" in stop_strategy,
+            "StopStrategy must not continue after requesting an asynchronous reload")
+
+    require(run_strategy.count("if !RunRoblox()") == run_strategy.count("RunRoblox()") == 2,
+            "every initial/switched RunRoblox call must fail fast")
+    for guarded_call in ("CheckRestart()", "EquipTowers(RequiredTowers)", "JoinGame()",
+                         "waitReady()", "CheckTheMapF()", "activateTimescale()", "ClickReady()"):
+        require(f"if !{guarded_call}" in run_strategy,
+                f"RunStrategy must stop before later interaction when {guarded_call} fails")
+
+    require(check_restart.count("if !RunRoblox()") == check_restart.count("RunRoblox()") == 2,
+            "reward and fresh-client fallback launches must both fail fast")
+    require("return JoinGame()" in check_restart and "if !WaitForLobbyLoad()" in check_restart,
+            "CheckRestart must propagate matchmaking and lobby-load failures")
+    require("if !RunningStrategy\n                return false" in reconnect,
+            "reconnect must stop retrying after RunRoblox has stopped the strategy")
+
+    guard = align_camera[:align_camera.index('Click("Right Down")')]
+    require("GetRobloxHWND()" in guard and "getRobloxPos(&rx, &ry, &rw, &rh, robloxHwnd)" in guard,
+            "AlignCamera must resolve a live HWND and CLIENT geometry before Right Down")
+    require(guard.count("return false") >= 3 and
+            guard.rfind("return false") < guard.find("MouseMove(") and "SendEvent(" not in guard,
+            "AlignCamera failure guards must precede all mouse and keyboard movement")
+    require("finally {\n        Click(\"Right Up\")" in align_camera and
+            align_camera.rstrip().endswith("return true\n}"),
+            "AlignCamera must release Right and report success explicitly")
+
+    for label, body in (("RunRoblox", run_roblox), ("RunStrategy", run_strategy),
+                        ("WaitForLobbyLoad", wait_lobby), ("JoinGame", join_game),
+                        ("SelectMap", select_map), ("CheckTheMapF", check_map),
+                        ("waitReady", wait_ready), ("activateTimescale", timescale)):
+        for match in re.finditer(r"SafeReload\(\)", body):
+            require(re.match(r"\s*return false", body[match.end():]) is not None,
+                    f"{label} continues after SafeReload instead of terminating the logical run")
+
+
+def validate_auto_settings_hardening(
+    root: Path, main_source: str, auto_settings_source: str, auto_settings_test: str
+) -> None:
+    tray_guard = region(
+        auto_settings_source,
+        "AutoSettingsRobloxSessionActive(robloxProcess :=",
+        "ApplyMacroSettings(",
+    )
+    require("--launch-to-tray" in tray_guard and 'ComObjGet("winmgmts:")' in tray_guard,
+            "Auto Settings must distinguish Roblox's persistent tray launcher from a game session")
+    require("WMI/COM inspection failure must never make an active game look closed." in tray_guard and
+            "return true" in tray_guard,
+            "Roblox process inspection must fail closed")
+    require("Roblox tray command line was not recognized" in auto_settings_test and
+            "A normal Roblox command line was misclassified as tray-only" in auto_settings_test,
+            "AHK behavioral fixtures must cover Roblox tray command-line classification")
+
+    require('global AutoConfigureSettings := IniRead(SettingsFile, "Options", "AutoConfigureSettings", 0)' in main_source,
+            "Auto Settings must be opt-in by default for the first hardened release")
+    require(main_source.count('global AutoEquip := IniRead(SettingsFile, "Options", "AutoEquip", 0)') == 1,
+            "AutoEquip should be initialized exactly once")
+
+    startup = region(main_source, "; Opening Ultimate Macro must never apply Roblox settings.", "global LogLines := []")
+    require("RecoverPendingAutoSettings(A_ScriptDir)" in startup,
+            "startup must recover a verified pending original-settings backup")
+    require("ApplyMacroSettings(" not in startup,
+            "opening Ultimate Macro must not apply settings")
+
+    enable = region(main_source, "EnableAutoConfig(ctrl, *) {", "SelectStrat1(ctrl, *) {")
+    require("CancelPendingAutoSettingsRestore()" in enable,
+            "enabling Auto Settings must cancel stale restore requests")
+    require("ApplyMacroSettings(" not in enable,
+            "enabling the option must not mutate Roblox XML immediately")
+    require("RequestAutoSettingsRestore(A_ScriptDir)" in enable,
+            "disabling Auto Settings must defer restoration safely while Roblox is alive")
+    require("AutoConfigCtrl.Value := 0" in enable,
+            "failed cancellation must turn the option back off")
+
+    run_roblox = region(main_source, "RunRoblox(doReload := true) {", "CloseRoblox() {")
+    require(run_roblox.count("PrepareAutoSettingsForRobloxLaunch(AutoConfigureSettings)") == 1,
+            "RunRoblox must have one centralized Auto Settings preparation call")
+    require(run_roblox.find("PrepareAutoSettingsForRobloxLaunch") < run_roblox.find("Run(DeepLink)"),
+            "Auto Settings must be prepared immediately before Roblox launch")
+    require("auto_settings_prepare_failed" in run_roblox and "return false" in run_roblox,
+            "unsafe preparation must be diagnosable and block launch")
+
+    handle_exit = region(main_source, "HandleExit(ExitReason, ExitCode) {", "CleanupGdip(exitReason, exitCode) {")
+    require("RequestAutoSettingsRestore(A_ScriptDir)" in handle_exit,
+            "Main exit must schedule the robust restore path")
+    require("AutoSettingsBackupExists()" in handle_exit,
+            "Main exit must recover a preserved backup even if the option was already disabled")
+    require("IsSet(AutoConfigureSettings) && AutoConfigureSettings" in handle_exit,
+            "early-startup OnExit must guard AutoConfigureSettings before reading it")
+    require("if (AutoConfigureSettings ||" not in handle_exit,
+            "early-startup OnExit retains an unguarded AutoConfigureSettings read")
+
+    transform = region(auto_settings_source, "TransformAutoSettingsXml(xmlContent) {", "AutoSettingsSha256Buffer(data) {")
+    require(r'\s+name="' in transform and r'</\1>' in transform,
+            "AHK transformation must pass PCRE whitespace/backreference escapes")
+    require(r'\\s+name="' not in transform and r'</\\1>' not in transform,
+            "AHK transformation retains generated doubled regex escaping")
+    require("AutoSettingsParseXml(xmlContent)" in transform and
+            "AutoSettingsValidateXml(xmlContent, true)" in transform,
+            "transformation must validate source and managed output XML")
+    require("nodes.length > 1" in transform,
+            "transformation must reject duplicate managed settings")
+
+    provenance = region(auto_settings_source, "AutoSettingsReadBackupState(paths) {", "AutoSettingsWriteMetadata(")
+    for field in ("Format", "Generation", "BackupSha256", "AppliedSha256"):
+        require(field in provenance, f"backup provenance field missing: {field}")
+    require('status: "unknown"' in provenance and "AutoSettingsFileSha256(paths.backup) != backupHash" in provenance,
+            "legacy/corrupt backups must be classified unknown by strong identity")
+
+    apply_region = region(auto_settings_source, 'ApplyMacroSettings(settingsPath := "",', "RestoreOriginalSettings(")
+    require("backupState.status = \"unknown\"" in apply_region and
+            "Unknown Auto Settings backup was preserved" in apply_region,
+            "apply must preserve and refuse unknown backups")
+    require("AutoSettingsRobloxSessionActive(robloxProcess)" in apply_region and
+            apply_region.rfind("AutoSettingsRobloxSessionActive(robloxProcess)") < apply_region.find("FileMove(paths.applyTemp"),
+            "apply must recheck Roblox immediately before replacement")
+
+    classifier = region(auto_settings_source, "AutoSettingsClassifyCurrent(paths, backupState) {", "AutoSettingsWriteMetadata(")
+    require('status: "backup"' in classifier and 'status: "applied_exact"' in classifier and
+            'status: "applied_semantic"' in classifier and 'status: "foreign"' in classifier,
+            "current settings must distinguish exact, semantic, and foreign states")
+    require("AutoSettingsValidateFile(paths.settings, true)" in classifier and
+            classifier.find("backupState.appliedHash") < classifier.find("AutoSettingsValidateFile(paths.settings, true)"),
+            "semantic validation must be a fallback after exact identity checks")
+    require("AutoSettingsClassifierReason(currentState)" in classifier and
+            'RegExReplace(reason, "[\\r\\n\\t]+", " ")' in classifier and "SubStr(reason, 1, 300)" in classifier,
+            "foreign-state diagnostics must be detailed, single-line, and bounded")
+    require('Reason: "' in apply_region and "AutoSettingsClassifierReason(currentState)" in apply_region,
+            "apply failure must preserve the detailed classifier reason for every log sink")
+
+    restore_region = region(auto_settings_source, "RestoreOriginalSettings(", "ResolveAutoSettingsHelperExe(")
+    require("AutoSettingsClassifyCurrent(paths, state)" in restore_region and
+            'currentState.status = "foreign"' in restore_region,
+            "restore must fail closed when a managed setting is outside the macro target")
+    require(restore_region.find("AutoSettingsFileSha256(paths.settings) != state.backupHash") <
+            restore_region.find("FileDelete(paths.backup)"),
+            "backup deletion must follow restored content-identity verification")
+    require("AutoSettingsRestoreRequestMatches(paths, expectedToken)" in restore_region and
+            "AutoSettingsRobloxSessionActive(robloxProcess)" in restore_region,
+            "restore must recheck generation and Roblox under the mutex")
+
+    mutex_region = region(auto_settings_source, "AutoSettingsAcquireMutex(", "AutoSettingsNewGeneration() {")
+    require("CreateMutexW" in mutex_region and "WaitForSingleObject" in mutex_region and
+            "ReleaseMutex" in mutex_region,
+            "apply/restore lifecycle must use inter-process exclusion")
+    wait_region = auto_settings_source[auto_settings_source.index("WaitForRobloxExitAndRestore(expectedToken) {"):]
+    require(wait_region.count("AutoSettingsRestoreRequestMatches(paths, expectedToken)") >= 3,
+            "helper must repeatedly honor cancellation/generation changes")
+    require('Sleep(2000)' in wait_region and
+            wait_region.find('Sleep(2000)') < wait_region.rfind('AutoSettingsRobloxSessionActive("RobloxPlayerBeta.exe")'),
+            "helper must recheck Roblox after its grace delay")
+
+    require(auto_settings_source.count("A_IconHidden := true") == 1,
+            "including auto_settings.ahk must not hide the main tray icon")
+    standalone = region(auto_settings_source, "if (A_ScriptFullPath == A_LineFile) {", "AutoSettingsPaths(settingsPath := \"\") {")
+    require("A_IconHidden := true" in standalone,
+            "tray hiding is allowed only in standalone helper mode")
+    require("A_Args[1]" in standalone and "WaitForRobloxExitAndRestore(restoreToken)" in standalone,
+            "standalone helper must be bound to its restore generation")
+
+    for forbidden in ("MEMORY_IDLE_THRESHOLD", "WorkingSetSize", "GetRobloxHWND()"):
+        require(forbidden not in auto_settings_source,
+                f"unsafe early-restore heuristic remains: {forbidden}")
+    require(auto_settings_source.count("Win32_Process") == tray_guard.count("Win32_Process") == 1,
+            "Win32_Process inspection must be confined to the fail-closed Roblox tray classifier")
+
+    dll_targets = re.findall(r'DllCall\("([^"]+)"', main_source + auto_settings_source)
+    require(all("\\\\" not in target for target in dll_targets),
+            "runtime DllCall target contains a doubled generated separator")
+
+    scroll_watch = region(main_source, "ScrollDragWatch() {", "OnScroll(wp, lp, msg, hwnd) {")
+    require(scroll_watch.count("StopScrollDrag()") >= 3 and
+            "!WinExist(\"ahk_id \" childHwnd)" in scroll_watch and
+            "catch Error as err" in scroll_watch,
+            "scroll drag must stop on release, missing GUI, and WinGetPos failure")
+    require("SetTimer(ScrollDragWatch, 0)" in scroll_watch and "ScrollDragging := false" in scroll_watch,
+            "scroll cleanup must clear state and stop the 10 ms timer")
+
+    runtime_timers = region(main_source, "StopRuntimeTimers() {", "; Persistent application/UI timers")
+    application_timers = region(main_source, "StopApplicationTimers() {", "ReleaseHeldInput() {")
+    stop_strategy = region(main_source, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
+    require("ProcessCommands" not in runtime_timers,
+            "ordinary runtime cleanup must not stop the persistent Discord bot timer")
+    require("ProcessCommands" in application_timers and "CheckWebhookLink" in application_timers and
+            "CheckWebhookLink2" in application_timers and "StopScrollDrag()" in application_timers,
+            "application teardown must stop bot, debounce, and scrollbar callbacks")
+    require("StopRuntimeTimers()" in stop_strategy and "StopApplicationTimers()" not in stop_strategy,
+            "F2/record/strategy cleanup must preserve application timers")
+
+    require("TransformAutoSettingsXml(fixture)" in auto_settings_test and
+            "A legacy backup without provenance was accepted" in auto_settings_test and
+            "Semantically applied settings were rejected" in auto_settings_test and
+            "An unexpected managed setting was accepted" in auto_settings_test and
+            "Live managed-value reproduction did not fail closed" in auto_settings_test and
+            "Detailed classifier reason was missing from macro_error.log" in auto_settings_test and
+            "Repeated lifecycle reused stale backup provenance" in auto_settings_test and
+            "A superseded helper generation restored settings" in auto_settings_test,
+            "isolated AHK fixture does not cover semantic state, provenance, repetition, and generation")
+    bundled_ahk = root / "submacros/AutoHotkey64.exe"
+    with tempfile.TemporaryDirectory(prefix="ultimate-macro-ahk-fixture-") as fixture_dir:
+        result_path = Path(fixture_dir) / "result.txt"
+        result = subprocess.run(
+            [str(bundled_ahk), "/ErrorStdOut=UTF-8", str(root / "tests/test_auto_settings.ahk"), str(result_path)],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        fixture_result = result_path.read_text(encoding="utf-8-sig") if result_path.is_file() else ""
+        require(result.returncode == 0 and fixture_result == "Auto Settings behavioral fixtures: PASS",
+                "bundled AHK 2.0.12 Auto Settings behavioral fixture failed: " +
+                (fixture_result or result.stdout + result.stderr).strip())
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     main_source = read(root / "Main.ahk")
     image_source = read(root / "lib/ImageSearch/ImageSearch.ahk")
     watchdog_source = read(root / "submacros/watchdog.ahk")
+    auto_settings_source = read(root / "lib/auto_settings.ahk")
+    auto_settings_test = read(root / "tests/test_auto_settings.ahk")
     validator = read(root / "tests/validate_repo.py")
     workflow = read(root / ".github/workflows/ci.yml")
 
@@ -467,6 +779,9 @@ def main() -> int:
     validate_paths(main_source)
     validate_dj_watchdog_and_pr30(main_source, watchdog_source)
     validate_watchdog_pid_lifecycle(main_source)
+    validate_positive_backports(main_source)
+    validate_launch_failure_safety(main_source)
+    validate_auto_settings_hardening(root, main_source, auto_settings_source, auto_settings_test)
     validate_community_strategy_sync(main_source)
     validate_packaging(root, validator, workflow)
 
