@@ -525,6 +525,20 @@ def validate_positive_backports(main_source: str) -> None:
 def validate_auto_settings_hardening(
     root: Path, main_source: str, auto_settings_source: str, auto_settings_test: str
 ) -> None:
+    tray_guard = region(
+        auto_settings_source,
+        "AutoSettingsRobloxSessionActive(robloxProcess :=",
+        "ApplyMacroSettings(",
+    )
+    require("--launch-to-tray" in tray_guard and 'ComObjGet("winmgmts:")' in tray_guard,
+            "Auto Settings must distinguish Roblox's persistent tray launcher from a game session")
+    require("WMI/COM inspection failure must never make an active game look closed." in tray_guard and
+            "return true" in tray_guard,
+            "Roblox process inspection must fail closed")
+    require("Roblox tray command line was not recognized" in auto_settings_test and
+            "A normal Roblox command line was misclassified as tray-only" in auto_settings_test,
+            "AHK behavioral fixtures must cover Roblox tray command-line classification")
+
     require('global AutoConfigureSettings := IniRead(SettingsFile, "Options", "AutoConfigureSettings", 0)' in main_source,
             "Auto Settings must be opt-in by default for the first hardened release")
     require(main_source.count('global AutoEquip := IniRead(SettingsFile, "Options", "AutoEquip", 0)') == 1,
@@ -585,18 +599,32 @@ def validate_auto_settings_hardening(
     require("backupState.status = \"unknown\"" in apply_region and
             "Unknown Auto Settings backup was preserved" in apply_region,
             "apply must preserve and refuse unknown backups")
-    require("ProcessExist(robloxProcess)" in apply_region and
-            apply_region.rfind("ProcessExist(robloxProcess)") < apply_region.find("FileMove(paths.applyTemp"),
+    require("AutoSettingsRobloxSessionActive(robloxProcess)" in apply_region and
+            apply_region.rfind("AutoSettingsRobloxSessionActive(robloxProcess)") < apply_region.find("FileMove(paths.applyTemp"),
             "apply must recheck Roblox immediately before replacement")
 
+    classifier = region(auto_settings_source, "AutoSettingsClassifyCurrent(paths, backupState) {", "AutoSettingsWriteMetadata(")
+    require('status: "backup"' in classifier and 'status: "applied_exact"' in classifier and
+            'status: "applied_semantic"' in classifier and 'status: "foreign"' in classifier,
+            "current settings must distinguish exact, semantic, and foreign states")
+    require("AutoSettingsValidateFile(paths.settings, true)" in classifier and
+            classifier.find("backupState.appliedHash") < classifier.find("AutoSettingsValidateFile(paths.settings, true)"),
+            "semantic validation must be a fallback after exact identity checks")
+    require("AutoSettingsClassifierReason(currentState)" in classifier and
+            'RegExReplace(reason, "[\\r\\n\\t]+", " ")' in classifier and "SubStr(reason, 1, 300)" in classifier,
+            "foreign-state diagnostics must be detailed, single-line, and bounded")
+    require('Reason: "' in apply_region and "AutoSettingsClassifierReason(currentState)" in apply_region,
+            "apply failure must preserve the detailed classifier reason for every log sink")
+
     restore_region = region(auto_settings_source, "RestoreOriginalSettings(", "ResolveAutoSettingsHelperExe(")
-    require("currentHash != state.appliedHash && currentHash != state.backupHash" in restore_region,
-            "restore must refuse to overwrite settings outside known identities")
+    require("AutoSettingsClassifyCurrent(paths, state)" in restore_region and
+            'currentState.status = "foreign"' in restore_region,
+            "restore must fail closed when a managed setting is outside the macro target")
     require(restore_region.find("AutoSettingsFileSha256(paths.settings) != state.backupHash") <
             restore_region.find("FileDelete(paths.backup)"),
             "backup deletion must follow restored content-identity verification")
     require("AutoSettingsRestoreRequestMatches(paths, expectedToken)" in restore_region and
-            "ProcessExist(robloxProcess)" in restore_region,
+            "AutoSettingsRobloxSessionActive(robloxProcess)" in restore_region,
             "restore must recheck generation and Roblox under the mutex")
 
     mutex_region = region(auto_settings_source, "AutoSettingsAcquireMutex(", "AutoSettingsNewGeneration() {")
@@ -607,7 +635,7 @@ def validate_auto_settings_hardening(
     require(wait_region.count("AutoSettingsRestoreRequestMatches(paths, expectedToken)") >= 3,
             "helper must repeatedly honor cancellation/generation changes")
     require('Sleep(2000)' in wait_region and
-            wait_region.find('Sleep(2000)') < wait_region.rfind('ProcessExist("RobloxPlayerBeta.exe")'),
+            wait_region.find('Sleep(2000)') < wait_region.rfind('AutoSettingsRobloxSessionActive("RobloxPlayerBeta.exe")'),
             "helper must recheck Roblox after its grace delay")
 
     require(auto_settings_source.count("A_IconHidden := true") == 1,
@@ -618,9 +646,11 @@ def validate_auto_settings_hardening(
     require("A_Args[1]" in standalone and "WaitForRobloxExitAndRestore(restoreToken)" in standalone,
             "standalone helper must be bound to its restore generation")
 
-    for forbidden in ("MEMORY_IDLE_THRESHOLD", "Win32_Process", "WorkingSetSize", "GetRobloxHWND()"):
+    for forbidden in ("MEMORY_IDLE_THRESHOLD", "WorkingSetSize", "GetRobloxHWND()"):
         require(forbidden not in auto_settings_source,
                 f"unsafe early-restore heuristic remains: {forbidden}")
+    require(auto_settings_source.count("Win32_Process") == tray_guard.count("Win32_Process") == 1,
+            "Win32_Process inspection must be confined to the fail-closed Roblox tray classifier")
 
     dll_targets = re.findall(r'DllCall\("([^"]+)"', main_source + auto_settings_source)
     require(all("\\\\" not in target for target in dll_targets),
@@ -647,8 +677,13 @@ def validate_auto_settings_hardening(
 
     require("TransformAutoSettingsXml(fixture)" in auto_settings_test and
             "A legacy backup without provenance was accepted" in auto_settings_test and
+            "Semantically applied settings were rejected" in auto_settings_test and
+            "An unexpected managed setting was accepted" in auto_settings_test and
+            "Live managed-value reproduction did not fail closed" in auto_settings_test and
+            "Detailed classifier reason was missing from macro_error.log" in auto_settings_test and
+            "Repeated lifecycle reused stale backup provenance" in auto_settings_test and
             "A superseded helper generation restored settings" in auto_settings_test,
-            "isolated AHK behavioral fixture does not cover regex, provenance, and generation")
+            "isolated AHK fixture does not cover semantic state, provenance, repetition, and generation")
     bundled_ahk = root / "submacros/AutoHotkey64.exe"
     with tempfile.TemporaryDirectory(prefix="ultimate-macro-ahk-fixture-") as fixture_dir:
         result_path = Path(fixture_dir) / "result.txt"
