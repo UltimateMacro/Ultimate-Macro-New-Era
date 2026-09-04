@@ -1137,42 +1137,41 @@ global CurrentStratTabMode := ""
 SwitchStrategiesTab(mode) {
     global BtnCommStrats, BtnMyStrats, IsRenderingStrategies, CurrentStratTabMode
     
-    ; If the user clicks the tab that is already selected, do nothing.
-    if (CurrentStratTabMode == mode)
-        return
-        
     if (IsRenderingStrategies)
         return
         
     IsRenderingStrategies := true
-    CurrentStratTabMode := mode
     
-    CleanupRenderedBitmaps()
-    
-    if (mode == "Community") {
-        BtnCommStrats.IsSelected := true
-        BtnMyStrats.IsSelected := false
+    try {
+        CleanupRenderedBitmaps()
         
-        BtnCommStrats.Opt("Background222222")
-        BtnCommStrats.SetFont("c3A86FF Bold")
-        BtnMyStrats.Opt("Background0e0e0f")
-        BtnMyStrats.SetFont("cFFFFFF Norm")
-    } else {
-        BtnCommStrats.IsSelected := false
-        BtnMyStrats.IsSelected := true
+        if (mode == "Community") {
+            BtnCommStrats.IsSelected := true
+            BtnMyStrats.IsSelected := false
+            
+            BtnCommStrats.Opt("Background222222")
+            BtnCommStrats.SetFont("c3A86FF Bold")
+            BtnMyStrats.Opt("Background0e0e0f")
+            BtnMyStrats.SetFont("cFFFFFF Norm")
+        } else {
+            BtnCommStrats.IsSelected := false
+            BtnMyStrats.IsSelected := true
+            
+            BtnMyStrats.Opt("Background222222")
+            BtnMyStrats.SetFont("c3A86FF Bold")
+            BtnCommStrats.Opt("Background0e0e0f")
+            BtnCommStrats.SetFont("cFFFFFF Norm")
+        }
         
-        BtnMyStrats.Opt("Background222222")
-        BtnMyStrats.SetFont("c3A86FF Bold")
-        BtnCommStrats.Opt("Background0e0e0f")
-        BtnCommStrats.SetFont("cFFFFFF Norm")
+        BtnCommStrats.Redraw()
+        BtnMyStrats.Redraw()
+        
+        RenderStrategies(mode)
+        
+        CurrentStratTabMode := mode
+    } finally {
+        IsRenderingStrategies := false
     }
-    
-    BtnCommStrats.Redraw()
-    BtnMyStrats.Redraw()
-    
-    RenderStrategies(mode)
-    
-    IsRenderingStrategies := false
 }
 
 RenderStrategies(mode := "Community") {
@@ -2436,21 +2435,39 @@ UpdateStrategyButtons() {
         width := HasProp(ctrl, "IsSmallBtn") && ctrl.IsSmallBtn ? 145 : 220
         
         hBtnNormal := CreateGradientButton(width, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", btnText, UIFont(), isLoaded ? (width==145?10:12) : 14, 1)
-        hBtnHover := CreateGradientButton(width, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", btnText, UIFont(), isLoaded ? (width==145?10:12) : 14, 1)
+        if (!isLoaded)
+            hBtnHover := CreateGradientButton(width, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", btnText, UIFont(), isLoaded ? (width==145?10:12) : 14, 1)
+        else
+            hBtnHover := hBtnNormal
+
+        ; Dispose the old bitmaps and remove them from the tracking array safely
+        if (HasProp(ctrl, "ImgNormal") && ctrl.ImgNormal) {
+            i := RenderedBitmaps.Length
+            while (i > 0) {
+                if (RenderedBitmaps[i] == ctrl.ImgNormal)
+                    RenderedBitmaps.RemoveAt(i)
+                i--
+            }
+            DisposeBitmap(ctrl.ImgNormal)
+        }
+        if (HasProp(ctrl, "ImgHover") && ctrl.ImgHover && ctrl.ImgHover != ctrl.ImgNormal) {
+            i := RenderedBitmaps.Length
+            while (i > 0) {
+                if (RenderedBitmaps[i] == ctrl.ImgHover)
+                    RenderedBitmaps.RemoveAt(i)
+                i--
+            }
+            DisposeBitmap(ctrl.ImgHover)
+        }
 
         ; Register the new bitmaps to be cleaned up when tabs change
         RenderedBitmaps.Push(hBtnNormal)
         if (!isLoaded)
             RenderedBitmaps.Push(hBtnHover)
 
-        ; Dispose the old bitmaps
-        DisposeBitmap(ctrl.ImgNormal)
-        if (ctrl.ImgHover != ctrl.ImgNormal)
-            DisposeBitmap(ctrl.ImgHover)
-
         ; Apply to UI instantly without a full page refresh
         ctrl.ImgNormal := hBtnNormal
-        ctrl.ImgHover := isLoaded ? hBtnNormal : hBtnHover
+        ctrl.ImgHover := hBtnHover
         ctrl.PicControl.Value := "HBITMAP:*" hBtnNormal
     }
 }
@@ -2496,9 +2513,13 @@ DownloadStrat(ctrl, *) {
 }
 
 EditStratFile(ctrl, *) {
+    global CurrentScrollPos, CurrentStratTabMode
     stratToEdit := ctrl.StratFile
     if FileExist(stratToEdit) {
-        Run("notepad.exe `"" stratToEdit "`"")
+        RunWait("notepad.exe `"" stratToEdit "`"")
+        savedScroll := CurrentScrollPos
+        RenderStrategies(CurrentStratTabMode)
+        SetScrollPos(savedScroll)
     } else {
         MsgBox("Strategy file not found!`n" stratToEdit, "Error", 0x10)
     }
@@ -2766,6 +2787,8 @@ EnableStratRotation(*) {
         ; Keep Auto Settings alongside Auto Equip when rotation controls collapse.
         AutoConfigCtrl.Move(285, 190)
     }
+    
+    UpdateStrategyButtons()
 }
 
 EnableAutoEquip(ctrl, *) {
@@ -2816,8 +2839,10 @@ SelectStrat1(ctrl, *) {
         Strategy1Path := f
         IniWrite(f, SettingsFile, "Options", "Strategy1")
         LoadStrategyFile(f)
+        UpdateStrategyButtons()
     }
 }
+
 SelectStrat2(ctrl, *) {
     global Strategy2Path
     targDir := RecordingsDir
@@ -2830,6 +2855,7 @@ SelectStrat2(ctrl, *) {
         Strategy2Ctrl.Value := f
         Strategy2Path := f
         IniWrite(f, SettingsFile, "Options", "Strategy2")
+        UpdateStrategyButtons()
     }
 }
 ClearStrat1(ctrl, *) {
@@ -2847,16 +2873,23 @@ ClearStrat2(ctrl, *) {
     IniWrite(" ", SettingsFile, "Options", "Strategy2")
     UpdateStrategyButtons()
 }
+
 SaveStrat1(ctrl, *) {
     global Strategy1Path, Strategy1Ctrl
     Strategy1Path := Strategy1Ctrl.Text
     IniWrite(Strategy1Ctrl.Text, SettingsFile, "Options", "Strategy1")
+    SetTimer(DebouncedUpdateStrategyButtons, -500)
 }
 
 SaveStrat2(ctrl, *) {
     global Strategy2Path, Strategy2Ctrl
     Strategy2Path := Strategy2Ctrl.Text
     IniWrite(Strategy2Ctrl.Text, SettingsFile, "Options", "Strategy2")
+    SetTimer(DebouncedUpdateStrategyButtons, -500)
+}
+
+DebouncedUpdateStrategyButtons() {
+    UpdateStrategyButtons()
 }
 
 StartStrategy(*) {
