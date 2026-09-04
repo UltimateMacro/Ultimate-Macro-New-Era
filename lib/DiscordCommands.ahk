@@ -232,7 +232,9 @@ SelectBotStrategy(argument) {
         return
     }
 
-    if (BotStrategyChoices.Length = 0 || A_TickCount - BotStrategyChoiceTime > 300000) {
+    if (!IsSet(BotStrategyChoices) || !IsObject(BotStrategyChoices)
+        || BotStrategyChoices.Length = 0 || !IsSet(BotStrategyChoiceTime)
+        || A_TickCount - BotStrategyChoiceTime > 300000) {
         Discord.SendEmbed("The strategy list expired. Request it again before choosing.")
         ListBotStrategies()
         return
@@ -253,9 +255,12 @@ SelectBotStrategy(argument) {
     Strategy1Path := selected.path
     Strategy2Path := ""
     RotateStrategies := 0
-    Strategy1Ctrl.Value := selected.path
-    Strategy2Ctrl.Value := ""
-    RotateStrategiesCtrl.Value := 0
+    if IsSet(Strategy1Ctrl)
+        Strategy1Ctrl.Value := selected.path
+    if IsSet(Strategy2Ctrl)
+        Strategy2Ctrl.Value := ""
+    if IsSet(RotateStrategiesCtrl)
+        RotateStrategiesCtrl.Value := 0
     IniWrite(Strategy1Path, SettingsFile, "Options", "Strategy1")
     IniWrite(Strategy2Path, SettingsFile, "Options", "Strategy2")
     IniWrite(0, SettingsFile, "Options", "RotateStrategies")

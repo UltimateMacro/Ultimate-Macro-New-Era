@@ -118,6 +118,8 @@ BootstrapPinnedSourceDependencies() {
 }
 
 command_buffer := []
+global BotStrategyChoices := []
+global BotStrategyChoiceTime := 0
 
 ver := "1.3.4"
 
