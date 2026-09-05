@@ -415,7 +415,7 @@ def validate_official_remote(root: Path, main: str) -> None:
     assert "Official Remote" in main
     assert "Tab4_RemoteConsent" in main
     assert "OfficialRemoteShutdown()" in main
-    assert 'global ClientVersion := "1.3.4"' in worker
+    assert 'global ClientVersion := "1.3.4a"' in worker
     assert "CryptProtectData" in worker
     assert "CryptUnprotectData" in worker
     assert "GetOrCreateInstallId" in worker

@@ -141,7 +141,7 @@ function Assert-RuntimePayload([string]$Root) {
 
 function Assert-PayloadVersion([string]$Root, [string]$Expected) {
     $expectedNormalized = Normalize-VersionLabel $Expected
-    if ($expectedNormalized -notmatch '^\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$') {
+    if ($expectedNormalized -notmatch '^\d+(?:\.\d+){1,3}(?:[A-Za-z]|[-+][0-9A-Za-z.-]+)?$') {
         throw "Invalid expected release version: $Expected"
     }
 

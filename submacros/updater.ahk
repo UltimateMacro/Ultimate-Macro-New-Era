@@ -113,8 +113,10 @@ NormalizeMacroVersion(version) {
 }
 
 CompareMacroVersions(leftVersion, rightVersion) {
-    leftCore := RegExReplace(NormalizeMacroVersion(leftVersion), "[^0-9.].*$", "")
-    rightCore := RegExReplace(NormalizeMacroVersion(rightVersion), "[^0-9.].*$", "")
+    leftNormalized := NormalizeMacroVersion(leftVersion)
+    rightNormalized := NormalizeMacroVersion(rightVersion)
+    leftCore := RegExReplace(leftNormalized, "[^0-9.].*$", "")
+    rightCore := RegExReplace(rightNormalized, "[^0-9.].*$", "")
 
     left := StrSplit(leftCore, ".")
     right := StrSplit(rightCore, ".")
@@ -130,7 +132,15 @@ CompareMacroVersions(leftVersion, rightVersion) {
             return -1
     }
 
-    return 0
+    leftSuffix := SubStr(leftNormalized, StrLen(leftCore) + 1)
+    rightSuffix := SubStr(rightNormalized, StrLen(rightCore) + 1)
+    if (leftSuffix = rightSuffix)
+        return 0
+    if (leftSuffix = "")
+        return -1
+    if (rightSuffix = "")
+        return 1
+    return StrCompare(leftSuffix, rightSuffix, false)
 }
 
 QuoteArg(value) {
