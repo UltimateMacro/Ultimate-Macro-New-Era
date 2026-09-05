@@ -10,12 +10,17 @@
 - Custom DJ disc schedules by wave or wave range, such as `18-20:Red;21-30:Green`.
 - Adjustable map-menu, typing, and result-detection delays in Advanced Settings.
 - Live wave reporting in Official Remote status.
+- An in-macro Smart Goals assistant backed by the linked, authenticated ULT Bot service.
+- A dedicated visual Guide tab with setup and troubleshooting guidance.
+- A safe recorded-strategy editor launcher in Tools.
 
 ### Fixed
 
 - Community strategy cards now ask which rotation slot to replace and load that selected slot immediately.
 - Generated GUI bitmap handles are tracked and released during shutdown, including hover images that previously had no owner.
 - Unknown in-game startup states fall back safely instead of blindly continuing inputs.
+- Official Remote privacy and consent controls no longer overlap at standard window sizes.
+- Smart Goals no longer requires manually entering every owned tower.
 
 ### Security and privacy
 

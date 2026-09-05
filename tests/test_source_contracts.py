@@ -432,6 +432,12 @@ def validate_official_remote(root: Path, main: str) -> None:
     assert '"X-ULT-Install-ID"' in worker
     assert "rotateToken" in worker
     assert "Tab4_RemoteConsent.Value" in bridge
+    assert '"/v1/remote/assistant"' in worker
+    assert "OfficialRemoteAsk(prompt)" in bridge
+    assert 'tabNames := ["Main", "Record", "Party", "Discord", "Settings", "Tools", "Guide", "Credits"]' in main
+    assert "Guide_TroubleTitle" in main
+    assert "AskGoalAssistant(promptCtrl, answerCtrl, askBtn)" in main
+    assert "OpenRecordedStrategyEditor(*)" in main
     assert not re.search(r"(?im)^\s*buffer\s*:=\s*Buffer\(", worker), (
         "a local named buffer shadows AutoHotkey v2's case-insensitive Buffer constructor"
     )

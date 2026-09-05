@@ -844,23 +844,23 @@ global DiscordRemoteTab := []
 global DiscordPage := "Webhook"
 ;==
 
-tabNames := ["Main", "Record", "(Beta) Party", "Discord", "Settings", "Tools", "Credits"]
+tabNames := ["Main", "Record", "Party", "Discord", "Settings", "Tools", "Guide", "Credits"]
 
 loop tabNames.Length {
     i := A_Index
-    xTab := 20 + (i - 1) * 90
+    xTab := 20 + (i - 1) * 82
 
-    hBg := MainGui.Add("Progress", "x" xTab " y43 w80 h34 Hidden Background222222 Disabled")
+    hBg := MainGui.Add("Progress", "x" xTab " y43 w74 h34 Hidden Background222222 Disabled")
     HoverTab.Push(hBg)
     SystemHwnds[hBg.Hwnd] := true
 
-    t := MainGui.Add("Text", "x" xTab " y52 w80 h22 Center BackgroundTrans", tabNames[i])
+    t := MainGui.Add("Text", "x" xTab " y52 w74 h22 Center BackgroundTrans", tabNames[i])
     t.OnEvent("Click", SelectTab)
     TabCtrl.Push(t)
     SystemHwnds[t.Hwnd] := true
 }
 
-global TabLine := MainGui.Add("Progress", "x20 y75 w80 h2 BackgroundFFFFFF", 0)
+global TabLine := MainGui.Add("Progress", "x20 y75 w74 h2 BackgroundFFFFFF", 0)
 SystemHwnds[TabLine.Hwnd] := true
 
 sysLine2 := MainGui.Add("Progress", "x0 y77 w700 h1 Background222222", 0)
@@ -1573,12 +1573,12 @@ global Tab4_RemoteCodeLabel := MainGui.Add("Text", "x30 y270 w250 h20 Hidden", "
 MainGui.SetFont("s10 w400 c000000", UIFont())
 global Tab4_RemoteCodeCtrl := MainGui.Add("Edit", "x30 y294 w640 h30 Hidden")
 MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
-global Tab4_RemoteSecurity := MainGui.Add("Text", "x30 y334 w640 h22 Hidden",
+global Tab4_RemoteSecurity := MainGui.Add("Text", "x30 y334 w640 h38 +Wrap Hidden",
     "Privacy: stores a random installation ID, Discord ID, version, link/active times, online status, and aggregated coin/gem gains. No HWID.")
 MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
-global Tab4_RemoteConsent := MainGui.Add("Checkbox", "x30 y360 w640 h22 Hidden", "I consent to this limited device data and 30-day security-event retention.")
-global Tab4_RemoteStatus := MainGui.Add("Text", "x30 y455 w640 h28 Center Hidden", "Not linked")
-global Tab4_RemoteConnectBtn := MakeActionButton(MainGui, 180, 400, 340, 40, "Link This PC", OfficialRemoteConnectFromControls, "accent", true)
+global Tab4_RemoteConsent := MainGui.Add("Checkbox", "x30 y378 w640 h22 Hidden", "I consent to this limited device data and 30-day security-event retention.")
+global Tab4_RemoteStatus := MainGui.Add("Text", "x30 y472 w640 h28 Center Hidden", "Not linked")
+global Tab4_RemoteConnectBtn := MakeActionButton(MainGui, 180, 420, 340, 40, "Link This PC", OfficialRemoteConnectFromControls, "accent", true)
 
 DiscordRemoteTab.Push(Tab4_RemoteHeading, Tab4_RemoteInfo, Tab4_RemoteCodeLabel, Tab4_RemoteCodeCtrl,
     Tab4_RemoteSecurity, Tab4_RemoteConsent, Tab4_RemoteStatus, Tab4_RemoteConnectBtn)
@@ -1803,6 +1803,7 @@ global ProfileExportBtn := MakeActionButton(MainGui, 30, 365, 200, 38, "Export P
 global ProfileImportBtn := MakeActionButton(MainGui, 250, 365, 200, 38, "Import Profile", ImportProfile, "neutral", true)
 global ProfileManagerBtn := MakeActionButton(MainGui, 470, 365, 200, 38, "Manage Profiles", ProfileManager, "neutral", true)
 global GoalManagerBtn := MakeActionButton(MainGui, 250, 430, 200, 38, "Goals & Smart Strategy", OpenGoalManager, "accent", true)
+global StrategyEditorBtn := MakeActionButton(MainGui, 470, 430, 200, 38, "Edit Recorded Strategy", OpenRecordedStrategyEditor, "neutral", true)
 
 global Auto_COA := MainGui.Add("Picture", "x30 y125 w197 h176 Hidden", "Resources/Gui/auto_coa_preview.png")
 
@@ -1817,7 +1818,26 @@ global Auto_Consum := MainGui.Add("Picture", "x450 y125 w200 h140 Hidden",
 
 Auto_Consum.OnEvent("Click", RunAutoConsumableTool)
 
-; tab 7 - credits ===========================
+; tab 7 - guide =============================
+
+MainGui.SetFont("s18 bold cFFFFFF", UIFont())
+global Guide_Title := MainGui.Add("Text", "x30 y96 w640 h32 Hidden", "Getting Started")
+MainGui.SetFont("s10 w400 cAAAAAA", UIFont())
+global Guide_Intro := MainGui.Add("Text", "x30 y132 w640 h44 +Wrap Hidden", "1. Use 1920x1080, 100% Windows scaling and Large TDS UI.  2. Pick or record a strategy.  3. Run Preflight, then Start. Keep Roblox chat closed and screen shake off.")
+global Guide_Line := MainGui.Add("Progress", "x30 y180 w640 h1 Hidden Background333333", 0)
+global Guide_Image1 := MainGui.Add("Picture", "x30 y195 w190 h135 Hidden", "Resources/Gui/auto_coa_preview.png")
+global Guide_Image2 := MainGui.Add("Picture", "x255 y195 w190 h135 Hidden", "Resources/Gui/auto_spin_preview.png")
+global Guide_Image3 := MainGui.Add("Picture", "x480 y195 w190 h135 Hidden", "Resources/Gui/auto_open_consumable_preview.png")
+MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
+global Guide_Caption1 := MainGui.Add("Text", "x30 y336 w190 h38 Center +Wrap Hidden", "Choose a strategy and verify its required towers.")
+global Guide_Caption2 := MainGui.Add("Text", "x255 y336 w190 h38 Center +Wrap Hidden", "Use Record to create and edit your own strategy.")
+global Guide_Caption3 := MainGui.Add("Text", "x480 y336 w190 h38 Center +Wrap Hidden", "Connect Official Remote for private controls and AI help.")
+MainGui.SetFont("s10 bold c3A86FF", UIFont())
+global Guide_TroubleTitle := MainGui.Add("Text", "x30 y390 w640 h24 Hidden", "Troubleshooting checklist")
+MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
+global Guide_Trouble := MainGui.Add("Text", "x30 y418 w640 h92 +Wrap Hidden", "Update Windows and graphics drivers. Confirm Roblox is visible, OCR English is installed, display scaling is 100%, resolution is supported, the taskbar is visible, and no multi-client tool is open. Export diagnostic logs from Tools when reporting a repeatable issue.")
+
+; tab 8 - credits ===========================
 
 MainGui.SetFont("s18 bold cFFFFFF", UIFont())
 global Credit_TITLE := MainGui.Add("Text", "x30 y95 w640 Hidden Center", "Ultimate Macro")
@@ -1935,8 +1955,8 @@ SelectTab(ctrl, *) {
     CurrentTab := newTab
     TabCtrl[idx].SetFont("cFFFFFF")
 
-    newX := 20 + (idx - 1) * 90
-    TabLine.Move(newX, , 80)
+    newX := 20 + (idx - 1) * 82
+    TabLine.Move(newX, , 74)
 
     ShowTabContent(newTab)
 }
@@ -2278,9 +2298,13 @@ ShowTabContent(tab) {
 
     } else if (tab = "Tab6") {
         for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Tools_Profiles_Section, Tools_Profiles_Line,
-            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, GoalManagerBtn, Auto_COA, Auto_Spin, Auto_Consum]
+            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, GoalManagerBtn, StrategyEditorBtn, Auto_COA, Auto_Spin, Auto_Consum]
             ShowControl(ctrl)
     } else if (tab = "Tab7") {
+        for ctrl in [Guide_Title, Guide_Intro, Guide_Line, Guide_Image1, Guide_Image2, Guide_Image3,
+            Guide_Caption1, Guide_Caption2, Guide_Caption3, Guide_TroubleTitle, Guide_Trouble]
+            ShowControl(ctrl)
+    } else if (tab = "Tab8") {
         Credit_Content.Visible := true
         Credit_Info.Visible := true
         Credit_Support.Visible := true
@@ -2922,24 +2946,55 @@ StartStrategy(*) {
 }
 
 OpenGoalManager(*) {
-    global MainGui, GoalType, GoalTarget, OwnedTowers, GoalEnabled
-    goalGui := Gui("+Owner" MainGui.Hwnd " +Border", "Goals & Smart Strategy")
+    global MainGui, GoalType, GoalTarget, GoalEnabled
+    goalGui := Gui("+Owner" MainGui.Hwnd " +Border", "Smart Goals Assistant")
     goalGui.BackColor := "121212"
     goalGui.SetFont("s10 cFFFFFF", UIFont())
-    goalGui.Add("Text", "x20 y18 w420", "Choose a measurable grind goal. The macro ranks compatible strategies by reward and estimated time.")
-    goalGui.Add("Text", "x20 y62 w100", "Goal type")
-    typeCtrl := goalGui.Add("DropDownList", "x130 y58 w180", ["Coins", "Gems"])
+    goalGui.Add("Text", "x20 y16 w520 h38 +Wrap", "Tell the assistant what you want to grind, or set a goal directly. Tower entry is no longer required; all downloaded strategies are considered.")
+    promptCtrl := goalGui.Add("Edit", "x20 y62 w440 h30", "")
+    askBtn := goalGui.Add("Button", "x470 y62 w70 h30", "Ask AI")
+    answerCtrl := goalGui.Add("Edit", "x20 y102 w520 h86 Multi ReadOnly +VScroll -Wrap Background1B1B1B", "Ask for a recommended mode, strategy, setup, or troubleshooting help.")
+    goalGui.Add("Text", "x20 y205 w100", "Goal type")
+    typeCtrl := goalGui.Add("DropDownList", "x130 y201 w180", ["Coins", "Gems"])
     typeCtrl.Text := GoalType
-    goalGui.Add("Text", "x20 y102 w100", "Amount to gain")
-    targetCtrl := goalGui.Add("Edit", "x130 y98 w180 Number", GoalTarget > 0 ? GoalTarget : "")
-    goalGui.Add("Text", "x20 y142 w420", "Owned towers (comma-separated; leave blank to allow every strategy)")
-    ownedCtrl := goalGui.Add("Edit", "x20 y166 w420", OwnedTowers)
-    statusCtrl := goalGui.Add("Text", "x20 y205 w420 h45 cAAAAAA", GoalEnabled ? "A goal is active. Saving replaces it." : "No active goal.")
-    saveBtn := goalGui.Add("Button", "x20 y260 w200 h34", "Choose strategy & save")
-    cancelBtn := goalGui.Add("Button", "x240 y260 w200 h34", "Disable goal")
-    saveBtn.OnEvent("Click", (*) => SaveGoalFromGui(goalGui, typeCtrl, targetCtrl, ownedCtrl, statusCtrl))
+    goalGui.Add("Text", "x20 y245 w100", "Amount to gain")
+    targetCtrl := goalGui.Add("Edit", "x130 y241 w180 Number", GoalTarget > 0 ? GoalTarget : "")
+    statusCtrl := goalGui.Add("Text", "x20 y286 w520 h44 cAAAAAA +Wrap", GoalEnabled ? "A goal is active. Saving replaces it." : "No active goal. Smart selection uses compatible reward and duration data from downloaded strategies.")
+    saveBtn := goalGui.Add("Button", "x20 y342 w250 h38", "Choose best strategy & save")
+    cancelBtn := goalGui.Add("Button", "x290 y342 w250 h38", "Disable goal")
+    askBtn.OnEvent("Click", (*) => AskGoalAssistant(promptCtrl, answerCtrl, askBtn))
+    saveBtn.OnEvent("Click", (*) => SaveGoalFromGui(goalGui, typeCtrl, targetCtrl, statusCtrl))
     cancelBtn.OnEvent("Click", (*) => DisableGoal(goalGui))
-    goalGui.Show("w460 h315")
+    goalGui.Show("w560 h400")
+}
+
+OpenRecordedStrategyEditor(*) {
+    global RecordingsDir
+    selected := FileSelect(1, RecordingsDir, "Choose a recorded strategy to edit", "Strategy files (*.strat)")
+    if (selected = "")
+        return
+    if !FileExist(selected) {
+        ModernMsgBox("Strategy Editor", "That strategy file no longer exists.", "OK", "WARNING")
+        return
+    }
+    Run('notepad.exe "' selected '"')
+}
+
+AskGoalAssistant(promptCtrl, answerCtrl, askBtn) {
+    prompt := Trim(promptCtrl.Value)
+    if (prompt = "") {
+        answerCtrl.Value := "Type what you want help with first."
+        return
+    }
+    askBtn.Enabled := false
+    answerCtrl.Value := "Thinking..."
+    try {
+        answerCtrl.Value := OfficialRemoteAsk(prompt)
+    } catch Error as err {
+        answerCtrl.Value := "Could not reach the assistant: " SubStr(err.Message, 1, 220)
+    } finally {
+        askBtn.Enabled := true
+    }
 }
 
 NormalizeTowerName(value) {
@@ -2997,20 +3052,20 @@ FindBestGoalStrategy(goalType, owned) {
     return bestPath
 }
 
-SaveGoalFromGui(goalGui, typeCtrl, targetCtrl, ownedCtrl, statusCtrl) {
+SaveGoalFromGui(goalGui, typeCtrl, targetCtrl, statusCtrl) {
     global GoalEnabled, GoalType, GoalTarget, GoalStrategy, OwnedTowers, Strategy1Path, Strategy1Ctrl, SettingsFile
     if !IsNumber(targetCtrl.Value) || Integer(targetCtrl.Value) <= 0 {
         statusCtrl.Text := "Enter a positive target amount."
         return
     }
-    chosen := FindBestGoalStrategy(typeCtrl.Text, ownedCtrl.Value)
+    chosen := FindBestGoalStrategy(typeCtrl.Text, "")
     if (chosen = "") {
         statusCtrl.Text := "No compatible strategy with matching reward data was found."
         return
     }
     GoalType := typeCtrl.Text
     GoalTarget := Integer(targetCtrl.Value)
-    OwnedTowers := Trim(ownedCtrl.Value)
+    OwnedTowers := ""
     GoalStrategy := chosen
     GoalEnabled := 1
     Strategy1Path := chosen

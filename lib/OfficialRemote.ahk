@@ -102,6 +102,34 @@ OfficialRemoteConnectFromControls(ctrl, *) {
     }
 }
 
+OfficialRemoteAsk(prompt) {
+    worker := OfficialRemoteWorkerPath()
+    if !FileExist(worker)
+        throw Error("Official Remote files are missing.")
+    if (Trim(prompt) = "")
+        throw Error("Type a question first.")
+    dir := OfficialRemoteDir()
+    nonce := A_TickCount "-" Random(100000, 999999)
+    inputPath := dir "\assistant-input-" nonce ".txt"
+    resultPath := dir "\assistant-result-" nonce ".txt"
+    try {
+        FileAppend(SubStr(Trim(prompt), 1, 1000), inputPath, "UTF-8")
+        RunWait('"' A_AhkPath '" "' worker '" ask-file "' inputPath '" "' resultPath '"', A_ScriptDir, "Hide")
+        if !FileExist(resultPath)
+            throw Error("The assistant did not return a result.")
+        result := FileRead(resultPath, "UTF-8")
+        separator := InStr(result, "`n")
+        state := separator ? Trim(SubStr(result, 1, separator - 1), " `t`r`n") : "ERROR"
+        message := separator ? Trim(SubStr(result, separator + 1), " `t`r`n") : Trim(result)
+        if (state != "OK")
+            throw Error(message != "" ? message : "The assistant is unavailable.")
+        return message
+    } finally {
+        try FileDelete(inputPath)
+        try FileDelete(resultPath)
+    }
+}
+
 OfficialRemoteProcessCommands(*) {
     dir := OfficialRemoteDir()
     Loop Files, dir "\command-*.json", "F" {
