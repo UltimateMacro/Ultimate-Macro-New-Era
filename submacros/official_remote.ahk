@@ -240,10 +240,10 @@ Base64Decode(value) {
     size := 0
     if !DllCall("Crypt32\CryptStringToBinaryW", "Str", value, "UInt", 0, "UInt", 1, "Ptr", 0, "UIntP", &size, "Ptr", 0, "Ptr", 0)
         throw Error("The connection code could not be decoded.")
-    buffer := Buffer(size)
-    if !DllCall("Crypt32\CryptStringToBinaryW", "Str", value, "UInt", 0, "UInt", 1, "Ptr", buffer.Ptr, "UIntP", &size, "Ptr", 0, "Ptr", 0)
+    decodedBytes := Buffer(size)
+    if !DllCall("Crypt32\CryptStringToBinaryW", "Str", value, "UInt", 0, "UInt", 1, "Ptr", decodedBytes.Ptr, "UIntP", &size, "Ptr", 0, "Ptr", 0)
         throw Error("The connection code could not be decoded.")
-    return buffer
+    return decodedBytes
 }
 
 Base64EncodeFile(path) {
@@ -254,13 +254,13 @@ Base64EncodeFile(path) {
         file.Close()
         throw Error("Screenshot is too large to send.")
     }
-    buffer := Buffer(file.Length)
-    file.RawRead(buffer)
+    fileBytes := Buffer(file.Length)
+    file.RawRead(fileBytes)
     file.Close()
     chars := 0
-    DllCall("Crypt32\CryptBinaryToStringW", "Ptr", buffer, "UInt", buffer.Size, "UInt", 0x40000001, "Ptr", 0, "UIntP", &chars)
+    DllCall("Crypt32\CryptBinaryToStringW", "Ptr", fileBytes, "UInt", fileBytes.Size, "UInt", 0x40000001, "Ptr", 0, "UIntP", &chars)
     output := Buffer(chars * 2)
-    if !DllCall("Crypt32\CryptBinaryToStringW", "Ptr", buffer, "UInt", buffer.Size, "UInt", 0x40000001, "Ptr", output, "UIntP", &chars)
+    if !DllCall("Crypt32\CryptBinaryToStringW", "Ptr", fileBytes, "UInt", fileBytes.Size, "UInt", 0x40000001, "Ptr", output, "UIntP", &chars)
         throw Error("Could not encode the screenshot.")
     return StrGet(output, "UTF-16")
 }

@@ -422,6 +422,11 @@ def validate_official_remote(root: Path, main: str) -> None:
     assert '"X-ULT-Install-ID"' in worker
     assert "rotateToken" in worker
     assert "Tab4_RemoteConsent.Value" in bridge
+    assert not re.search(r"(?im)^\s*buffer\s*:=\s*Buffer\(", worker), (
+        "a local named buffer shadows AutoHotkey v2's case-insensitive Buffer constructor"
+    )
+    assert "decodedBytes := Buffer(size)" in worker
+    assert "fileBytes := Buffer(file.Length)" in worker
 
 
 def validate(root: Path) -> None:
