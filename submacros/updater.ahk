@@ -5,7 +5,7 @@ if (A_LineFile = A_ScriptFullPath)
     ExitApp()
 
 CheckForUpdate(currentVer) {
-    static ReleaseApi := "https://api.github.com/repos/DarksenDev/tds-macro/releases/latest"
+    static ReleaseApi := "https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era/releases/latest"
     static PreferredAsset := "TDS_Macro.zip"
 
     try {
@@ -25,7 +25,7 @@ CheckForUpdate(currentVer) {
             return 0
 
         latestTag := release["tag_name"]
-        if !RegExMatch(latestTag, "i)^v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$")
+       if !RegExMatch(latestTag, "i)^v?\d+(?:\.\d+){1,3}(?:[A-Za-z]|[-+][0-9A-Za-z.-]+)?$")
             return 0
 
         latestVer := NormalizeMacroVersion(latestTag)
@@ -44,8 +44,8 @@ CheckForUpdate(currentVer) {
 
                 candidateURL := asset["browser_download_url"]
                 candidateDigest := asset["digest"]
-                if !RegExMatch(candidateURL,
-                    "i)^https://github\.com/DarksenDev/tds-macro/releases/download/")
+               if !RegExMatch(candidateURL,
+    "i)^https://github\.com/UltimateMacro/Ultimate-Macro-New-Era/releases/download/")
                     continue
                 if !RegExMatch(candidateDigest, "i)^sha256:[0-9a-f]{64}$")
                     continue
