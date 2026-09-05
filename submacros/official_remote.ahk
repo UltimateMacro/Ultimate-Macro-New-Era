@@ -43,7 +43,7 @@ SetupOfficialRemote(connectionCode := "", interactive := true) {
         if !interactive
             return Map("ok", false, "message", "Paste the private connection code first.")
         prompt := InputBox(
-            "By linking, you consent to storing a random installation ID, Discord ID, macro version, link/active times, and online status. No hardware ID is collected; security events expire after 30 days.`n`nPaste the private /remote link code. Never share it.",
+            "By linking, you consent to storing a random installation ID, Discord ID, macro version, link/active times, online status, and aggregated coin/gem gains. No hardware ID is collected; security events expire after 30 days.`n`nPaste the private /remote link code. Never share it.",
             "Ultimate Macro Remote Control",
             "w620 h170"
         )
@@ -70,6 +70,7 @@ SetupOfficialRemote(connectionCode := "", interactive := true) {
         if !parsed.Has("token")
             throw Error(parsed.Has("error") ? parsed["error"] : "The bot did not accept the code.")
         IniWrite(baseUrl, RemoteSettings, "Remote", "BaseUrl")
+        IniWrite(1, RemoteSettings, "Remote", "EconomyConsent")
         SaveProtectedToken(parsed["token"])
         message := "Linked successfully. Keep Ultimate Macro open for remote commands."
         if interactive {
@@ -93,7 +94,14 @@ RunWorker() {
         ExitApp()
     loop {
         try {
-            response := RemoteRequest("GET", baseUrl "/v1/remote/poll", "", token, 40000, installId)
+            pollUrl := baseUrl "/v1/remote/poll"
+            if (IniRead(RemoteSettings, "Remote", "EconomyConsent", "0") = "1") {
+                stateFile := A_AppData "\Ultimate_Macro\state.ini"
+                coins := Max(0, Integer(IniRead(stateFile, "State", "Coins", 0)))
+                gems := Max(0, Integer(IniRead(stateFile, "State", "Gems", 0)))
+                pollUrl .= "?coins=" coins "&gems=" gems
+            }
+            response := RemoteRequest("GET", pollUrl, "", token, 40000, installId)
             parsed := JSON.parse(response)
             if parsed.Has("rotateToken") && Trim(parsed["rotateToken"]) != "" {
                 token := parsed["rotateToken"]

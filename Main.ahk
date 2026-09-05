@@ -1564,7 +1564,7 @@ MainGui.SetFont("s10 w400 c000000", UIFont())
 global Tab4_RemoteCodeCtrl := MainGui.Add("Edit", "x30 y294 w640 h30 Hidden")
 MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
 global Tab4_RemoteSecurity := MainGui.Add("Text", "x30 y334 w640 h22 Hidden",
-    "Privacy: stores a random installation ID, Discord ID, version, link/active times and online status. No HWID.")
+    "Privacy: stores a random installation ID, Discord ID, version, link/active times, online status, and aggregated coin/gem gains. No HWID.")
 MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
 global Tab4_RemoteConsent := MainGui.Add("Checkbox", "x30 y360 w640 h22 Hidden", "I consent to this limited device data and 30-day security-event retention.")
 global Tab4_RemoteStatus := MainGui.Add("Text", "x30 y455 w640 h28 Center Hidden", "Not linked")
