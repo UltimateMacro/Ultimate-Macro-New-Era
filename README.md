@@ -1,6 +1,6 @@
 # Ultimate Macro: The New Era 🚀
 
-> **⚠️ For the recommended ready-to-use package, download `TDS_Macro.zip` from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).**
+> **⚠️ For the recommended ready-to-use package, download `TDS_Macro.zip` from the [official releases](https://github.com/DarksenDev/tds-macro/releases).**
 
 **Ultimate Macro: The New Era** is the continuation of Ultimate Macro, a free and open-source automation tool for **Roblox Tower Defense Simulator**.
 
@@ -24,7 +24,7 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 - Potato Mode and Legacy Mode
 - 1.5x and 2x timescale support
 - Discord webhooks with stats, screenshots, and logs
-- Discord Bot remote control
+- Official Discord Remote Control with private slash-command responses, encrypted device tokens, and per-account PC linking
 - And much more
 
 ## 💻 Requirements
@@ -41,20 +41,18 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 
 ## 📥 Installation
 
-1. Download `TDS_Macro.zip` from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases), or use **Code → Download ZIP** on the production [`main` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era)
+1. Download `TDS_Macro.zip` from the [official releases](https://github.com/DarksenDev/tds-macro/releases)
 2. Extract all files
 3. Install **AutoHotkey v2.0**
 4. Run `Main.ahk`
 5. Configure your strategy and start the macro
 
-## 🛠️ Production and development
+## 🛠️ Release, tester and development
 
-- **Production/runtime:** the `main` branch contains only the files required to
-  run the macro. Official packaged releases are published separately in
-  [`UltimateMacro/Ultimate-Macro-New-Era`](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
-- **Development/source:** source tooling, tests, CI configuration, QA guidance,
-  and contributor documentation are available on the
-  [`dev` branch](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/tree/dev).
+- **Tester/runtime:** the `main` branch contains the current runtime candidate used for tester QA.
+- **Public releases:** official packaged releases are published in
+  [`DarksenDev/tds-macro`](https://github.com/DarksenDev/tds-macro/releases).
+- **Development/source:** `main` contains the promoted v1.3.4 source and release candidate; ongoing changes continue through reviewed development branches.
 - Community strategies refresh automatically only in extracted release trees.
   Git checkouts and linked worktrees intentionally keep their tracked strategy
   inventory unchanged; developers update them through reviewed Git changes.

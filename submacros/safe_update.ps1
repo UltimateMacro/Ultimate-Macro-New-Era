@@ -124,6 +124,7 @@ function Assert-RuntimePayload([string]$Root) {
         'lib\JSON.ahk',
         'lib\Roblox.ahk',
         'lib\Discord.ahk',
+        'lib\auto_settings.ahk',
         'submacros\updater.ahk',
         'submacros\update.bat',
         'submacros\safe_update.ps1',

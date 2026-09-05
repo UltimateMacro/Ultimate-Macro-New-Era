@@ -53,8 +53,12 @@ if (A_PtrSize == 4) {
 #Include lib\ImageSearch\ImageSearch.ahk
 #Include *i lib\JSON.ahk
 #Include submacros\updater.ahk
+#Include *i lib\Profiles.ahk
 #Include lib\Discord.ahk
+#Include *i lib\DiscordCommands.ahk
+#Include lib\OfficialRemote.ahk
 #Include lib\RuntimeLog.ahk
+#Include lib\auto_settings.ahk
 
 BootstrapPinnedSourceDependencies() {
     ocrPath := A_ScriptDir "\lib\OCR.ahk"
@@ -115,6 +119,8 @@ BootstrapPinnedSourceDependencies() {
 }
 
 command_buffer := []
+global BotStrategyChoices := []
+global BotStrategyChoiceTime := 0
 
 ver := "1.3.4"
 
@@ -146,6 +152,7 @@ global AppDataOpt := A_AppData "\Ultimate_Macro\Options"
 global SettingsFile := AppDataOpt "\Settings.tds"
 global BotSettings := AppDataOpt "\Discord-Bot-Settings.ini"
 global RecordingsDir := A_AppData "\Ultimate_Macro\Recordings"
+global ProfilesDir := A_AppData "\Ultimate_Macro\Profiles"
 global StateFile := A_AppData "\Ultimate_Macro\state.ini"
 
 global StratsDir := A_WorkingDir "\Resources\Strats"
@@ -161,6 +168,8 @@ if !DirExist(AppDataOpt)
     DirCreate(AppDataOpt)
 if !DirExist(RecordingsDir)
     DirCreate(RecordingsDir)
+if !DirExist(ProfilesDir)
+    DirCreate(ProfilesDir)
 
 ;INI READS
 global VipLink := IniRead(SettingsFile, "Options", "VipLink", "")
@@ -184,11 +193,14 @@ global BotToken := IniRead(BotSettings, "Token", "BotToken", "")
 global BotEnabled := IniRead(BotSettings, "Settings", "Enabled", 0)
 global ChannelID := IniRead(BotSettings, "Settings", "Channel", "")
 global UserID := IniRead(BotSettings, "Settings", "UserID", "")
+global BotPrefix := IniRead(BotSettings, "Settings", "Prefix", "!")
+;
+global AutoEquip := IniRead(SettingsFile, "Options", "AutoEquip", 0)
+global AutoConfigureSettings := IniRead(SettingsFile, "Options", "AutoConfigureSettings", 0)
 ;
 global UseRestartBtn := IniRead(SettingsFile, "Options", "UseRestartBtn", "1")
 global UsePlayAgainBtn := IniRead(SettingsFile, "Options", "UsePlayAgainBtn", "1")
 global RotateStrategies := IniRead(SettingsFile, "Options", "RotateStrategies", 0)
-global AutoEquip := IniRead(SettingsFile, "Options", "AutoEquip", 0)
 global CheckTheMap := IniRead(SettingsFile, "Options", "CheckTheMap", 1)
 global UseNumbersForHotbar := IniRead(SettingsFile, "Options", "UseNumbers", 1)
 global UseHForUpgrade := IniRead(SettingsFile, "Options", "UseHotkeyForUpgrade", 1)
@@ -228,6 +240,14 @@ SendMode("Event")
 SetDefaultMouseSpeed(DefaultMouseSpeed)
 SetMouseDelay(MouseDelay)
 SetKeyDelay(KeyDelay)
+
+; Opening Ultimate Macro must never apply Roblox settings. Only recover a
+; verified backup from an interrupted earlier run; new changes are prepared at
+; the single pre-launch boundary in RunRoblox().
+if !RecoverPendingAutoSettings(A_ScriptDir) {
+    RuntimeLogWarn("auto_settings_restore_pending", "A Roblox settings backup was preserved and needs attention",
+        "detail=" GetAutoSettingsLastError())
+}
 
 global LogLines := []
 global OverlayHWND := 0
@@ -286,6 +306,7 @@ global LastOpenedTowerID := ""
 global IsRestarting := false
 global SafeExitFlag := false
 global RestartLock := false
+global PartyInviteBusy := false
 
 global isUiPositionSaved := false
 global isUpgradeAuthorized := false
@@ -322,11 +343,15 @@ if FileExist(IconPath)
 
 WM_LBUTTONDOWN_Drag(wParam, lParam, msg, hwnd) {
     global MainGui
+
+    if (TryBeginScrollDrag())
+        return 0
+
     if (MainGui) {
-        if (hwnd != MainGui.Hwnd) {
+        if (hwnd != MainGui.Hwnd)
             return
-        }
     }
+
     mouseY := lParam >> 16
     if (mouseY >= 42)
         return
@@ -802,8 +827,11 @@ global GradientButtons := []
 ;tabs
 global Tab3 := []
 
+global DiscordNavTab := []
 global DiscordWebhookTab := []
 global DiscordBotTab := []
+global DiscordRemoteTab := []
+global DiscordPage := "Webhook"
 ;==
 
 tabNames := ["Main", "Record", "(Beta) Party", "Discord", "Settings", "Tools", "Credits"]
@@ -891,6 +919,9 @@ SwapUnitCtrl.OnEvent("Change", (*) => (
 MainGui.SetFont("s9 w400 cFFFFFF")
 global AutoEquipCtrl := MainGui.Add("Checkbox", "x357 y190 vAutoEquip 0x200 Checked" AutoEquip, "Auto Equip Towers")
 AutoEquipCtrl.OnEvent("Click", EnableAutoEquip)
+
+global AutoConfigCtrl := MainGui.Add("Checkbox", "x490 y190 vAutoConfigureSettings 0x200 Checked" AutoConfigureSettings, "Auto Configure Settings")
+AutoConfigCtrl.OnEvent("Click", EnableAutoConfig)
 
 MainGui.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Community Strategies")
@@ -1074,6 +1105,8 @@ global FrameW := 640
 global FrameH := 220
 global ContentH := 400
 global CurrentScrollPos := 0
+global ScrollDragging := false
+global ScrollDragGrab := 0
 global SliderH := 30
 global ChildHwnd := 0
 
@@ -1274,14 +1307,8 @@ if (ContentH > 0) {
 OnMessage(0x0115, OnScroll)
 OnMessage(0x020A, OnMouseWheel)
 
-MainGui.SetFont("s11 w400 cFFFFFF", UIFont())
-global Tab1_Start := MainGui.Add("Text", "x30 y500 w300 h40 Center Background0e0e0f +Border 0x200", "Start (F1)")
-Tab1_Start.OnEvent("Click", StartStrategy)
-global Tab1_Stop := MainGui.Add("Text", "x340 y500 w330 h40 Center Background0e0e0f +Border 0x200", "Stop (F2)")
-Tab1_Stop.OnEvent("Click", StopStrategy)
-
-HoverEffect.Push(Tab1_Start)
-HoverEffect.Push(Tab1_Stop)
+global Tab1_Start := MakeActionButton(MainGui, 30, 500, 310, 40, "Start  (F1)", StartStrategy, "start")
+global Tab1_Stop := MakeActionButton(MainGui, 360, 500, 310, 40, "Stop  (F2)", StopStrategy, "stop")
 
 ; tab 2 - RECORD ===========================
 
@@ -1377,15 +1404,9 @@ global Tab2_Txt4 := MainGui.Add("Text", "x220 y452 Hidden", "Duration (ms):")
 MainGui.SetFont("s9 w400 c000000")
 global RecMoveDurCtrl := MainGui.Add("Edit", "x310 y450 w50 h22 Hidden vRecMoveDuration", 1000)
 
-MainGui.SetFont("s11 w400 cFFFFFF", UIFont())
-global Tab2_Btn1 := MainGui.Add("Text", "x30  y500 w300 h40 Center Background0e0e0f +Border 0x200 Hidden",
-    "Start Recording")
-Tab2_Btn1.OnEvent("Click", StartRecording)
-MainGui.SetFont("s11 w400 c808080", UIFont())
-global Tab2_Btn2 := MainGui.Add("Text", "x340 y500 w330 h40 Center Background0e0e0f +Border 0x200 Hidden", "Stop")
-Tab2_Btn2.OnEvent("Click", StopRecord)
-
-HoverEffect.Push(Tab2_Btn1)
+global Tab2_Btn1 := MakeActionButton(MainGui, 30, 500, 310, 40, "Start Recording", StartRecording, "start", true)
+global Tab2_Btn2 := MakeActionButton(MainGui, 360, 500, 310, 40, "Stop", StopRecord, "stop", true)
+SetActionButtonEnabled(Tab2_Btn2, false)
 
 ; tab 3 - MULTIPLAYER ===========================
 
@@ -1427,38 +1448,40 @@ global MultiplayerEnabledTGL := MainGui.Add("Checkbox", "x30 y368 Hidden vMultip
     "Enabled")
 global Tab3_Line3 := MainGui.Add("Progress", "x30 y360 w640 h1 Hidden Background333333", 0)
 
-MainGui.SetFont("s11 w400 cFFFFFF")
-global Tab3_Btn1 := MainGui.Add("Text", "x30 y500 w645 h40 Center Background0e0e0f +Border 0x200 Hidden",
-    "Save all settings")
-Tab3_Btn1.OnEvent("Click", SaveAllSettingsMULTIPLAYER)
-
-HoverEffect.Push(Tab3_Btn1)
+global Tab3_Btn1 := MakeActionButton(MainGui, 30, 500, 640, 40, "Save all settings", SaveAllSettingsMULTIPLAYER, "accent", true)
 
 MainGui.SetFont("s9 w400 cFFFFFF")
 global Tab3_Info := MainGui.Add("Text", "x30 y400 w640 h100 Hidden",
-    "The macro can now run simultaneously with other users. Just enter the host's username and the party members.`nHow to use:`n1. Enter the party leader's username in 'Host Username'.`n2. Enter other players' display names in 'Party Members' (separated by commas).`n3. Click 'Save all settings'."
+    "Run the macro on several accounts at once, in the same party.`nHow to use:`n1. Pick your role. The Host creates the party and invites everyone; Members wait for the invite.`n2. Host Username: the party leader's display name. Members need this.`n3. Party Members: the display names of the other players, separated by commas (1 to 3). The Host needs this.`n4. Choose when to return to the lobby, then click 'Save all settings'."
 )
 
 TAB3.Push(Tab3_Title, Tab3_Line1, Tab3_HostNm, Tab3_HostNm_EDIT, Tab3_PartyMemb, Tab3_PartyMemb_Edit, Tab3_Line2,
     Tab3_Btn1, Tab3_Info, MultiplayerEnabledTGL, Tab3_RoleTxt, Tab3_Role_Host, Tab3_Role_Member, Tab3_Title2,
     Tab3_Line3, Tab3_LCondition_All, Tab3_LCondition_Any, Tab3_LConditionTxt)
 
-; tab 4 - WEBHOOK ===========================
+; tab 4 - DISCORD ===========================
 
-MainGui.SetFont("s10 w400 c3A86FF", UIFont())
-global Tab4_Title := MainGui.Add("Text", "x30 y95 vTab4_TITLE BackgroundTrans h22 w110 Hidden", "Discord Webhook")
-HoverEffect.Push(Tab4_Title)
-Tab4_Title.OnEvent("Click", DiscordSettings)
+MainGui.SetFont("s10 w500 c3A86FF", UIFont())
+global Tab4_WebhookTabTitle := MainGui.Add("Text", "x30 y95 BackgroundTrans h22 w130 Hidden", "Discord Webhook")
+global Tab4_BotTabTitle := MainGui.Add("Text", "x170 y95 BackgroundTrans h22 w105 Hidden", "Personal Bot")
+global Tab4_RemoteTabTitle := MainGui.Add("Text", "x285 y95 BackgroundTrans h22 w150 Hidden", "Official Remote")
+for ctrl in [Tab4_WebhookTabTitle, Tab4_BotTabTitle, Tab4_RemoteTabTitle]
+    HoverEffect.Push(ctrl)
+Tab4_WebhookTabTitle.OnEvent("Click", (*) => ShowDiscordPage("Webhook"))
+Tab4_BotTabTitle.OnEvent("Click", (*) => ShowDiscordPage("Bot"))
+Tab4_RemoteTabTitle.OnEvent("Click", (*) => ShowDiscordPage("Remote"))
 global Tab4_Line1 := MainGui.Add("Progress", "x30 y118 w640 h1  Hidden Background333333", 0)
+DiscordNavTab.Push(Tab4_WebhookTabTitle, Tab4_BotTabTitle, Tab4_RemoteTabTitle, Tab4_Line1)
 MainGui.SetFont("s9 w400 cAAAAAA")
 MainGui.Add("Text", "x30 y135 w200 h20 Hidden vTab4_Lbl1", "Webhook URL:")
 global Tab4_Lbl1 := MainGui["Tab4_Lbl1"]
 MainGui.SetFont("s9 w400 c000000")
 global WebhookLinkCtrl := MainGui.Add("Edit", "x30 y155 w640 h24 Hidden vWebhookLink", WebhookLink)
-WebhookLinkCtrl.OnEvent("Change", CheckWebhookLink)
+WebhookLinkCtrl.OnEvent("Change", (*) => SetTimer(CheckWebhookLink, -700))
 MainGui.SetFont("s9 w400 cFFFFFF")
 global WebhookEnabledCtrl := MainGui.Add("Checkbox", "x30 y195 Hidden vWebhookEnabled Checked" WebhookEnabled,
     "Enable Webhook")
+WebhookEnabledCtrl.OnEvent("Click", HoldLockedCheckbox)
 global Tab4_Line2 := MainGui.Add("Progress", "x30 y243 w640 h1 Hidden Background333333", 0)
 global SendCurrCtrl := MainGui.Add("Checkbox", "x30 y253 Hidden vSendCurrenciesEnabled Checked" SendCurrenciesEnabled,
     "Send Statistics")
@@ -1481,24 +1504,16 @@ MainGui.SetFont("s9 w400 c000000")
 global WebhookLinkCtrl2 := MainGui.Add("Edit", "x280 y280 w360 h20 Hidden vWebhookLink2", WebhookLink2)
 ; global WebhookUserIDCtrl := MainGui.Add("Edit", "x85 y313 w200 h20 Hidden vWebhookUserID", WebhookUserID)
 MainGui.SetFont("s9 w400 cFFFFFF")
-WebhookLinkCtrl2.OnEvent("Change", CheckWebhookLink2)
+WebhookLinkCtrl2.OnEvent("Change", (*) => SetTimer(CheckWebhookLink2, -700))
 EnableWebhookLink2()
 WebhookSepatateTriumphScreenshotsCtrl.OnEvent("Click", EnableWebhookLink2)
 global Tab4_Info := MainGui.Add("Text", "x30 y400 w640 h100 Hidden",
-    "Webhook sends real-time logs, screenshots, and currency stats to your Discord server.`nUseful to check if your macro is working while being outside.`nHow to get a webhook URL: Create your own Discord Server > Open any channel's settings > Integrations > Create Webhook > Copy Webhook URL.`nYou can also set up a Discord bot by clicking on the 'Discord Webhook' text to view the Discord bot settings."
+    "Webhook sends real-time logs, screenshots, and currency stats to your Discord server.`nUseful to check if your macro is working while being outside.`nHow to get a webhook URL: Create your own Discord Server > Open any channel's settings > Integrations > Create Webhook > Copy Webhook URL."
 )
-MainGui.SetFont("s12 w400 cFFFFFF")
-global Tab4_Btn1 := MainGui.Add("Text", "x30  y500 w300 h40 Center Background0e0e0f +Border 0x200 Hidden",
-    "Test Webhook")
-Tab4_Btn1.OnEvent("Click", TestWebhook)
-global Tab4_Btn2 := MainGui.Add("Text", "x340 y500 w330 h40 Center Background0e0e0f +Border 0x200 Hidden",
-    "Save Discord Settings")
-Tab4_Btn2.OnEvent("Click", SaveWebhookSettings)
+global Tab4_Btn1 := MakeActionButton(MainGui, 30, 500, 310, 40, "Test Webhook", TestWebhook, "accent", true)
+global Tab4_Btn2 := MakeActionButton(MainGui, 360, 500, 310, 40, "Save Discord Settings", SaveWebhookSettings, "accent", true)
 
-HoverEffect.Push(Tab4_Btn1)
-HoverEffect.Push(Tab4_Btn2)
-
-DiscordWebhookTab.Push(Tab4_Title, Tab4_Line1, Tab4_Line2, Tab4_Btn1, Tab4_Btn2, Tab4_Info, Tab4_Lbl1,
+DiscordWebhookTab.Push(Tab4_Line2, Tab4_Btn1, Tab4_Btn2, Tab4_Info, Tab4_Lbl1,
     WebhookEnabledCtrl, SendCurrCtrl, WebhookLinkCtrl, WebhookLinkCtrl2, DebugLogsCtrl, WebhookScreenshotsCtrl,
     WebhookTriumphScreenshotsCtrl, WebhookSepatateTriumphScreenshotsCtrl)
 
@@ -1509,8 +1524,9 @@ global BotTokenCtrl := MainGui.Add("Edit", "x30 y155 w640 h24 Hidden vBotToken",
 
 global ChannelIDCtrl := MainGui.Add("Edit", "x30 y273 w310 h24 Hidden vChannelID", ChannelID)
 global WebhookUserIDCtrl2 := MainGui.Add("Edit", "x360 y273 w310 h24 Hidden vWebhookUserID2", UserID)
+global BotPrefixCtrl := MainGui.Add("Edit", "x130 y222 w70 h24 Hidden vBotPrefix Limit1 Center", BotPrefix)
 
-global Tab4_Line3 := MainGui.Add("Progress", "x30 y305 w640 h1 Hidden Background333333", 0)
+global Tab4_Line3 := MainGui.Add("Progress", "x30 y325 w640 h1 Hidden Background333333", 0)
 
 MainGui.SetFont("s9 w400 cFFFFFF")
 global BotEnabledCtrl := MainGui.Add("Checkbox", "x30 y195 Hidden vBotEnabled Checked" BotEnabled, "Enable Bot")
@@ -1523,20 +1539,39 @@ Here you can set up a Discord bot.`nThe Discord bot can be used as a remote cont
 
 MainGui.SetFont("s9 w400 cAAAAAA")
 global bot_token_text := MainGui.Add("Text", "x30 y135 w200 h20 Hidden", "Bot Token:")
+global bot_prefix_text := MainGui.Add("Text", "x30 y225 w95 h20 Hidden BackgroundTrans", "Command prefix:")
 
 global channel_id_text := MainGui.Add("Text", "x30 y253 w200 h20 Hidden BackgroundTrans", "Channel ID:")
 global userid_text := MainGui.Add("Text", "x360 y253 w200 h20 Hidden BackgroundTrans", "User ID:")
 
 MainGui.SetFont("s12 w400 cFFFFFF")
 
-global Tab4_bot_Btn1 := MainGui.Add("Text", "x30  y500 w300 h40 Center Background0e0e0f +Border 0x200 Hidden",
-    "Test Bot")
-Tab4_bot_Btn1.OnEvent("Click", TestBot)
+global Tab4_bot_Btn1 := MakeActionButton(MainGui, 30, 500, 310, 40, "Test Bot", TestBot, "accent", true)
 
-HoverEffect.Push(Tab4_bot_Btn1)
+DiscordBotTab.Push(Tab4_Line2, BotTokenCtrl, BotEnabledCtrl, Tab4_Btn2, Tab4_bot_Btn1,
+    bot_token_text, bot_prefix_text, BotPrefixCtrl, WebhookUserIDCtrl2, ChannelIDCtrl, channel_id_text, userid_text,
+    Tab4_Line3, Tab4_Info_Bot)
 
-DiscordBotTab.Push(Tab4_Title, Tab4_Line1, Tab4_Line2, BotTokenCtrl, BotEnabledCtrl, Tab4_Btn2, Tab4_bot_Btn1,
-    bot_token_text, WebhookUserIDCtrl2, ChannelIDCtrl, channel_id_text, userid_text, Tab4_Line3, Tab4_Info_Bot)
+; official remote tab
+MainGui.SetFont("s15 w600 cFFFFFF", UIFont())
+global Tab4_RemoteHeading := MainGui.Add("Text", "x30 y150 w640 h30 Hidden", "Connect Ultimate Macro to Discord")
+MainGui.SetFont("s10 w400 cAAAAAA", UIFont())
+global Tab4_RemoteInfo := MainGui.Add("Text", "x30 y190 w640 h62 Hidden",
+    "1. Run /remote link in #bot-controller.`n2. Copy the private connection code Discord shows only to you.`n3. Paste it below and select Link This PC.")
+MainGui.SetFont("s9 w500 cFFFFFF", UIFont())
+global Tab4_RemoteCodeLabel := MainGui.Add("Text", "x30 y270 w250 h20 Hidden", "Private connection code")
+MainGui.SetFont("s10 w400 c000000", UIFont())
+global Tab4_RemoteCodeCtrl := MainGui.Add("Edit", "x30 y294 w640 h30 Hidden")
+MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
+global Tab4_RemoteSecurity := MainGui.Add("Text", "x30 y334 w640 h22 Hidden",
+    "Privacy: stores a random installation ID, Discord ID, version, link/active times and online status. No HWID.")
+MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
+global Tab4_RemoteConsent := MainGui.Add("Checkbox", "x30 y360 w640 h22 Hidden", "I consent to this limited device data and 30-day security-event retention.")
+global Tab4_RemoteStatus := MainGui.Add("Text", "x30 y455 w640 h28 Center Hidden", "Not linked")
+global Tab4_RemoteConnectBtn := MakeActionButton(MainGui, 180, 400, 340, 40, "Link This PC", OfficialRemoteConnectFromControls, "accent", true)
+
+DiscordRemoteTab.Push(Tab4_RemoteHeading, Tab4_RemoteInfo, Tab4_RemoteCodeLabel, Tab4_RemoteCodeCtrl,
+    Tab4_RemoteSecurity, Tab4_RemoteConsent, Tab4_RemoteStatus, Tab4_RemoteConnectBtn)
 
 ;TAB 5 - SETTINGS ==========================
 
@@ -1713,12 +1748,20 @@ global LegacyModeCtrl := MainGui.Add("Checkbox", "x560 y465 Hidden", "Legacy Mod
 LegacyModeCtrl.Value := (LegacyMode = "1" || LegacyMode = 1)
 LegacyModeCtrl.OnEvent("Click", LegacyModeInfo)
 
-MainGui.SetFont("s11 w400 cFFFFFF")
-global Tab5_Btn1 := MainGui.Add("Text", "x30 y500 w645 h40 Center Background0e0e0f +Border 0x200 Hidden",
-    "Save all settings")
-Tab5_Btn1.OnEvent("Click", SaveAllSettings)
+MainGui.SetFont("s9 w400 cFFFFFF")
+global Tab5_BtnClearLogs := MainGui.Add("Text",
+    "x310 y463 w120 h24 Center Background0e0e0f +Border 0x200 Hidden", "Clear Logs")
+Tab5_BtnClearLogs.OnEvent("Click", ClearStoredLogs)
 
-HoverEffect.Push(Tab5_Btn1)
+HoverEffect.Push(Tab5_BtnClearLogs)
+
+global Tab5_AdvancedBtn := MakeActionButton(MainGui, 30, 500, 180, 40, "Advanced settings", ShowAdvancedSettings, "neutral", true)
+global Tab5_BackBtn := MakeActionButton(MainGui, 170, 500, 180, 40, "Back to settings", ShowMainSettings, "neutral", true)
+global Tab5_AdvancedTitle := MainGui.Add("Text", "x30 y95 w250 h22 Hidden", "Advanced settings")
+global Tab5_AdvancedLine := MainGui.Add("Progress", "x30 y118 w640 h1 Hidden Background333333", 0)
+global Tab5_SaveStatus := MainGui.Add("Text", "x225 y499 w275 h22 Hidden BackgroundTrans", "")
+
+global Tab5_Btn1 := MakeActionButton(MainGui, 370, 500, 300, 40, "Save all settings", SaveAllSettings, "accent", true)
 
 ; tab 6 - tools ===========================
 
@@ -1730,6 +1773,12 @@ MainGui.SetFont("s9 w400 cffffff")
 global Tools_Info := MainGui.Add("Text", "x30 y490 w640 h100 Hidden",
     "Additional utilities for optimizing and simplifying the gameplay and automating repetitive actions. It reduces your suffering."
 )
+
+global Tools_Profiles_Section := MainGui.Add("Text", "x30 y325 w300 h22 Hidden", "Profiles & diagnostics")
+global Tools_Profiles_Line := MainGui.Add("Progress", "x30 y348 w640 h1 Hidden Background333333", 0)
+global ProfileExportBtn := MakeActionButton(MainGui, 30, 365, 200, 38, "Export Profile", ExportProfile, "neutral", true)
+global ProfileImportBtn := MakeActionButton(MainGui, 250, 365, 200, 38, "Import Profile", ImportProfile, "neutral", true)
+global ProfileManagerBtn := MakeActionButton(MainGui, 470, 365, 200, 38, "Manage Profiles", ProfileManager, "neutral", true)
 
 global Auto_COA := MainGui.Add("Picture", "x30 y125 w197 h176 Hidden", "Resources/Gui/auto_coa_preview.png")
 
@@ -1807,6 +1856,10 @@ YoutubeImg.OnEvent("Click", YouTubeLink)
 MainGui.Title := "Ultimate Macro"
 MainGui.Show("w700 h565")
 
+; Official Remote Control uses one authenticated long-poll worker instead of a
+; personal Discord bot token. It stays responsive without blocking the macro UI.
+OfficialRemoteInit()
+
 if (AlwaysOnTop = 1) {
     MainGui.Opt("+AlwaysOnTop")
 } else {
@@ -1869,28 +1922,31 @@ Hoverwatchdog(*) {
     static hoverClose := false, hoverMin := false, hoverTabs := []
     static activeHoverHwnd := 0
     static activeGradHwnd := 0
+    static lastX := -1, lastY := -1, lastCtrl := 0, lastTab := ""
 
-    ; Populate ONCE. This used to push HoverTab.Length entries on every tick, so a
-    ; 10ms timer appended ~700 dead entries per second and this static array grew
-    ; without bound for the life of the process (~2.5M entries per hour).
-    while (hoverTabs.Length < HoverTab.Length)
-        hoverTabs.Push(false)
+    if (hoverTabs.Length != HoverTab.Length) {
+        hoverTabs := []
+        loop HoverTab.Length
+            hoverTabs.Push(false)
+    }
 
     if (!hMain)
         hMain := MainGui.Hwnd
 
-    ; Nothing can be hovered while the window is hidden (which is the entire time
-    ; a strategy is running). Skip the per-control GetPos sweep entirely.
-    if (!hMain || !WinExist("ahk_id " hMain))
-        return
-
     if (!hChild && IsSet(ChildGui))
         hChild := ChildGui.Hwnd
+
+    if !DllCall("user32\IsWindowVisible", "Ptr", hMain, "Int")
+        return
 
     oldMode := A_CoordModeMouse
     CoordMode("Mouse", "Screen")
     MouseGetPos(&screenX, &screenY, &mouseWin, &mouseCtrl, 2)
     CoordMode("Mouse", oldMode)
+
+    if (screenX = lastX && screenY = lastY && mouseCtrl = lastCtrl && CurrentTab = lastTab)
+        return
+    lastX := screenX, lastY := screenY, lastCtrl := mouseCtrl, lastTab := CurrentTab
 
     try {
         WinGetPos(&mX, &mY, , , "ahk_id " hMain)
@@ -1940,7 +1996,7 @@ Hoverwatchdog(*) {
             for ctrl in GradientButtons {
                 if (ctrl.Hwnd = activeGradHwnd) {
                     if (HasProp(ctrl, "PicControl"))
-                        ctrl.PicControl.Value := "HBITMAP:*" ctrl.ImgNormal
+                        ctrl.PicControl.Value := "HBITMAP:*" ((HasProp(ctrl, "GradEnabled") && !ctrl.GradEnabled) ? ctrl.ImgDisabled : ctrl.ImgNormal)
                     ctrl.Redraw()
                     break
                 }
@@ -2044,21 +2100,30 @@ Hoverwatchdog(*) {
         }
     }
 
-    if (IsSet(GradientButtons) && hChild) {
+    if (IsSet(GradientButtons)) {
         matchedGrad := false
-
-        try {
-            WinGetPos(&chX, &chY, , , "ahk_id " hChild)
-            childMouseX := screenX - chX
-            childMouseY := screenY - chY
-        } catch {
-            childMouseX := 0
-            childMouseY := 0
-        }
+        originCache := Map()
 
         for ctrl in GradientButtons {
             if (!ctrl.Visible)
                 continue
+            if (HasProp(ctrl, "GradEnabled") && !ctrl.GradEnabled)
+                continue
+
+            ownerHwnd := DllCall("user32\GetParent", "Ptr", ctrl.Hwnd, "Ptr")
+            if (!ownerHwnd)
+                continue
+            if (!originCache.Has(ownerHwnd)) {
+                try {
+                    WinGetPos(&oX, &oY, , , "ahk_id " ownerHwnd)
+                    originCache[ownerHwnd] := [oX, oY]
+                } catch {
+                    originCache[ownerHwnd] := [0, 0]
+                }
+            }
+            origin := originCache[ownerHwnd]
+            childMouseX := screenX - origin[1]
+            childMouseY := screenY - origin[2]
 
             ctrl.GetPos(&cX, &cY, &cW, &cH)
 
@@ -2070,7 +2135,7 @@ Hoverwatchdog(*) {
                         for oldCtrl in GradientButtons {
                             if (oldCtrl.Hwnd = activeGradHwnd) {
                                 if (HasProp(oldCtrl, "PicControl"))
-                                    oldCtrl.PicControl.Value := "HBITMAP:*" oldCtrl.ImgNormal
+                                    oldCtrl.PicControl.Value := "HBITMAP:*" ((HasProp(oldCtrl, "GradEnabled") && !oldCtrl.GradEnabled) ? oldCtrl.ImgDisabled : oldCtrl.ImgNormal)
                                 oldCtrl.Redraw()
                                 break
                             }
@@ -2091,7 +2156,7 @@ Hoverwatchdog(*) {
             for ctrl in GradientButtons {
                 if (ctrl.Hwnd = activeGradHwnd) {
                     if (HasProp(ctrl, "PicControl"))
-                        ctrl.PicControl.Value := "HBITMAP:*" ctrl.ImgNormal
+                        ctrl.PicControl.Value := "HBITMAP:*" ((HasProp(ctrl, "GradEnabled") && !ctrl.GradEnabled) ? ctrl.ImgDisabled : ctrl.ImgNormal)
                     ctrl.Redraw()
                     break
                 }
@@ -2118,10 +2183,10 @@ ShowTabContent(tab) {
     global ChildGui
     if (tab = "Tab1") {
         for ctrl in [Tab1_Section1, Tab1_Line1, Tab1_Lbl1, Strategy1Ctrl, Tab1_Btn1, Tab1_Btn2,
-            Tab1_Lbl2, Strategy2Ctrl, Tab1_Btn3, Tab1_Btn4, RotateStrategiesCtrl, AutoEquipCtrl, Tab1_Section2,
+            Tab1_Lbl2, Strategy2Ctrl, Tab1_Btn3, Tab1_Btn4, RotateStrategiesCtrl, AutoEquipCtrl, AutoConfigCtrl, Tab1_Section2,
             Tab1_Line2,
             Tab1_Start, Tab1_Stop]
-            ctrl.Visible := true
+            ShowControl(ctrl)
         EnableStratRotation()
         ShowChildGui()
     } else if (tab = "Tab2") {
@@ -2130,15 +2195,12 @@ ShowTabContent(tab) {
             Tab2_Line2, Tab2_Line3, RecAutoChainCtrl, RecAutoCaravanCtrl, RecAutoDropCtrl,
             RecAutoSkipCtrl, RecAbilitySpamCtrl, Tab2_Info, RecMoveCtrl, DIRECTIONTEXTCtrl, RecMoveDirCtrl,
             Tab2_Txt4, RecMoveDurCtrl, Tab2_Btn1, Tab2_Btn2]
-            ctrl.Visible := true
+            ShowControl(ctrl)
     } else if (tab = "Tab3") {
         for ctrl in TAB3
-            ctrl.Visible := true
+            ShowControl(ctrl)
     } else if (tab = "Tab4") {
-        for ctrl in DiscordWebhookTab
-            ctrl.Visible := true
-        tab4_Title.Text := "Discord Webhook"
-        EnableWebhookLink2()
+        ShowDiscordPage("Webhook")
     } else if (tab = "Tab5") {
         for ctrl in [Tab5_Section1, Tab5_Line1, Tab5_Lbl1, ChainKeyCtrl,
             Tab5_Lbl2, BeatKeyCtrl, Tab5_Lbl3, CaravanKeyCtrl,
@@ -2156,10 +2218,13 @@ ShowTabContent(tab) {
             ChangeDJTrackKeyCtrl, SellTowerKeyCtrl, DeleteTowerRecordingKeyCtrl,
             RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL,
             CollectPlaytimeRewardsCtrl,
-            Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl, Tab5_Btn1,
+            Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl,
+            Tab5_BtnClearLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_SaveStatus, Tab5_Btn1,
             MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown,
             MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown]
-            ctrl.Visible := true
+            ShowControl(ctrl)
+
+        ShowSettingsPage(false)
 
         ChainKeyCtrl.Value := ChainKey
         BeatKeyCtrl.Value := BeatKey
@@ -2188,8 +2253,9 @@ ShowTabContent(tab) {
         UpgradeDelayCtrl.Value := UpgradeDelay
 
     } else if (tab = "Tab6") {
-        for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Auto_COA, Auto_Spin, Auto_Consum]
-            ctrl.Visible := true
+        for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Tools_Profiles_Section, Tools_Profiles_Line,
+            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, Auto_COA, Auto_Spin, Auto_Consum]
+            ShowControl(ctrl)
     } else if (tab = "Tab7") {
         Credit_Content.Visible := true
         Credit_Info.Visible := true
@@ -2209,6 +2275,83 @@ ShowTabContent(tab) {
 ShowChildGui() {
     global ChildGui, FrameX, FrameY, FrameW, FrameH, MainGui
     ChildGui.Show("x" FrameX " y" FrameY " w" FrameW " h" FrameH)
+}
+
+ShowAdvancedSettings(*) {
+    ShowSettingsPage(true)
+}
+
+ShowMainSettings(*) {
+    ShowSettingsPage(false)
+}
+
+ShowSettingsPage(advanced := false) {
+    global Tab5_Section1, Tab5_Line1, Tab5_Lbl1, ChainKeyCtrl, Tab5_Lbl2, BeatKeyCtrl, Tab5_Lbl3, CaravanKeyCtrl
+    global Tab5_Lbl44, RaiseDeadKeyCtrl, Tab5_Lbl55, Tab5_Lbl56, HologramKeyCtrl, RepoKeyCtrl, Tab5_Lbl99
+    global Tab5_LblUPG, Tab5_LblUPGBTM, CancelPlacementKeyCtrl, UpgradeTowerGCtrl, UpgradeTowerGBCtrl
+    global Tab1_Lbl3, Tab1_Lbl4, TimeScaleModeCtrl, UpgradeDelayCtrl, Tab5_Section2, Tab5_Line2, Tab5_Help6
+    global UseRestartBtnCtrl, Tab5_Help4, UsePlayAgainBtnCtrl, Tab5_Help5, CheckTheMapCtrl, UseNumbersForHotbarCtrl
+    global UseUpgradeHCtrl, Tab5_Help7, Tab5_Help11, Tab5_Help12, Tab5_Section3, Tab5_Line3, PlcTowerTEXT
+    global UpgTowerTEXT, AlignCamTEXT, DjTrackTEXT, SellTowTEXT, DelRecTEXT, RecInputsTEXT, HoloTEXT, RaiseDeadTEXT
+    global PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl, AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl, SellTowerKeyCtrl
+    global DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl
+    global Tab5_BtnClearLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_Btn1, Tab5_SaveStatus
+    global Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl, DebugConsoleCtrl, PotatoModeCtrl
+    global MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown
+    global KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown
+
+    common := [Tab5_Section1, Tab5_Line1, Tab5_Lbl1, ChainKeyCtrl, Tab5_Lbl2, BeatKeyCtrl, Tab5_Lbl3, CaravanKeyCtrl,
+        Tab5_Lbl44, RaiseDeadKeyCtrl, Tab5_Lbl55, Tab5_Lbl56, HologramKeyCtrl, RepoKeyCtrl, Tab5_Lbl99, Tab5_LblUPG,
+        Tab5_LblUPGBTM, CancelPlacementKeyCtrl, UpgradeTowerGCtrl, UpgradeTowerGBCtrl, Tab1_Lbl3, Tab1_Lbl4,
+        TimeScaleModeCtrl, UpgradeDelayCtrl, Tab5_Section2, Tab5_Line2, Tab5_Help6, UseRestartBtnCtrl, Tab5_Help4,
+        UsePlayAgainBtnCtrl, Tab5_Help5, CheckTheMapCtrl, UseNumbersForHotbarCtrl, UseUpgradeHCtrl, Tab5_Help7,
+        Tab5_Help11, Tab5_Help12, Tab5_Section3, Tab5_Line3, PlcTowerTEXT, UpgTowerTEXT, AlignCamTEXT, DjTrackTEXT,
+        SellTowTEXT, DelRecTEXT, RecInputsTEXT, HoloTEXT, RaiseDeadTEXT, PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl,
+        AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl, SellTowerKeyCtrl, DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl,
+        HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl, Tab5_BtnClearLogs]
+    advancedControls := [Tab5_AdvancedTitle, Tab5_AdvancedLine, DebugConsoleCtrl, PotatoModeCtrl, MouseSpeedLbl,
+        MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt,
+        KeyDelayUpDown, Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl]
+    for ctrl in common
+        ctrl.Visible := !advanced
+    for ctrl in advancedControls
+        ctrl.Visible := advanced
+    Tab5_AdvancedBtn.Visible := !advanced
+    Tab5_AdvancedBtn.PicControl.Visible := !advanced
+    Tab5_BackBtn.Visible := advanced
+    Tab5_BackBtn.PicControl.Visible := advanced
+    Tab5_Btn1.Visible := true
+    Tab5_SaveStatus.Visible := true
+    Tab5_Btn1.Move(370, 500, 300, 40)
+    Tab5_Btn1.PicControl.Move(370, 500, 300, 40)
+    Tab5_SaveStatus.Move(225, 509, 275, 22)
+    if advanced {
+        Tab5_AdvancedTitle.Move(30, 95, 250, 22)
+        Tab5_AdvancedLine.Move(30, 118, 640, 1)
+        DebugConsoleCtrl.Move(100, 140)
+        PotatoModeCtrl.Move(400, 140)
+        MouseSpeedLbl.Move(100, 190, 95, 20)
+        MouseSpeedTxt.Move(200, 186, 32, 22)
+        MouseSpeedUpDown.Move(220, 186, 16, 22)
+        MouseDelayLbl.Move(300, 190, 90, 20)
+        MouseDelayTxt.Move(395, 186, 32, 22)
+        MouseDelayUpDown.Move(415, 186, 16, 22)
+        KeyDelayLbl.Move(500, 190, 75, 20)
+        KeyDelayTxt.Move(580, 186, 32, 22)
+        KeyDelayUpDown.Move(600, 186, 16, 22)
+        Tab5_Line4.Move(30, 235, 640, 1)
+        Tab5_Lbl4.Move(30, 247, 160, 20)
+        VipLinkCtrl.Move(30, 272, 640, 24)
+        UseVipServerCtrl.Move(100, 307)
+        AlwaysOnTopCtrl.Move(300, 307)
+        LegacyModeCtrl.Move(540, 307)
+        Tab5_BackBtn.Move(170, 500, 180, 40)
+        Tab5_BackBtn.PicControl.Move(170, 500, 180, 40)
+    } else {
+        Tab5_AdvancedBtn.Move(30, 500, 180, 40)
+        Tab5_AdvancedBtn.PicControl.Move(30, 500, 180, 40)
+    }
+    DllCall("RedrawWindow", "ptr", MainGui.Hwnd, "ptr", 0, "ptr", 0, "uint", 0x185)
 }
 
 MoveWindow(ctrl, *) {
@@ -2269,76 +2412,283 @@ OnMouseWheel(wp, lp, msg, hwnd) {
     }
 }
 
-OnScroll(wp, lp, msg, hwnd) {
-    global ChildGui, CurrentScrollPos, ContentH, FrameH, SliderH, Slider
-    ch := ChildGui.Hwnd
-    if (hwnd != ch)
+ScrollMaxOffset() {
+    global ContentH, FrameH
+    return Max(0, ContentH - FrameH)
+}
+
+ScrollThumbY(pos) {
+    global FrameH, SliderH
+    track := FrameH - SliderH
+    maxScroll := ScrollMaxOffset()
+    if (track <= 0 || maxScroll <= 0)
+        return 0
+    return Round((pos / maxScroll) * track)
+}
+
+ScrollPosFromThumbY(thumbY) {
+    global FrameH, SliderH
+    track := FrameH - SliderH
+    if (track <= 0)
+        return 0
+    thumbY := Max(0, Min(thumbY, track))
+    return Round((thumbY / track) * ScrollMaxOffset())
+}
+
+SetScrollPos(newPos) {
+    global ChildGui, CurrentScrollPos, Slider
+
+    newPos := Max(0, Min(Round(newPos), ScrollMaxOffset()))
+    if (newPos = CurrentScrollPos)
         return
-    action := wp & 0xFFFF
-    if (action = 0) {
-        newPos := CurrentScrollPos - 3
-    } else if (action = 1) {
-        newPos := CurrentScrollPos + 3
+
+    hwnd := ChildGui.Hwnd
+    DllCall("ScrollWindow", "Ptr", hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
+    CurrentScrollPos := newPos
+    Slider.Move(, ScrollThumbY(newPos))
+    DllCall("UpdateWindow", "Ptr", hwnd)
+}
+
+TryBeginScrollDrag() {
+    global ChildGui, Slider, SliderX, SliderW, SliderH, CurrentScrollPos
+    global ScrollDragging, ScrollDragGrab
+
+    if (!IsSet(ChildGui) || !ChildGui || !IsSet(Slider))
+        return false
+    if (ScrollMaxOffset() <= 0)
+        return false
+    if !DllCall("user32\IsWindowVisible", "Ptr", ChildGui.Hwnd, "Int")
+        return false
+
+    oldMode := A_CoordModeMouse
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&screenX, &screenY)
+    CoordMode("Mouse", oldMode)
+
+    try WinGetPos(&childX, &childY, , &childH, "ahk_id " ChildGui.Hwnd)
+    catch
+        return false
+
+    localX := screenX - childX
+    localY := screenY - childY
+    if (localY < 0 || localY > childH)
+        return false
+    if (localX < SliderX - 5 || localX > SliderX + SliderW + 5)
+        return false
+
+    thumbY := ScrollThumbY(CurrentScrollPos)
+    if (localY >= thumbY && localY <= thumbY + SliderH) {
+        ScrollDragGrab := localY - thumbY
     } else {
-        return
+        ScrollDragGrab := SliderH // 2
+        SetScrollPos(ScrollPosFromThumbY(localY - ScrollDragGrab))
     }
-    maxScroll := ContentH - FrameH
-    newPos := Max(0, Min(newPos, maxScroll))
-    if (newPos != CurrentScrollPos) {
-        DllCall("ScrollWindow", "Ptr", hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
-        CurrentScrollPos := newPos
 
-        availableTrackSpace := FrameH - SliderH
+    ScrollDragging := true
+    SetTimer(ScrollDragWatch, 10)
+    return true
+}
 
-        sliderVisualY := Round((newPos / maxScroll) * availableTrackSpace)
+ScrollDragWatch() {
+    global ChildGui, ScrollDragging, ScrollDragGrab
 
-        Slider.Move(, sliderVisualY)
+    try {
+        if (!ScrollDragging || !GetKeyState("LButton", "P") || !IsSet(ChildGui) || !ChildGui) {
+            StopScrollDrag()
+            return
+        }
+        childHwnd := ChildGui.Hwnd
+        if (!childHwnd || !WinExist("ahk_id " childHwnd)) {
+            StopScrollDrag()
+            return
+        }
 
-        DllCall("UpdateWindow", "Ptr", hwnd)
+        oldMode := A_CoordModeMouse
+        try {
+            CoordMode("Mouse", "Screen")
+            MouseGetPos(, &screenY)
+        } finally CoordMode("Mouse", oldMode)
+
+        try WinGetPos(, &childY, , , "ahk_id " childHwnd)
+        catch {
+            StopScrollDrag()
+            return
+        }
+
+        SetScrollPos(ScrollPosFromThumbY(screenY - childY - ScrollDragGrab))
+    } catch Error as err {
+        ; A destroyed control/window or any unexpected GUI error must not leave
+        ; the high-frequency drag callback alive.
+        StopScrollDrag()
     }
 }
 
+StopScrollDrag() {
+    global ScrollDragging
+    ScrollDragging := false
+    try SetTimer(ScrollDragWatch, 0)
+}
+
+OnScroll(wp, lp, msg, hwnd) {
+    global ChildGui, CurrentScrollPos
+    if (hwnd != ChildGui.Hwnd)
+        return
+
+    action := wp & 0xFFFF
+    if (action = 0)
+        SetScrollPos(CurrentScrollPos - 3)
+    else if (action = 1)
+        SetScrollPos(CurrentScrollPos + 3)
+}
+
+SetCheckboxLocked(ctrl, locked, lockedValue := 0) {
+    if (!IsSet(ctrl) || !ctrl)
+        return
+
+    ctrl.Locked := locked ? true : false
+    ctrl.LockedValue := lockedValue
+    if (locked)
+        ctrl.Value := lockedValue
+
+    ctrl.SetFont(locked ? "c6E7681" : "cFFFFFF")
+    ctrl.Redraw()
+}
+
+HoldLockedCheckbox(ctrl, *) {
+    if (!IsSet(ctrl) || !ctrl || !HasProp(ctrl, "Locked") || !ctrl.Locked)
+        return false
+
+    ctrl.Value := ctrl.LockedValue
+    return true
+}
+
+ActionButtonClick(ctrl, *) {
+    if (HasProp(ctrl, "GradEnabled") && !ctrl.GradEnabled)
+        return
+    if (HasProp(ctrl, "ActionHandler") && IsObject(ctrl.ActionHandler))
+        ctrl.ActionHandler.Call(ctrl)
+}
+
+MakeActionButton(guiObj, x, y, w, h, label, handler, tone := "accent", hidden := false) {
+    global GradientButtons
+
+    if (tone = "start")
+        c1 := "0xFF1E8A5E", c2 := "0xFF0F5C3D", k1 := "0xFF2FBE81", k2 := "0xFF17805A"
+    else if (tone = "stop")
+        c1 := "0xFF8C333F", c2 := "0xFF561F27", k1 := "0xFFC24C5A", k2 := "0xFF7B2D39"
+    else
+        c1 := "0xFF2C63C4", c2 := "0xFF1A3A7C", k1 := "0xFF3A86FF", k2 := "0xFF2657AC"
+
+    imgOn := CreateGradientButton(w, h, 8, c1, c2, "0x40000000", "0x5DFFFFFF", label, UIFont(), 13, 1)
+    imgHot := CreateGradientButton(w, h, 8, k1, k2, "0x60000000", "0x8CFFFFFF", label, UIFont(), 13, 1)
+    imgOff := CreateGradientButton(w, h, 8, "0xFF23262C", "0xFF17191E", "0x20000000", "0x30FFFFFF", label,
+        UIFont(), 13, 1)
+
+    box := "x" x " y" y " w" w " h" h " +BackgroundTrans" (hidden ? " Hidden" : "")
+    pic := guiObj.Add("Picture", box, "HBITMAP:*" imgOn)
+    btn := guiObj.Add("Text", box " +0x200 Center", "")
+    btn.ActionHandler := handler
+    btn.OnEvent("Click", ActionButtonClick)
+
+    btn.PicControl := pic
+    btn.ImgNormal := imgOn
+    btn.ImgHover := imgHot
+    btn.ImgDisabled := imgOff
+    btn.GradEnabled := true
+
+    GradientButtons.Push(btn)
+    return btn
+}
+
+SetActionButtonEnabled(btn, enabled) {
+    if (!IsSet(btn) || !btn || !HasProp(btn, "PicControl"))
+        return
+    btn.GradEnabled := enabled ? true : false
+    btn.PicControl.Value := "HBITMAP:*" (enabled ? btn.ImgNormal : btn.ImgDisabled)
+    btn.PicControl.Redraw()
+}
+
+ShowControl(ctrl) {
+    if (HasProp(ctrl, "PicControl"))
+        ctrl.PicControl.Visible := true
+    ctrl.Visible := true
+}
+
+ShowControls(list) {
+    for ctrl in list
+        ShowControl(ctrl)
+}
+
 EnableStratRotation(*) {
-    global RotateStrategies, SwapAmount, SwapUnit
+    global RotateStrategies, SwapAmount, SwapUnit, AutoEquip
 
     v := MainGui.Submit(false)
     RotateStrategies := v.RotateStrategies
     IniWrite(RotateStrategies, SettingsFile, "Options", "RotateStrategies")
 
     show := (RotateStrategies = 1)
-
     Tab1_Lbl2.Visible := show
     Strategy2Ctrl.Visible := show
     Tab1_Btn3.Visible := show
     Tab1_Btn4.Visible := show
-
     SwapAfterLbl.Visible := show
     SwapAmountCtrl.Visible := show
     SwapUnitCtrl.Visible := show
 
-    AutoEquipCtrl.Enabled := !show
+    ; Rotation requires Auto Equip, but keep the checkbox readable instead of
+    ; disabling it with the OS greyed-out style.
+    SetCheckboxLocked(AutoEquipCtrl, show, 1)
 
     if (show) {
-        AutoEquipCtrl.Value := 1
-        v := MainGui.Submit(false)
-        AutoEquip := v.AutoEquip
+        AutoEquip := 1
         IniWrite(AutoEquip, SettingsFile, "Options", "AutoEquip")
         SwapAmount := SwapAmountCtrl.Text
         SwapUnit := SwapUnitCtrl.Text
         AutoEquipCtrl.Move(357, 190)
+        ; Preserve Sanjin's Auto Settings layout introduced by PR #37.
+        AutoConfigCtrl.Move(490, 190)
         IniWrite(SwapAmount, SettingsFile, "Options", "SwapAmount")
         IniWrite(SwapUnit, SettingsFile, "Options", "SwapUnit")
     } else {
         AutoEquipCtrl.Move(155, 190)
+        ; Keep Auto Settings alongside Auto Equip when rotation controls collapse.
+        AutoConfigCtrl.Move(285, 190)
     }
 }
 
-EnableAutoEquip(*) {
+EnableAutoEquip(ctrl, *) {
     global AutoEquip
+
+    if (HoldLockedCheckbox(ctrl))
+        return
 
     v := MainGui.Submit(false)
     AutoEquip := v.AutoEquip
     IniWrite(AutoEquip, SettingsFile, "Options", "AutoEquip")
+}
+
+EnableAutoConfig(ctrl, *) {
+    global AutoConfigureSettings, SettingsFile, AutoConfigCtrl
+
+    AutoConfigureSettings := ctrl.Value ? 1 : 0
+    IniWrite(AutoConfigureSettings, SettingsFile, "Options", "AutoConfigureSettings")
+
+    if (AutoConfigureSettings) {
+        ; Opting in only arms the feature. Roblox XML is changed later, after
+        ; Roblox is confirmed closed and immediately before RunRoblox launches it.
+        if !CancelPendingAutoSettingsRestore() {
+            AutoConfigureSettings := 0
+            AutoConfigCtrl.Value := 0
+            IniWrite(0, SettingsFile, "Options", "AutoConfigureSettings")
+            ModernMsgBox("Auto Settings unavailable",
+                "Ultimate Macro could not safely cancel a pending restore.`n`nNo Roblox settings were changed. " GetAutoSettingsLastError(),
+                "OK", "WARNING")
+        }
+    } else if !RequestAutoSettingsRestore(A_ScriptDir) {
+        ModernMsgBox("Auto Settings restore pending",
+            "The original Roblox settings backup is still preserved, but Ultimate Macro could not schedule the restore helper.`n`nClose Roblox and reopen Ultimate Macro to retry the restore.",
+            "OK", "WARNING")
+    }
 }
 
 SelectStrat1(ctrl, *) {
@@ -2406,6 +2756,13 @@ StartStrategy(*) {
 
     if !IsSet(MainGui) or !MainGui
         return
+
+    partyProblem := SyncPartySettingsFromGui(false)
+    if (partyProblem != "") {
+        ModernMsgBox("Party settings incomplete",
+            partyProblem "`n`nFill it in on the Party tab, or turn party mode off.", "OK", "WARNING")
+        return
+    }
 
     v := MainGui.Submit(false)
     IniWrite(v.Strategy1, SettingsFile, "Options", "Strategy1")
@@ -2509,6 +2866,9 @@ StartStrategy(*) {
 StopStrategy(*) {
     global RunningStrategy, AutorunStartTime, Recording, MacroRecording, InputHookObj
 
+    StopRuntimeTimers()
+    if (RunningStrategy || Recording || MacroRecording)
+        ReleaseHeldInput()
     KillSubmacros()
 
     if (RunningStrategy) {
@@ -2543,6 +2903,7 @@ StopStrategy(*) {
         IniDelete(StateFile, "State", "HeartbeatTimeout")
         RunningStrategy := false
         SafeReload()
+        return
     }
 
     if (Recording) {
@@ -2612,11 +2973,14 @@ StartRecording(ctrl, *) {
             return
     }
 
+    SetActionButtonEnabled(Tab2_Btn1, false)
+    SetActionButtonEnabled(Tab2_Btn2, true)
+
     if (IsSet(GuiTitleCtrl) && GuiTitleCtrl) {
         GuiTitleCtrl.SetFont("cff6b6b")
     }
 
-    if (IsSet(Tab2_Btn1) && Tab2_Btn1) {
+    if (IsSet(Tab2_Btn1) && Tab2_Btn1 && !HasProp(Tab2_Btn1, "PicControl")) {
         Tab2_Btn1.SetFont("c808080 norm")
         Tab2_Btn1.Opt("Background0e0e0f")
         if (IsSet(HoverEffect) && IsObject(HoverEffect)) {
@@ -2629,7 +2993,7 @@ StartRecording(ctrl, *) {
         }
     }
 
-    if (IsSet(Tab2_Btn2) && Tab2_Btn2) {
+    if (IsSet(Tab2_Btn2) && Tab2_Btn2 && !HasProp(Tab2_Btn2, "PicControl")) {
         Tab2_Btn2.SetFont("cWhite norm")
         if (IsSet(HoverEffect) && IsObject(HoverEffect)) {
             hasElement := false
@@ -2694,11 +3058,14 @@ StopRecord(ctrl, *) {
     Recording := false
     DeleteAllIndicators()
 
+    SetActionButtonEnabled(Tab2_Btn1, true)
+    SetActionButtonEnabled(Tab2_Btn2, false)
+
     if (IsSet(GuiTitleCtrl) && GuiTitleCtrl) {
         GuiTitleCtrl.SetFont("cWhite")
     }
 
-    if (IsSet(Tab2_Btn1) && Tab2_Btn1) {
+    if (IsSet(Tab2_Btn1) && Tab2_Btn1 && !HasProp(Tab2_Btn1, "PicControl")) {
         Tab2_Btn1.SetFont("cWhite norm")
         if (IsSet(HoverEffect) && IsObject(HoverEffect)) {
             hasElement := false
@@ -2714,7 +3081,7 @@ StopRecord(ctrl, *) {
         }
     }
 
-    if (IsSet(Tab2_Btn2) && Tab2_Btn2) {
+    if (IsSet(Tab2_Btn2) && Tab2_Btn2 && !HasProp(Tab2_Btn2, "PicControl")) {
         Tab2_Btn2.SetFont("c808080 norm")
         Tab2_Btn2.Opt("Background0e0e0f")
         if (IsSet(HoverEffect) && IsObject(HoverEffect)) {
@@ -4115,8 +4482,15 @@ TestBot(ctrl, *) {
 
 SaveWebhookSettings(ctrl, *) {
     global WebhookLink, WebhookLink2, WebhookEnabled, SendCurrenciesEnabled, WebhookDebugLogs, WebhookScreenshots,
-        WebhookTriumphScreenshots, WebhookSepatateTriumphScreenshots, UserID, ChannelID, BotEnabled, BotToken
+        WebhookTriumphScreenshots, WebhookSepatateTriumphScreenshots, UserID, ChannelID, BotEnabled, BotToken, BotPrefix
     v := MainGui.Submit(0)
+    nextPrefix := Trim(v.BotPrefix)
+    if (nextPrefix = "")
+        nextPrefix := "!"
+    if (StrLen(nextPrefix) != 1 || RegExMatch(nextPrefix, "[A-Za-z0-9\s]")) {
+        ModernMsgBox("Invalid command prefix", "Use one non-alphanumeric character, such as !, ., or -.", "OK", "WARNING")
+        return
+    }
     WebhookLink := v.WebhookLink
     WebhookLink2 := v.WebhookLink2
     WebhookEnabled := v.WebhookEnabled
@@ -4129,10 +4503,12 @@ SaveWebhookSettings(ctrl, *) {
     BotEnabled := v.BotEnabled
     ChannelID := v.ChannelID
     UserID := v.WebhookUserID2
+    BotPrefix := nextPrefix
     IniWrite(BotToken, BotSettings, "Token", "BotToken")
     IniWrite(BotEnabled, BotSettings, "Settings", "Enabled")
     IniWrite(ChannelID, BotSettings, "Settings", "Channel")
     IniWrite(UserID, BotSettings, "Settings", "UserID")
+    IniWrite(BotPrefix, BotSettings, "Settings", "Prefix")
     IniWrite(WebhookLink, SettingsFile, "Webhook", "Link")
     IniWrite(WebhookLink2, SettingsFile, "Webhook", "Link2")
     IniWrite(WebhookUserID, SettingsFile, "Webhook", "WebhookUserID")
@@ -4372,31 +4748,88 @@ SaveAllSettings(ctrl, *) {
     MsgBox("All settings have been successfully saved!", "Ultimate Macro", 0x1040)
 }
 
-SaveAllSettingsMULTIPLAYER(ctrl, *) {
-    global HostName, PartyMembersStr, MultiplayerEnabled, PlayerRole, LeaveCondition
+NormalizePartyMembers(value) {
+    normalized := ""
+    loop parse, value, "," {
+        member := Trim(A_LoopField)
+        if (member = "")
+            continue
+        normalized .= (normalized = "" ? "" : ",") member
+    }
+    return normalized
+}
+
+IsPartyFieldUnset(value) {
+    value := Trim(value)
+    return (value = "" || value = "..." || value = "someone, someone..." || value = "someone,someone...")
+}
+
+CountConfiguredPartyMembers(value := "") {
+    global PartyMembers
+    if (value = "")
+        value := PartyMembers
+
+    count := 0
+    loop parse, value, "," {
+        if (Trim(A_LoopField) != "")
+            count++
+    }
+    return count
+}
+
+PartySettingsProblem() {
+    global MultiplayerEnabled, PlayerRole, HostName, PartyMembers
+
+    if (!MultiplayerEnabled)
+        return ""
+
+    if (PlayerRole = "Member" && IsPartyFieldUnset(HostName))
+        return "Party mode is enabled and you are set to Member, but 'Host Username' is empty."
+
+    if (PlayerRole = "Host" && IsPartyFieldUnset(PartyMembers))
+        return "Party mode is enabled and you are set to Host, but 'Party Members' is empty."
+
+    if (PlayerRole = "Host") {
+        count := CountConfiguredPartyMembers(PartyMembers)
+        if (count < 1 || count > 3)
+            return "Party mode supports 1 to 3 party members besides you; " count " are configured."
+    }
+
+    return ""
+}
+
+SyncPartySettingsFromGui(showFeedback := false) {
+    global HostName, PartyMembersStr, PartyMembers, MultiplayerEnabled, PlayerRole, LeaveCondition
     global SettingsFile
 
-    s := MainGui.Submit(false)
-
     HostName := Trim(Tab3_HostNm_EDIT.Value)
-    PartyMembersStr := RegExReplace(Tab3_PartyMemb_Edit.Value, "\s*,\s*", ",")
+    PartyMembersStr := NormalizePartyMembers(Tab3_PartyMemb_Edit.Value)
+    PartyMembers := PartyMembersStr
     MultiplayerEnabled := MultiplayerEnabledTGL.Value
-    PlayerRole := (s.PlayerRole == 2) ? "Member" : "Host"
-    LeaveCondition := (s.LeaveCondition == 1) ? "All" : "Any"
+    PlayerRole := Tab3_Role_Member.Value ? "Member" : "Host"
+    LeaveCondition := Tab3_LCondition_All.Value ? "All" : "Any"
 
     IniWrite(HostName, SettingsFile, "Multiplayer", "HostName")
-    IniWrite(PartyMembersStr, SettingsFile, "Multiplayer", "PartyMembers")
+    IniWrite(PartyMembers, SettingsFile, "Multiplayer", "PartyMembers")
     IniWrite(MultiplayerEnabled, SettingsFile, "Multiplayer", "MultiplayerEnabled")
     IniWrite(PlayerRole, SettingsFile, "Multiplayer", "PlayerRole")
     IniWrite(LeaveCondition, SettingsFile, "Multiplayer", "LeaveCondition")
 
-    global PartyMembers := IniRead(SettingsFile, "Multiplayer", "PartyMembers", "someone, someone...")
-    global PlayerRole := IniRead(SettingsFile, "Multiplayer", "PlayerRole", "Host")
-    global HostName := IniRead(SettingsFile, "Multiplayer", "HostName", "...")
-    global LeaveCondition := IniRead(SettingsFile, "Multiplayer", "LeaveCondition", "Any")
-    global MultiplayerEnabled := IniRead(SettingsFile, "Multiplayer", "MultiplayerEnabled", 0)
+    partyProblem := PartySettingsProblem()
+    if (showFeedback) {
+        if (partyProblem != "") {
+            ModernMsgBox("Party settings saved with warning",
+                partyProblem "`n`nThe settings were saved, but the macro will not start Party Mode until this is fixed.",
+                "OK", "WARNING")
+        } else {
+            MsgBox("Multiplayer settings saved!", "Success", 0x1040)
+        }
+    }
+    return partyProblem
+}
 
-    MsgBox("Multiplayer settings saved!", "Success", 0x1040)
+SaveAllSettingsMULTIPLAYER(ctrl, *) {
+    SyncPartySettingsFromGui(true)
 }
 
 LegacyModeInfo(*) {
@@ -4405,6 +4838,40 @@ LegacyModeInfo(*) {
             "Changes how the image detection works. May not work for some people.`n`nWarning: some features - such as Auto Equip, Changing Tower Targeting will not work with this mode!",
             "Legacy Mode", "0x1040")
     }
+}
+
+ClearStoredLogs(ctrl, *) {
+    logDir := RuntimeLogDirectory()
+
+    if (logDir = "" || !DirExist(logDir)) {
+        MsgBox("There are no stored logs yet.", "Clear Logs", "0x1040")
+        return
+    }
+
+    storedBytes := RuntimeLogStoredBytes()
+    if (storedBytes = 0) {
+        MsgBox("There are no stored logs to clear.", "Clear Logs", "0x1040")
+        return
+    }
+
+    prompt := "Delete every stored log in:`n" logDir
+    prompt .= "`n`nCurrently stored: " FormatLogSize(storedBytes)
+    prompt .= "`n`nThis removes the persistent log, past session logs, and the last crash report."
+    prompt .= " It cannot be undone."
+
+    if (MsgBox(prompt, "Clear Logs", "0x1024") != "Yes")
+        return
+
+    removed := RuntimeLogClear()
+    MsgBox("Cleared " removed " log file" (removed = 1 ? "" : "s") ".", "Clear Logs", "0x1040")
+}
+
+FormatLogSize(bytes) {
+    if (bytes >= 1048576)
+        return Format("{:.1f} MB", bytes / 1048576)
+    if (bytes >= 1024)
+        return Format("{:.1f} KB", bytes / 1024)
+    return bytes " bytes"
 }
 
 CheckVipLink(ctrl, *) {
@@ -4431,23 +4898,24 @@ CheckVipLink(ctrl, *) {
     UseVipServerCtrl.Value := 0
 }
 
-CheckWebhookLink(ctrl, *) {
-    v := MainGui.Submit(false)
-    link := v.WebhookLink
+CheckWebhookLink(*) {
+    link := Trim(WebhookLinkCtrl.Value)
     if (link = "" || (!InStr(link, "discord.com/api/webhooks/") && !InStr(link, "discordapp.com/api/webhooks/"))) {
-        WebhookEnabledCtrl.Value := 0
+        SetCheckboxLocked(WebhookEnabledCtrl, true, 0)
         return
     }
+
     try {
         whr := ComObject("WinHttp.WinHttpRequest.5.1")
         whr.Open("GET", link, false)
         whr.SetTimeouts(3000, 3000, 4000, 4000)
         whr.Send()
-        WebhookEnabledCtrl.Enabled := (whr.Status = 200)
-        if (whr.Status != 200)
+        valid := (whr.Status = 200)
+        SetCheckboxLocked(WebhookEnabledCtrl, !valid, 0)
+        if (!valid)
             WebhookEnabledCtrl.Value := 0
     } catch {
-        WebhookEnabledCtrl.Value := 0
+        SetCheckboxLocked(WebhookEnabledCtrl, true, 0)
     }
 }
 
@@ -4462,32 +4930,43 @@ EnableWebhookLink2(*) {
 }
 
 DiscordSettings(*) {
-    if tab4_Title.Text = "Discord Webhook" {
-        tab4_Title.Text := "Discord Bot"
-        HideAllTabContent()
-        ShowDiscordSettings()
-    } else {
-        tab4_Title.Text := "Discord Webhook"
-        HideAllTabContent()
-        ShowDiscordSettings()
-    }
+    global DiscordPage
+    ShowDiscordPage(DiscordPage = "Webhook" ? "Bot" : "Webhook")
 }
 
 ShowDiscordSettings(*) {
-    if tab4_Title.Text = "Discord Webhook" {
-        HideAllTabContent()
-        for ctrl in DiscordWebhookTab
-            ctrl.Visible := true
-    } else {
-        HideAllTabContent()
-        for ctrl in DiscordBotTab
-            ctrl.Visible := true
-    }
+    global DiscordPage
+    ShowDiscordPage(DiscordPage)
 }
 
-CheckWebhookLink2(ctrl, *) {
-    v := MainGui.Submit(false)
-    link := v.WebhookLink2
+ShowDiscordPage(page, *) {
+    global DiscordPage, DiscordNavTab, DiscordWebhookTab, DiscordBotTab, DiscordRemoteTab
+    global Tab4_WebhookTabTitle, Tab4_BotTabTitle, Tab4_RemoteTabTitle
+
+    if (page != "Webhook" && page != "Bot" && page != "Remote")
+        page := "Webhook"
+    DiscordPage := page
+    HideAllTabContent()
+
+    for ctrl in DiscordNavTab
+        ShowControl(ctrl)
+
+    Tab4_WebhookTabTitle.SetFont(page = "Webhook" ? "c3A86FF" : "c888888")
+    Tab4_BotTabTitle.SetFont(page = "Bot" ? "c3A86FF" : "c888888")
+    Tab4_RemoteTabTitle.SetFont(page = "Remote" ? "c3A86FF" : "c888888")
+
+    controls := page = "Webhook" ? DiscordWebhookTab : (page = "Bot" ? DiscordBotTab : DiscordRemoteTab)
+    for ctrl in controls
+        ShowControl(ctrl)
+
+    if (page = "Webhook")
+        EnableWebhookLink2()
+    else if (page = "Remote")
+        OfficialRemoteRefreshControls()
+}
+
+CheckWebhookLink2(*) {
+    link := Trim(WebhookLinkCtrl2.Value)
     if (link = "" || (!InStr(link, "discord.com/api/webhooks/") && !InStr(link, "discordapp.com/api/webhooks/"))) {
         WebhookSepatateTriumphScreenshotsCtrl.Value := 0
         return
@@ -4495,6 +4974,7 @@ CheckWebhookLink2(ctrl, *) {
     try {
         whr := ComObject("WinHttp.WinHttpRequest.5.1")
         whr.Open("GET", link, false)
+        whr.SetTimeouts(3000, 3000, 4000, 4000)
         whr.Send()
         WebhookSepatateTriumphScreenshotsCtrl.Enabled := (whr.Status = 200)
         if (whr.Status != 200)
@@ -4715,47 +5195,65 @@ RunStrategy(stratFile := "", skipRestart := false) {
 
     if (!switched) {
         if (!skipRestart) {
-            CheckRestart()
+            if !CheckRestart()
+                return false
         } else {
             CloseRoblox()
-            RunRoblox()
+            if !RunRoblox()
+                return false
             if (AutoEquip) {
-                EquipTowers(RequiredTowers)
+                if !EquipTowers(RequiredTowers)
+                    return false
             }
-            JoinGame()
+            if !JoinGame()
+                return false
         }
     } else {
         CloseRoblox()
-        RunRoblox()
-        EquipTowers(RequiredTowers)
+        if !RunRoblox()
+            return false
+        if !EquipTowers(RequiredTowers)
+            return false
 
-        JoinGame()
+        if !JoinGame()
+            return false
     }
 
     if (readyX = 0 && readyY = 0) {
-        waitReady()
+        if !waitReady()
+            return false
     }
 
     if (!IsRestarting) {
-        CheckTheMapF()
+        if !CheckTheMapF()
+            return false
         if (!InArray(SpecialMaps, gamemap) && ResolveArcadeTarget() = "") {
-            AlignCamera()
+            if !AlignCamera() {
+                SafeReload()
+                return false
+            }
         }
     }
 
-    activateTimescale()
+    if !activateTimescale()
+        return false
 
     if (!IsRestarting && ResolveArcadeTarget() != "") {
         ; Arcade/Trial worlds should use the same deterministic camera baseline
         ; before gameplay begins. Align while the Ready screen is still active,
         ; then press Ready only after the camera operation has completed.
         RuntimeLogInfo("arcade_camera_pre_ready", "Aligning Arcade camera before Ready", "target=" ResolveArcadeTarget())
-        AlignCamera()
+        if !AlignCamera() {
+            SafeReload()
+            return false
+        }
     }
 
-    ClickReady()
+    if !ClickReady()
+        return false
 
     PlayStrategy()
+    return true
 }
 
 PlayStrategy() {
@@ -5273,12 +5771,13 @@ CheckRestart() {
         LogToConsole("Navigating to lobby to check playtime rewards...", true, false)
         IsRestarting := false
         CloseRoblox()
-        RunRoblox()
+        if !RunRoblox()
+            return false
         if (shouldEquip && AutoEquip) {
-            EquipTowers(requiredTowers)
+            if !EquipTowers(requiredTowers)
+                return false
         }
-        JoinGame()
-        return
+        return JoinGame()
     }
 
     KillSubmacros()
@@ -5338,7 +5837,7 @@ CheckRestart() {
                 }
                 Sleep(150)
                 startWatchdog()
-                return
+                return true
             }
         }
 
@@ -5354,9 +5853,10 @@ CheckRestart() {
                     Click(resReplay.x, resReplay.y)
                 }
                 Sleep(150)
-                WaitForLobbyLoad()
+                if !WaitForLobbyLoad()
+                    return false
                 startWatchdog()
-                return
+                return true
             }
         }
     }
@@ -5364,15 +5864,17 @@ CheckRestart() {
     startWatchdog()
     IsRestarting := false
     CloseRoblox()
-    RunRoblox()
+    if !RunRoblox()
+        return false
     if (shouldEquip && AutoEquip) {
-        EquipTowers(requiredTowers)
+        if !EquipTowers(requiredTowers)
+            return false
     }
-    JoinGame()
+    return JoinGame()
 }
 
 RunRoblox(doReload := true) {
-    global VipLink, UseVipServer
+    global VipLink, UseVipServer, AutoConfigureSettings, RunningStrategy
     PlaceID := "3260590327"
 
     loop {
@@ -5391,6 +5893,15 @@ RunRoblox(doReload := true) {
         }
 
         MacroPhase("launching_roblox", 240000)
+        if !PrepareAutoSettingsForRobloxLaunch(AutoConfigureSettings) {
+            detail := GetAutoSettingsLastError()
+            RuntimeLogError("auto_settings_prepare_failed",
+                "Roblox launch blocked because Auto Settings could not be prepared safely", "detail=" detail)
+            LogToConsole("Auto Settings preparation failed; Roblox was not launched. " detail, true, false)
+            if (IsSet(RunningStrategy) && RunningStrategy)
+                StopStrategy()
+            return false
+        }
         Run(DeepLink)
         robloxopened := false
         loop 60 {
@@ -5408,6 +5919,7 @@ RunRoblox(doReload := true) {
         if (!robloxopened && doReload) {
             LogToConsole("Roblox not started after 1 minute! Reloading...", true)
             SafeReload()
+            return false
         } else if (!robloxopened && !doReload) {
             return false
         }
@@ -5427,6 +5939,7 @@ RunRoblox(doReload := true) {
             if (A_TickCount - startTime > 60000) {
                 if (doReload) {
                     SafeReload()
+                    return false
                 } else {
                     return false
                 }
@@ -5715,8 +6228,13 @@ WaitForLobbyLoad() {
             if (A_TickCount - startTime > 60000) {
                 CloseRoblox()
                 SafeReload()
+                return false
             }
-            getRobloxPos(, , &w, &h)
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("lobby_load_geometry_missing", "Roblox client geometry disappeared while loading the lobby")
+                SafeReload()
+                return false
+            }
             res := AdvancedImageSearch("Resources/Ready.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.5), Round(h *
                 0.34), 0.6, 1.7)
             if (res.status = "success" && res.score >= 0.7) {
@@ -5725,7 +6243,8 @@ WaitForLobbyLoad() {
             Sleep(100)
         }
         if (!MultiplayerEnabled || PlayerRole = "Host") {
-            SelectMap(res.x, res.y)
+            if !SelectMap(res.x, res.y)
+                return false
         } else {
             Click(Round(w * 0.5), res.y)
             Sleep 250
@@ -5734,6 +6253,7 @@ WaitForLobbyLoad() {
                 ApplyModifiers()
         }
     }
+    return true
 }
 
 JoinGame() {
@@ -5743,13 +6263,17 @@ JoinGame() {
     readyY := 0
     MacroPhase("matchmaking", 240000)
     RuntimeLogInfo("matchmaking_ready_reset", "Reset Ready coordinates before fresh matchmaking join")
-    getRobloxPos(, , &w, &h)
+    if !getRobloxPos(, , &w, &h) {
+        RuntimeLogWarn("matchmaking_geometry_missing", "Roblox client geometry was unavailable before matchmaking")
+        SafeReload()
+        return false
+    }
 
     startTime := A_TickCount
     loop {
         if (A_TickCount - startTime > 80000) {
             SafeReload()
-            break
+            return false
         }
 
         x1 := Round(w * 0.25)
@@ -5769,13 +6293,12 @@ JoinGame() {
 
             if (MultiplayerEnabled) {
                 if (PlayerRole = "Member") {
-                    AcceptInvite(res.x, res.y)
-                    WaitForLobbyLoad()
-                    return
-                } else {
-                    CreateParty(res.x, res.y)
+                    if !AcceptInvite(res.x, res.y)
+                        return false
+                    return WaitForLobbyLoad()
+                } else if !CreateParty(res.x, res.y) {
+                    return false
                 }
-
             }
 
             joinTarget := ResolveArcadeTarget()
@@ -5799,7 +6322,11 @@ JoinGame() {
         categoryStart := A_TickCount
         categoryOpened := false
         loop {
-            getRobloxPos(, , &w, &h)
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("arcade_category_geometry_missing", "Roblox client geometry disappeared before Arcade selection")
+                SafeReload()
+                return false
+            }
             if TryOpenArcadeCategory(w, h) {
                 categoryOpened := true
                 break
@@ -5812,7 +6339,7 @@ JoinGame() {
         }
         if !categoryOpened {
             SafeReload()
-            return
+            return false
         }
 
         ; Start card scrolling only after the Arcade category is active.
@@ -5820,11 +6347,15 @@ JoinGame() {
         arcadeScrollAttempts := 0
         startTime := A_TickCount
         loop {
-            getRobloxPos(, , &w, &h)
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("arcade_matchmaking_geometry_missing", "Roblox client geometry disappeared during Arcade selection")
+                SafeReload()
+                return false
+            }
             if (A_TickCount - startTime > 35000) {
                 RuntimeLogWarn("arcade_matchmaking_timeout", "Could not find Arcade/Trial card", "target=" arcadeTarget)
                 SafeReload()
-                break
+                return false
             }
 
             if TryClickArcadeTarget(arcadeTarget, w, h)
@@ -5852,14 +6383,18 @@ JoinGame() {
         modeScrollAttempts := 0
 
         loop {
-            getRobloxPos(, , &w, &h)
+            if !getRobloxPos(, , &w, &h) {
+                RuntimeLogWarn("difficulty_geometry_missing", "Roblox client geometry disappeared during difficulty selection")
+                SafeReload()
+                return false
+            }
             elapsedDifficulty := A_TickCount - difficultyStart
             if (A_TickCount >= difficultyDeadline) {
                 LogToConsole("Could not select difficulty '" difficulty "' within 60s. Reloading...", true)
                 RuntimeLogWarn("difficulty_select_timeout", "Difficulty card never matched",
                     "difficulty=" difficulty "; scrolls=" modeScrollAttempts)
                 SafeReload()
-                return
+                return false
             }
 
             if TryClickDifficultyTarget(difficulty, w, h) {
@@ -5903,10 +6438,14 @@ JoinGame() {
     MacroPhase("selecting_party_size", 120000)
     startTime := A_TickCount
     loop {
-        getRobloxPos(, , &w, &h)
+        if !getRobloxPos(, , &w, &h) {
+            RuntimeLogWarn("party_size_geometry_missing", "Roblox client geometry disappeared during party-size selection")
+            SafeReload()
+            return false
+        }
         if (A_TickCount - startTime > 40000) {
             SafeReload()
-            break
+            return false
         }
         if (!MultiplayerEnabled) {
             res := AdvancedImageSearch("Resources/Solo.png", 0, Round(h * 0.2), Round(w * 0.7), Round(h * 0.55))
@@ -5944,254 +6483,289 @@ JoinGame() {
         }
         Sleep(100)
     }
-    WaitForLobbyLoad()
+    return WaitForLobbyLoad()
+}
+
+InvitePartyMembers(search_bar) {
+    global PartyMembers, PartyInviteBusy
+
+    PartyInviteBusy := true
+    try {
+        loop parse, PartyMembers, "," {
+            member := Trim(A_LoopField)
+            if (member = "")
+                continue
+
+            Click(search_bar.x, search_bar.y)
+            Sleep(80)
+            Send("^a")
+            Send("{Backspace}")
+            Sleep(60)
+            SendText(member)
+            Sleep(120)
+            Click(search_bar.x + ScaleX(75), search_bar.y + ScaleY(92))
+            Sleep(120)
+            LogToConsole("Invited party member: " member)
+        }
+        return true
+    } finally {
+        PartyInviteBusy := false
+    }
+}
+
+CountPartyMembersPresent(w, h) {
+    count := 0
+    sy := Round(h * 0.1)
+    bottom := Round(h * 0.75)
+
+    loop 8 {
+        if (sy >= bottom)
+            break
+
+        x_btn := AdvancedImageSearch("Resources\\x.png", Round(w * 0.25), sy, Round(w * 0.25), bottom - sy)
+        if (x_btn.status != "success" || x_btn.score <= 0.7)
+            break
+
+        count++
+        step := (x_btn.HasProp("h") && x_btn.h > 0) ? Round(x_btn.h / 2) : ScaleY(20)
+        nextY := x_btn.y + Max(step, ScaleY(10))
+        if (nextY <= sy)
+            break
+        sy := nextY
+    }
+
+    return count
 }
 
 CreateParty(x, y) {
-    global PartyMembers
-    StartTime := A_TickCount
-    CloseX := 0
-    CloseY := 0
+    global PartyMembers, PartyInviteBusy
+
+    MacroPhase("party_host_setup", 30000)
+    setupDeadline := A_TickCount + 15000
 
     loop {
-        Click(x + 200, y)
+        getRobloxPos(, , &w, &h)
+        Click(x + ScaleX(200), y)
+        innerDeadline := A_TickCount + 5000
 
-        InnerStartTime := A_TickCount
+        loop {
+            resclose := AdvancedImageSearch("Resources\\close.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5),
+                Round(h * 0.4))
+            if (resclose.status = "success" && resclose.score >= 0.7)
+                break 2
+            if (A_TickCount >= innerDeadline)
+                break
+            Sleep(250)
+        }
 
-        if (A_TickCount - StartTime > 10000) {
-            LogToConsole("Failed to Create Party: The macro can't see the menu!", true)
+        if (A_TickCount >= setupDeadline) {
+            LogToConsole("Failed to Create Party: the party menu did not open in time.", true)
+            RuntimeLogWarn("party_create_menu_timeout", "Could not open party menu")
             SafeReload()
+            return false
+        }
+    }
+
+    Sleep(150)
+    getRobloxPos(, , &w, &h)
+    create_btn := AdvancedImageSearch("Resources\\create_party.png", Round(w * 0.25), Round(h * 0.5), Round(w * 0.5),
+        Round(h * 0.5))
+    if (create_btn.status != "success" || create_btn.score <= 0.58) {
+        LogToConsole("Failed to Create Party: the macro can't see the create party button!", true)
+        RuntimeLogWarn("party_create_button_missing", "Create Party button was not detected")
+        SafeReload()
+        return false
+    }
+
+    Click(create_btn.x, create_btn.y)
+    LogToConsole("Successfully created the party")
+    Sleep(300)
+
+    timerEnabled := false
+    try {
+        SetTimer(CancelInviteIfAppeared, 7500)
+        timerEnabled := true
+
+        search_bar := ""
+        loop 3 {
+            getRobloxPos(, , &w, &h)
+            candidate := AdvancedImageSearch("Resources\\type_to_search.png", Round(w * 0.25), Round(h * 0.1),
+                Round(w * 0.5), Round(h * 0.3))
+            if (candidate.status = "success" && candidate.score > 0.58) {
+                search_bar := candidate
+                break
+            }
+            Sleep(1000)
+        }
+
+        if (!IsObject(search_bar)) {
+            LogToConsole("Failed to Create Party: the macro can't see the member search bar!", true)
+            RuntimeLogWarn("party_search_missing", "Party member search bar was not detected")
+            SafeReload()
+            return false
+        }
+
+        InvitePartyMembers(search_bar)
+        totalPartyMembers := CountConfiguredPartyMembers(PartyMembers)
+        waitDeadline := A_TickCount + 180000
+        reinviteAt := A_TickCount + 30000
+        MacroPhase("party_host_wait", 190000)
+
+        loop {
+            getRobloxPos(, , &w, &h)
+            present := CountPartyMembersPresent(w, h)
+            LogToConsole("Waiting for " totalPartyMembers " players... (" present "/" totalPartyMembers ")")
+
+            if (present >= totalPartyMembers) {
+                LogToConsole("All players: " PartyMembers " have joined!")
+                RuntimeLogInfo("party_ready", "All configured party members joined",
+                    "members=" totalPartyMembers)
+                break
+            }
+
+            if (A_TickCount >= waitDeadline) {
+                LogToConsole("Party members did not all join within 3 minutes. Reloading...", true)
+                RuntimeLogWarn("party_join_timeout", "Timed out waiting for party members",
+                    "expected=" totalPartyMembers "; present=" present)
+                SafeReload()
+                return false
+            }
+
+            if (A_TickCount >= reinviteAt) {
+                candidate := AdvancedImageSearch("Resources\\type_to_search.png", Round(w * 0.25), Round(h * 0.1),
+                    Round(w * 0.5), Round(h * 0.3))
+                if (candidate.status = "success" && candidate.score > 0.58) {
+                    search_bar := candidate
+                    InvitePartyMembers(search_bar)
+                }
+                reinviteAt := A_TickCount + 30000
+            }
+            Sleep(3000)
         }
 
         getRobloxPos(, , &w, &h)
-        loop {
-            resclose := AdvancedImageSearch("Resources\close.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5),
+        resclose := AdvancedImageSearch("Resources\\close.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5),
             Round(h * 0.4))
-
-            if (resclose.status = "success" && resclose.score >= 0.7) {
-                openedMenu := true
-                CloseX := resclose.x
-                CloseY := resclose.y
-                break 2
-            }
-            if (A_TickCount - InnerStartTime > 5000)
-                break
-            Sleep(500)
-        }
+        if (resclose.status = "success" && resclose.score >= 0.7)
+            Click(resclose.x, resclose.y)
+        Sleep(200)
+        return true
+    } finally {
+        PartyInviteBusy := false
+        if (timerEnabled)
+            SetTimer(CancelInviteIfAppeared, 0)
     }
-
-    Sleep 150
-
-    create_btn := AdvancedImageSearch("Resources\create_party.png", Round(w * 0.25), Round(h * 0.5), Round(w * 0.5),
-    Round(h * 0.5))
-    Sleep 500
-    if (create_btn.score > 0.58) {
-        Click(create_btn.x, create_btn.y)
-        LogToConsole("Successfully created the party")
-    } else {
-        LogToConsole("Failed to Create Party: The macro can't see the create party button!", true)
-        SafeReload()
-    }
-
-    Sleep 300
-
-    invited := false
-
-    SetTimer(CancelInviteIfAppeared, 7500)
-
-    loop 3 {
-        search_bar := AdvancedImageSearch("Resources\type_to_search.png", Round(w * 0.25), Round(h * 0.1), Round(w *
-            0.5), Round(h * 0.3))
-        if (search_bar.score > 0.58) {
-            loop parse, PartyMembers, "," {
-                member := Trim(A_LoopField)
-                if (member = "") {
-                    continue
-                }
-                Click(search_bar.x, search_bar.y)
-                Sleep(100)
-                SendText(member)
-                Sleep(100)
-                Click(search_bar.x + ScaleX(75), search_bar.y + ScaleY(92))
-                Sleep(50)
-
-                LogToConsole("Successfully invited " member)
-            }
-            invited := true
-            break
-        }
-        Sleep 1500
-    }
-
-    if (!invited) {
-        LogToConsole("Failed to Create Party: The macro can't see the search_bar!", true)
-        SafeReload()
-    }
-
-    Sleep 300
-
-    totalPartyMembers := 0
-    loop parse, PartyMembers, "," {
-        member := Trim(A_LoopField)
-        if (member = "") {
-            continue
-        }
-        totalPartyMembers++
-    }
-
-    xs := 0
-    sy := Round(h * 0.1)
-
-    waitStartTime := A_TickCount
-
-    loop {
-        x_btn := AdvancedImageSearch("Resources\x.png", Round(w * 0.25), sy, Round(w * 0.25), Round(h * 0.75) - sy)
-        if (x_btn.score > 0.7) {
-
-            xs++
-            sy := x_btn.y + x_btn.h / 2
-        }
-        LogToConsole("Waiting for " totalPartyMembers " players... (" xs "/" totalPartyMembers ")")
-        if (xs >= totalPartyMembers) {
-            LogToConsole("All players: " PartyMembers " have joined!")
-            break
-        }
-        if (A_TickCount - waitStartTime > 30000) {
-            sy := Round(h * 0.1)
-            xs := 0
-            loop parse, PartyMembers, "," {
-                member := Trim(A_LoopField)
-                if (member = "") {
-                    continue
-                }
-                Click(search_bar.x, search_bar.y)
-                Sleep(100)
-                SendText(member)
-                Sleep(100)
-                Click(search_bar.x + ScaleX(75), search_bar.y + ScaleY(92))
-                Sleep(50)
-
-                LogToConsole("Successfully invited " member)
-            }
-            waitStartTime := A_TickCount
-        }
-        Sleep 5000
-    }
-
-    SetTimer(CancelInviteIfAppeared, 0)
-
-    resclose := AdvancedImageSearch("Resources\close.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5), Round(h *
-        0.4))
-
-    if (resclose.status = "success" && resclose.score >= 0.7) {
-        Click(resclose.x, resclose.y)
-    }
-    Sleep 200
 }
 
 CancelInviteIfAppeared(*) {
-    getRobloxPos(, , &w, &h)
+    global PartyInviteBusy
 
+    if (PartyInviteBusy)
+        return
+
+    getRobloxPos(, , &w, &h)
     cancel_btn := AdvancedImageSearch("Resources/cancel_invite.png", Round(w * 0.2), Round(h * 0.2), Round(w * 0.6),
-    Round(h * 0.65))
-    if (cancel_btn.status = "success" && cancel_btn.score >= 0.65) {
+        Round(h * 0.65))
+    if (cancel_btn.status = "success" && cancel_btn.score >= 0.65)
         Click(cancel_btn.x, cancel_btn.y)
-    }
 }
 
 AcceptInvite(x, y) {
+    global HostName
 
-    StartTime := A_TickCount
-    CloseX := 0
-    CloseY := 0
+    MacroPhase("party_member_setup", 30000)
+    setupDeadline := A_TickCount + 15000
+
     loop {
-        Click(x + 200, y)
+        getRobloxPos(, , &w, &h)
+        Click(x + ScaleX(200), y)
+        innerDeadline := A_TickCount + 5000
 
-        InnerStartTime := A_TickCount
-
-        if (A_TickCount - StartTime > 15000) {
-            LogToConsole("Failed to Create Party: The macro can't see the menu!", true)
-            SafeReload()
+        loop {
+            resclose := AdvancedImageSearch("Resources\\close.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5),
+                Round(h * 0.4))
+            if (resclose.status = "success" && resclose.score >= 0.7)
+                break 2
+            if (A_TickCount >= innerDeadline)
+                break
+            Sleep(250)
         }
 
-        getRobloxPos(, , &w, &h)
-        loop {
-            resclose := AdvancedImageSearch("Resources\close.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5),
-            Round(h * 0.4))
-
-            if (resclose.status = "success" && resclose.score >= 0.7) {
-                openedMenu := true
-                CloseX := resclose.x
-                CloseY := resclose.y
-                break 2
-            }
-            if (A_TickCount - InnerStartTime > 5000)
-                break
-            Sleep(500)
+        if (A_TickCount >= setupDeadline) {
+            LogToConsole("Failed to Accept Invite: the party menu did not open in time.", true)
+            RuntimeLogWarn("party_invite_menu_timeout", "Could not open party menu as member")
+            SafeReload()
+            return false
         }
     }
 
-    Sleep 150
-
+    Sleep(150)
     clickedInviteBtn := false
-
     search_bar_X := 0
     search_bar_Y := 0
 
     loop 5 {
-        create_btn := AdvancedImageSearch("Resources\invites_btn.png", Round(w * 0.25), 0, Round(w * 0.5), Round(h *
-            0.4))
-        if (create_btn.score > 0.58) {
+        getRobloxPos(, , &w, &h)
+        invite_btn := AdvancedImageSearch("Resources\\invites_btn.png", Round(w * 0.25), 0, Round(w * 0.5),
+            Round(h * 0.4))
+        if (invite_btn.status = "success" && invite_btn.score > 0.58) {
             clickedInviteBtn := true
-            Click(create_btn.x, create_btn.y)
-            search_bar_X := create_btn.x - 250
-            search_bar_Y := create_btn.y + 50
+            Click(invite_btn.x, invite_btn.y)
+            search_bar_X := invite_btn.x - ScaleX(250)
+            search_bar_Y := invite_btn.y + ScaleY(50)
             break
         }
-        Sleep 200
+        Sleep(250)
     }
 
     if (!clickedInviteBtn) {
-        LogToConsole("Failed to Accept Invite: The macro can't see the invites button!", true)
-        Sleep 300
+        LogToConsole("Failed to Accept Invite: the macro can't see the invites button!", true)
+        RuntimeLogWarn("party_invites_tab_missing", "Invites button was not detected")
         SafeReload()
+        return false
     }
 
-    invited := false
-
-    Sleep 200
-
+    Sleep(200)
     Click(search_bar_X, search_bar_Y)
-    Sleep(100)
+    Sleep(80)
+    Send("^a")
+    Send("{Backspace}")
+    Sleep(60)
     SendText(HostName)
-    Sleep 100
+    Sleep(150)
 
-    InnerStartTime := A_TickCount
+    inviteDeadline := A_TickCount + 180000
+    MacroPhase("party_member_wait", 190000)
     loop {
+        getRobloxPos(, , &w, &h)
         LogToConsole("Waiting for an invite from host: " HostName "...")
-        accept_btn := AdvancedImageSearch("Resources\accept_invite.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5
-        ), Round(h * 0.3))
-        if (accept_btn.score > 0.66) {
+        accept_btn := AdvancedImageSearch("Resources\\accept_invite.png", Round(w * 0.25), Round(h * 0.1),
+            Round(w * 0.5), Round(h * 0.3))
+        if (accept_btn.status = "success" && accept_btn.score > 0.66) {
             Click(accept_btn.x, accept_btn.y)
+            Sleep(200)
             if !(ReadMessage(["Error", "Party", "not", "found"])) {
                 LogToConsole("Successfully accepted an invitation from " HostName)
+                RuntimeLogInfo("party_invite_accepted", "Member accepted host invitation", "host=" HostName)
                 break
             }
         }
-        if (A_TickCount - InnerStartTime > 180000) {
-            LogToConsole(
-                "Didn't receive an invite from the host within 3 minutes! Reloading the script and rejoining...", true)
+
+        if (A_TickCount >= inviteDeadline) {
+            LogToConsole("Didn't receive an invite from the host within 3 minutes! Reloading...", true)
+            RuntimeLogWarn("party_invite_timeout", "Timed out waiting for host invitation", "host=" HostName)
             SafeReload()
+            return false
         }
-        Sleep 5000
+        Sleep(3000)
     }
 
-    resclose := AdvancedImageSearch("Resources\close.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5), Round(h *
-        0.4))
-
-    if (resclose.status = "success" && resclose.score >= 0.7) {
+    getRobloxPos(, , &w, &h)
+    resclose := AdvancedImageSearch("Resources\\close.png", Round(w * 0.25), Round(h * 0.1), Round(w * 0.5),
+        Round(h * 0.4))
+    if (resclose.status = "success" && resclose.score >= 0.7)
         Click(resclose.x, resclose.y)
-    }
+    return true
 }
 
 checkCondition(*) {
@@ -6252,7 +6826,11 @@ checkCondition(*) {
 SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
     global gamemap, difficulty, modifiers, CheckTheMap, LegacyMode
 
-    getRobloxPos(, , &w, &h)
+    if !getRobloxPos(, , &w, &h) {
+        RuntimeLogWarn("map_select_geometry_missing", "Roblox client geometry was unavailable before map selection")
+        SafeReload()
+        return false
+    }
     readyX := Round(w * 0.5)
 
     MacroPhase("selecting_map", 420000)
@@ -6288,7 +6866,10 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         ActivateRoblox()
         resetCharacter()
         Sleep(7500)
-        AlignCamera(false, false)
+        if !AlignCamera(false, false) {
+            SafeReload()
+            return false
+        }
     }
 
     if (difficulty = "Hardcore" || difficulty = "Voidcore") {
@@ -6314,7 +6895,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if !GetRobloxScreenClientRect(&mapClientX, &mapClientY, &w, &h) {
                 LogToConsole("Cannot resolve Roblox window for map OCR. Reloading...", true)
                 SafeReload()
-                return
+                return false
             }
             FoundSlot := 0
             regions := [[0, 0, Floor(w * 0.3307), Floor(h * 0.6)],
@@ -6354,6 +6935,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if (attempts >= 5) {
                 LogToConsole("Map is not found after 5 attempts! Reloading...", true)
                 SafeReload()
+                return false
             }
 
             if (FoundSlot = 0) {
@@ -6434,8 +7016,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
 
         if !(e_pr.score >= 0.75) {
             LogToConsole("The macro can't see the E prompt (" e_pr.score "), retrying again... ", true)
-            SelectMap(readyX, readyY)
-            return
+            return SelectMap(readyX, readyY)
         }
 
         SendEvent("{sc012 down}")
@@ -6467,7 +7048,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         if (!foundsearchbar) {
             LogToConsole("Can not found the search bar in the override map menu! Reloading..", true)
             SafeReload()
-            return
+            return false
         }
 
         Sleep(100)
@@ -6529,6 +7110,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if (!changedMap) {
                 LogToConsole("Failed to change the map to " gamemap, true)
                 SafeReload()
+                return false
             } else {
                 break
             }
@@ -6579,6 +7161,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if !(e_pr.score >= 0.7) {
                 LogToConsole("The macro can't see the E prompt (" e_pr.score "), reloading... ", true)
                 SafeReload()
+                return false
             }
         }
 
@@ -6589,7 +7172,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
     Sleep(100)
 
     Click(readyX, readyY)
-    waitReady()
+    return waitReady()
 }
 
 CheckTheMapF() {
@@ -6599,7 +7182,10 @@ CheckTheMapF() {
 
     if (ResolveArcadeTarget() = "" && FileExist("Resources\Maps\" . gamemap . ".png") && CheckTheMap = 1 && !InArray(SpecialMaps, gamemap) && !
     RegExMatch(modifiers_str, "i)fog")) {
-        AlignCamera(false, false, false)
+        if !AlignCamera(false, false, false) {
+            SafeReload()
+            return false
+        }
 
         LogToConsole("Checking the map... (Make sure you have the lowest graphics)")
 
@@ -6628,7 +7214,10 @@ CheckTheMapF() {
             ; A noisy first viewport is not a reload condition. Re-establish the
             ; deterministic camera twice during the same absolute deadline.
             if (cameraRecoveries < 2 && (mapSamples = 4 || mapSamples = 9)) {
-                AlignCamera(false, false, false)
+                if !AlignCamera(false, false, false) {
+                    SafeReload()
+                    return false
+                }
                 cameraRecoveries++
                 RuntimeLogInfo("map_camera_recovery", "Realigned camera after transient map misses",
                     "map=" gamemap "; recovery=" cameraRecoveries "; samples=" mapSamples)
@@ -6642,7 +7231,7 @@ CheckTheMapF() {
             LogToConsole("Can't detect the map! Reloading script...", true)
             Sleep 300
             SafeReload()
-            return
+            return false
         }
     }
 
@@ -6651,6 +7240,7 @@ CheckTheMapF() {
 
         %functionName%()
     }
+    return true
 }
 
 ApplyModifiers() {
@@ -6783,6 +7373,7 @@ waitReady() {
             LogToConsole("The ready button hasn't appeared for too long! Reloading the script...", true)
             CloseRoblox()
             SafeReload()
+            return false
         }
         if FindReadyButton(&fx, &fy) {
             readyX := fx
@@ -6792,17 +7383,22 @@ waitReady() {
         Sleep(250)
     }
     startWatchdog()
+    return true
 }
 
 activateTimescale() {
     global UseTimeScale, TimeScaleMode, TimeScaleMultiplier, difficulty, SettingsFile, AutorunStartTime,
         MultiplayerEnabled, TimescaleActive
     if (MultiplayerEnabled) {
-        return
+        return true
     }
 
-    getRobloxPos(&x, &y, &w, &h)
     if (UseTimeScale && ResolveArcadeTarget() = "") {
+        if !getRobloxPos(&x, &y, &w, &h) {
+            RuntimeLogWarn("timescale_geometry_missing", "Roblox client geometry was unavailable before TimeScale input")
+            SafeReload()
+            return false
+        }
         LogToConsole("Applying timescale: " TimeScaleMode ". Please, enable UI Navigation Toggle.")
         Click(Round(w * 0.5), Round(h * 0.5))
 
@@ -6838,6 +7434,7 @@ activateTimescale() {
                 LogToConsole("failed to activate timescale. the macro can't see the confirm/get more button... (" res.score ")",
                     true)
                 SafeReload()
+                return false
             }
 
             timescales := IniRead(StateFile, "State", "Timescale", 0)
@@ -6863,25 +7460,38 @@ activateTimescale() {
         Send("{sc02B}")
         Send("#")
     }
+    return true
 }
 
 AlignCamera(move := true, skipZoom := false, log := true) {
     global MoveEnabled, MoveDirection, MoveDuration, IsRestarting, MouseDelay
     if (IsRestarting)
-        return
+        return false
+    robloxHwnd := GetRobloxHWND()
+    if !robloxHwnd {
+        RuntimeLogWarn("align_camera_window_missing", "Camera alignment skipped because no Roblox window was found")
+        LogToConsole("Cannot align camera: Roblox window is unavailable.", true, false)
+        return false
+    }
+    if !getRobloxPos(&rx, &ry, &rw, &rh, robloxHwnd) {
+        RuntimeLogWarn("align_camera_geometry_missing", "Camera alignment skipped because Roblox CLIENT geometry was unavailable")
+        LogToConsole("Cannot align camera: Roblox client geometry is unavailable.", true, false)
+        return false
+    }
     if (log) {
         LogToConsole("Aligning camera")
     }
     closeChat()
 
-    getRobloxPos(&rx, &ry, &rw, &rh)
-
     MouseMove(rw / 2, rh / 2, 0)
     Click("Right Down")
-    Sleep(50)
-    MouseMove(0, rh, 3 + MouseDelay, "R")
-    Sleep(10)
-    Click("Right Up")
+    try {
+        Sleep(50)
+        MouseMove(0, rh, 3 + MouseDelay, "R")
+        Sleep(10)
+    } finally {
+        Click("Right Up")
+    }
     if (!skipZoom) {
         Sleep(200)
         SendEvent("{o down}")
@@ -6895,6 +7505,7 @@ AlignCamera(move := true, skipZoom := false, log := true) {
         HyperSleep(MoveDuration)
         SendEvent("{" MoveDirection " up}")
     }
+    return true
 }
 
 getSlots() {
@@ -7365,6 +7976,7 @@ isDisconnected() {
 }
 
 TryReconnect() {
+    global RunningStrategy
     attempts := 0
     loop {
         attempts++
@@ -7372,11 +7984,15 @@ TryReconnect() {
         KillSubmacros()
         CloseRoblox()
         if (RunRoblox(false) == false) {
+            ; Auto Settings failure owns the single strategy-stop/reload request.
+            ; A normal transient launch miss may still retry while the run is active.
+            if !RunningStrategy
+                return false
             continue
         } else {
             LogToConsole("Reconnect successful after " attempts " attempts!", true, false)
             startWatchdog()
-            break
+            return true
         }
     }
 }
@@ -8034,6 +8650,8 @@ LogToConsole(text, SendWebhookInstantly := false, flush := true) {
     while (LogLines.Length > 500)
         LogLines.RemoveAt(1)
 
+    RuntimeLogConsole(text)
+
     if (OverlayHWND && WinExist("ahk_id " OverlayHWND))
         UpdateOverlay()
 
@@ -8521,11 +9139,36 @@ FlushWebhookQueue() {
 ; Release anything the macro may be physically holding down. AutoHotkey does not
 ; do this on Reload/ExitApp, so a stop during AlignCamera (right-drag) or a
 ; movement step left the button or key stuck for the user afterwards.
+StopRuntimeTimers() {
+    try SetTimer(UseAbilities, 0)
+    try SetTimer(checkCondition, 0)
+    try SetTimer(CheckPopups, 0)
+    try SetTimer(CancelInviteIfAppeared, 0)
+}
+
+; Persistent application/UI timers survive ordinary F2, recording, and strategy
+; cleanup. They stop only when the whole process is exiting or reloading.
+StopApplicationTimers() {
+    StopScrollDrag()
+    try SetTimer(CheckWebhookLink, 0)
+    try SetTimer(CheckWebhookLink2, 0)
+    try SetTimer(ProcessWebhookQueue, 0)
+    try SetTimer(ProcessWebhookInstantQueue, 0)
+    try SetTimer(Hoverwatchdog, 0)
+    try SetTimer(ProcessCommands, 0)
+    try OfficialRemoteShutdown()
+}
+
 ReleaseHeldInput() {
-    global MoveDirection, CancelPlacementKey
+    global MoveDirection
+
     try Click("Right Up")
     try Click("Up")
-    for k in ["o", "w", "a", "s", "d", "Shift", "Ctrl", "Left", "Right", "Up", "Down"] {
+
+    ; Names cover normal runtime sends; scan codes cover raw recorded movement
+    ; and camera input regardless of keyboard layout.
+    for k in ["o", "w", "a", "s", "d", "Shift", "Ctrl", "Left", "Right", "Up", "Down",
+        "sc011", "sc01e", "sc01f", "sc020", "sc012", "sc02A"] {
         try SendEvent("{" k " up}")
     }
     if (IsSet(MoveDirection) && MoveDirection != "")
@@ -8539,14 +9182,10 @@ SafeReload() {
     }
     RestartLock := true
 
-    ; Stop every recurring thread first. These used to keep firing (clicking and
-    ; sending keys into Roblox) during the blocking webhook flush below.
-    try SetTimer(UseAbilities, 0)
-    try SetTimer(checkCondition, 0)
-    try SetTimer(CheckPopups, 0)
-    try SetTimer(CancelInviteIfAppeared, 0)
-    try SetTimer(Hoverwatchdog, 0)
-    try SetTimer(ProcessCommands, 0)
+    ; Stop per-run work plus persistent UI/application callbacks before the GUI
+    ; is destroyed and the process is replaced.
+    StopRuntimeTimers()
+    StopApplicationTimers()
 
     ReleaseHeldInput()
 
@@ -8686,10 +9325,29 @@ KillSubmacros() {
 }
 
 HandleExit(ExitReason, ExitCode) {
-    global StateFile, SettingsFile, RunningStrategy
+    global StateFile, SettingsFile, RunningStrategy, AutoConfigureSettings
+
+    try StopRuntimeTimers()
+    try StopApplicationTimers()
 
     ; Never leave a mouse button or movement key latched down for the user.
     try ReleaseHeldInput()
+    
+    ; Restore only through the hardened path. If Roblox is still alive, a
+    ; helper waits for actual process exit so Roblox cannot overwrite the restore.
+    autoSettingsEnabled := IsSet(AutoConfigureSettings) && AutoConfigureSettings
+    if (autoSettingsEnabled || AutoSettingsBackupExists()) {
+        try {
+            if !RequestAutoSettingsRestore(A_ScriptDir)
+                RuntimeLogWarn("auto_settings_restore_schedule_failed",
+                    "Could not schedule Roblox settings restore; original backup was preserved",
+                    "detail=" GetAutoSettingsLastError())
+        } catch Error as err {
+            RuntimeLogWarn("auto_settings_restore_schedule_failed",
+                "Could not schedule Roblox settings restore; original backup was preserved",
+                "error=" err.Message)
+        }
+    }
 
     try KillSubmacros()
     catch Error as err
@@ -9242,7 +9900,7 @@ RunAutoConsumableTool(*) {
     }
 }
 
-ProcessCommands(*) {
+LegacyProcessCommands(*) {
     global command_buffer, UserID, RunningStrategy, ChannelID
 
     Discord.GetCommands(ChannelID)

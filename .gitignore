@@ -1,0 +1,49 @@
+# User-specific runtime state (normally stored in AppData)
+Options/
+Recordings/
+state.ini
+overall_stats.ini
+run_ledger.csv
+
+# Local secrets / configuration
+*.local.ini
+*.local.tds
+.env
+.env.*
+
+# Reproducibly fetched source dependencies
+/lib/OCR.ahk
+/lib/JSON.ahk
+
+# Diagnostics and temporary files
+*.log
+*.tmp
+*.bak
+*.old
+*.dmp
+*.trace
+
+# Build/release output
+/build/
+/dist/
+/release/
+/*.zip
+
+# Local compiled artifacts
+/*.exe
+
+# Python test cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Editor / OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Updater staging/backup directories if a developer tests in-tree
+.ultimate-macro-stage-*/
+.Ultimate-Macro-New-Era.backup-*/
