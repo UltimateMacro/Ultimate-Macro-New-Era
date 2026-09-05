@@ -56,6 +56,7 @@ if (A_PtrSize == 4) {
 #Include *i lib\Profiles.ahk
 #Include lib\Discord.ahk
 #Include *i lib\DiscordCommands.ahk
+#Include lib\OfficialRemote.ahk
 #Include lib\RuntimeLog.ahk
 #Include lib\auto_settings.ahk
 
@@ -121,7 +122,7 @@ command_buffer := []
 global BotStrategyChoices := []
 global BotStrategyChoiceTime := 0
 
-ver := "1.3.4"
+ver := "1.3.4a"
 
 RuntimeLogInstall("Main", ver)
 
@@ -143,9 +144,19 @@ else
 
 A_MaxHotkeysPerInterval := 9999
 
+; F2 can be pressed while the script is still loading. Initialize lifecycle
+; flags before registering exit/hotkey paths so early stops are safe.
+global RunningStrategy := false
+global Recording := false
+global MacroRecording := false
+global InputHookObj := ""
+global AutorunStartTime := 0
+global RenderedBitmaps := []
+
 pToken := Gdip_Startup()
 OnExit(CleanupGdip)
 OnExit(HandleExit)
+OnMessage(0x84, DebugOverlayHitTest)
 
 global AppDataOpt := A_AppData "\Ultimate_Macro\Options"
 global SettingsFile := AppDataOpt "\Settings.tds"
@@ -275,7 +286,7 @@ CancelPlacementKey := IniRead(SettingsFile, "Hotkeys", "CancelPlacement", "Q")
 global UpgradeTowerGKey := IniRead(SettingsFile, "Hotkeys", "UpgradeTower", "E")
 global UpgradeTowerGBKey := IniRead(SettingsFile, "Hotkeys", "UpgradeBottom", "Z")
 TimeScaleMode := IniRead(SettingsFile, "Options", "TimeScaleMode", "OFF")
-global DebugConsole := IniRead(SettingsFile, "Options", "DebugConsole", "1")
+global DebugConsole := IniRead(SettingsFile, "Options", "DebugConsole", "0")
 
 global TimescaleActive := false
 
@@ -409,7 +420,7 @@ RegisterRecordingHotkeys()
 ;Got this from someone on a Discord server
 RegisterRecordingHotkeys(oldKeys := "") {
     global PlaceTowerKey, UpgradeTowerKey, ChangeDJTrackKey, DeleteTowerRecordingKey, IsRecordingActive
-    global SellTowerKey, AlignCameraKey, RecordInputsKey, HoloKey, ChangeTargetsKey, RepoKey, UpgradeTowerGKey
+    global SellTowerKey, AlignCameraKey, RecordInputsKey, HoloKey, ChangeTargetsKey, RepoKey, RaiseDeadKey, UpgradeTowerGKey
 
     HotIf(IsRecordingActive)
 
@@ -826,8 +837,11 @@ global GradientButtons := []
 ;tabs
 global Tab3 := []
 
+global DiscordNavTab := []
 global DiscordWebhookTab := []
 global DiscordBotTab := []
+global DiscordRemoteTab := []
+global DiscordPage := "Webhook"
 ;==
 
 tabNames := ["Main", "Record", "(Beta) Party", "Discord", "Settings", "Tools", "Credits"]
@@ -920,8 +934,18 @@ global AutoConfigCtrl := MainGui.Add("Checkbox", "x490 y190 vAutoConfigureSettin
 AutoConfigCtrl.OnEvent("Click", EnableAutoConfig)
 
 MainGui.SetFont("s10 w400 c3A86FF", UIFont())
-global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Community Strategies")
+global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Strategies")
 global Tab1_Line2 := MainGui.Add("Progress", "x30 y248 w640 h1 Background333333", 0)
+
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
+global BtnCommStrats := MainGui.Add("Text", "x30 y257 w120 h24 Center Background222222 +Border 0x200", "Community")
+MainGui.SetFont("s10 w400 cFFFFFF", UIFont())
+global BtnMyStrats := MainGui.Add("Text", "x160 y257 w120 h24 Center Background0e0e0f +Border 0x200", "My Strats")
+
+BtnCommStrats.OnEvent("Click", (*) => SwitchStrategiesTab("Community"))
+BtnMyStrats.OnEvent("Click", (*) => SwitchStrategiesTab("MyStrats"))
+HoverEffect.Push(BtnCommStrats)
+HoverEffect.Push(BtnMyStrats)
 
 if !DirExist(StratsDir)
     DirCreate(StratsDir)
@@ -947,6 +971,7 @@ if (lastUpdate != "0") {
 if (needUpdate) {
     tempDir := StratsDir "\.download_temp"
     communityBackupDir := StratsDir "\.community_backup"
+    apiStatus := 0
 
     try {
         apiURL := "https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main"
@@ -958,6 +983,7 @@ if (needUpdate) {
         whr.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28")
         whr.SetTimeouts(5000, 5000, 10000, 10000)
         whr.Send()
+        apiStatus := whr.Status
 
         if (whr.Status != 200)
             throw Error("API request failed with status: " whr.Status)
@@ -1086,7 +1112,10 @@ if (needUpdate) {
             throw commitErr
         }
     } catch Error as err {
-        LogToConsole("Error while downloading strats: " err.Message)
+        if (apiStatus = 403)
+            LogToConsole("Community strategy refresh skipped because GitHub returned 403; keeping local strategies.", false)
+        else
+            LogToConsole("Error while downloading strats: " err.Message)
     } finally {
         if DirExist(tempDir)
             try DirDelete(tempDir, true)
@@ -1096,208 +1125,369 @@ if (needUpdate) {
 }
 
 global FrameX := 30
-global FrameY := 260
+global FrameY := 290
 global FrameW := 640
-global FrameH := 220
+global FrameH := 190
 global ContentH := 400
 global CurrentScrollPos := 0
 global ScrollDragging := false
 global ScrollDragGrab := 0
 global SliderH := 30
+global SliderX := 0
+global SliderW := 0
 global ChildHwnd := 0
+global ChildGui := ""
+global ContentGui := ""
 
-ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
-ChildGui.BackColor := "181818"
-ChildGui.SetFont("s10 cWhite", UIFont())
-width := FrameW - 6
+global IsRenderingStrategies := false
 
-loop files, StratsDir "\*.strat" {
-    localPath := A_LoopFileFullPath
-
-    sMap := IniRead(localPath, "Settings", "map", "")
-    sDifficulty := IniRead(localPath, "Settings", "difficulty", "")
-    sTowers := IniRead(localPath, "Settings", "requiredTowers", "")
-    sDesc := IniRead(localPath, "Info", "desc", "")
-    sAuthor := IniRead(localPath, "Info", "author", "")
-    sTitle := IniRead(localPath, "Info", "title", "")
-    sTime := IniRead(localPath, "Info", "time", "")
-    sIncome := IniRead(localPath, "Info", "income", "")
-    sModifiers := IniRead(localPath, "Settings", "modifiers", "")
-
-    LoadedStrats.Push({
-        fileName: A_LoopFileName,
-        map: sMap,
-        difficulty: sDifficulty,
-        towers: sTowers,
-        desc: sDesc,
-        author: sAuthor,
-        title: sTitle,
-        time: sTime,
-        income: sIncome,
-        modifiers: sModifiers
-    })
-}
-
-StartY := 15
-CardH := 115
-CardW := 600
-Gap := 15
-
-ContentH := StartY
-
-for index, strat in LoadedStrats {
-    CurrentY := StartY + ((index - 1) * (CardH + Gap))
-    ContentH := CurrentY + CardH + Gap
-
-    C1X := 10
-    C1Y := CurrentY
-
-    hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
-    ChildGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
-
-    hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(),
-        10, 1)
-    ChildGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
-
-    diffImg := "Resources/Strats/images/" strat.difficulty ".png"
-    if !FileExist(diffImg) {
-        LogToConsole("Missing resource file: " diffImg)
-    } else {
-        ChildGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
-    }
-
-    ChildGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
-
-    coinsCount := 0
-    if RegExMatch(strat.income, "i)([\d,]+)\s*coins", &match) {
-        coinsCount := Number(StrReplace(match[1], ","))
-    }
-
-    if (strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore") {
-        rewardIcon := "Resources/Strats/images/GemsMediumPile.png"
-    } else {
-        if (coinsCount >= 8000) {
-            rewardIcon := "Resources/Strats/images/CoinsSmallChest.png"
-        } else if (coinsCount >= 6000) {
-            rewardIcon := "Resources/Strats/images/CoinsMediumPile.png"
-        } else {
-            rewardIcon := "Resources/Strats/images/CoinsSmallPile.png"
+DisposeBitmap(hBitmap) {
+    if (hBitmap) {
+        try {
+            DeleteObject(hBitmap)
+        } catch Error as e {
         }
     }
-
-    if !FileExist(rewardIcon) {
-        LogToConsole("Missing resource file: " rewardIcon)
-    } else {
-        ChildGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
-    }
-
-    ChildGui.SetFont("s11 Bold cWhite", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title :
-        "Unknown Strat")
-
-    ChildGui.SetFont("s9 w500 c7E848E", UIFont())
-    helpDl1 := ChildGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
-    helpDl1.OnEvent("Click", ((t, a, r, m, d) => (*) => StratInfo(t, a, r, m, d))(
-        strat.title,
-        strat.author,
-        strat.towers,
-        (strat.modifiers != "" ? strat.modifiers : "none"),
-        strat.desc
-    ))
-
-    ChildGui.SetFont("s9 w400 cE2E4E7", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers :
-        "None"))
-
-    ChildGui.SetFont("s9 w400 c7E848E", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
-
-    if (strat.difficulty = "Hardcore") {
-        badgeColor1 := "0xFFAB457B", badgeColor2 := "0xFF5C2040"
-    } else if (strat.difficulty = "Molten") {
-        badgeColor1 := "0xFFE09334", badgeColor2 := "0xFF8F5413"
-    } else if (strat.difficulty = "Frost") {
-        badgeColor1 := "0xff34a9e0", badgeColor2 := "0xff17559c"
-    } else if (strat.difficulty = "Fallen") {
-        badgeColor1 := "0xff17559c", badgeColor2 := "0xff351570"
-    } else {
-        badgeColor1 := "0xb900ff2a", badgeColor2 := "0xff1a5f39"
-    }
-
-    hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty !=
-        "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
-    ChildGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
-
-    ChildGui.SetFont("s9 w500 c9CA4B0", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time :
-        "Unknown"))
-    ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income :
-        "Unknown"))
-
-    if ((strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore")) {
-        hBtnNormal := CreateGradientButton(220, 38, 8, "0xff961ea1", "0xff5f237a", "0x40000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-        hBtnHover := CreateGradientButton(220, 38, 8, "0xffea00ff", "0xff8d32b7", "0x60000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-    } else {
-        hBtnNormal := CreateGradientButton(220, 38, 8, "0xFF147A6E", "0xFF214B75", "0x40000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-        hBtnHover := CreateGradientButton(220, 38, 8, "0xFF1CB5A2", "0xFF3272B7", "0x60000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-    }
-
-    picLoadBtn := ChildGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal
-    )
-
-    dl1 := ChildGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
-    dl1.SetFont("cFFFFFF s10 Bold", UIFont())
-
-    dl1.StratFile := strat.fileName
-    dl1.OnEvent("Click", DownloadStrat)
-
-    dl1.PicControl := picLoadBtn
-    dl1.ImgNormal := hBtnNormal
-    dl1.ImgHover := hBtnHover
-    GradientButtons.Push(dl1)
 }
 
-if (LoadedStrats.Length == 0) {
-    ChildGui.SetFont("s12 c7E848E", UIFont())
-    ChildGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
-    ContentH := 220
+CleanupRenderedBitmaps() {
+    global RenderedBitmaps
+    if (!IsSet(RenderedBitmaps) || !IsObject(RenderedBitmaps)) {
+        RenderedBitmaps := []
+        return
+    }
+    for index, hBitmap in RenderedBitmaps {
+        DisposeBitmap(hBitmap)
+    }
+    RenderedBitmaps := []
 }
 
-SliderX := FrameW - 10
-SliderW := 6
+global CurrentStratTabMode := ""
 
-if (ContentH > 0) {
-    SliderH := Round(FrameH * (FrameH / ContentH))
+SwitchStrategiesTab(mode) {
+    global BtnCommStrats, BtnMyStrats, IsRenderingStrategies, CurrentStratTabMode
+    
+    if (IsRenderingStrategies)
+        return
+        
+    IsRenderingStrategies := true
+    
+    try {
+        CleanupRenderedBitmaps()
+        
+        if (mode == "Community") {
+            BtnCommStrats.IsSelected := true
+            BtnMyStrats.IsSelected := false
+            
+            BtnCommStrats.Opt("Background222222")
+            BtnCommStrats.SetFont("c3A86FF Bold")
+            BtnMyStrats.Opt("Background0e0e0f")
+            BtnMyStrats.SetFont("cFFFFFF Norm")
+        } else {
+            BtnCommStrats.IsSelected := false
+            BtnMyStrats.IsSelected := true
+            
+            BtnMyStrats.Opt("Background222222")
+            BtnMyStrats.SetFont("c3A86FF Bold")
+            BtnCommStrats.Opt("Background0e0e0f")
+            BtnCommStrats.SetFont("cFFFFFF Norm")
+        }
+        
+        BtnCommStrats.Redraw()
+        BtnMyStrats.Redraw()
+        
+        RenderStrategies(mode)
+        
+        CurrentStratTabMode := mode
+    } finally {
+        IsRenderingStrategies := false
+    }
+}
 
-    if (ContentH <= FrameH) {
-        SliderH := FrameH
-    } else {
-        SliderH := Max(30, SliderH)
+RenderStrategies(mode := "Community") {
+    global ChildGui, ContentGui, MainGui, LoadedStrats, GradientButtons
+    global FrameX, FrameY, FrameW, FrameH, ContentH, CurrentScrollPos, SliderH, SliderBG, Slider
+    global StratsDir, RecordingsDir, CurrentTab, ChildHwnd, RenderedBitmaps, SliderX, SliderW
+    global Strategy1Path, Strategy2Path, RotateStrategies
+
+    CleanupRenderedBitmaps()
+    
+    newGradBtns := []
+    if IsSet(GradientButtons) {
+        for btn in GradientButtons {
+            if !HasProp(btn, "StratFile")
+                newGradBtns.Push(btn)
+        }
+    }
+    GradientButtons := newGradBtns
+
+    if (!IsSet(ChildGui) || ChildGui == "") {
+        ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
+        ChildGui.BackColor := "181818"
+        ChildGui.SetFont("s10 cWhite", UIFont())
+        ChildHwnd := ChildGui.Hwnd
     }
 
-    if (ContentH > FrameH && CurrentScrollPos > 0) {
-        maxScroll := ContentH - FrameH
-        scrollPercent := CurrentScrollPos / maxScroll
-        sliderPos := Round(scrollPercent * (FrameH - SliderH))
-        sliderPos := Max(0, Min(sliderPos, FrameH - SliderH))
-    } else {
+    if (IsSet(ContentGui) && ContentGui != "") {
+        try ContentGui.Destroy()
+        catch
+        ContentGui := ""
+    }
+
+    ContentGui := Gui("-Caption +Parent" ChildGui.Hwnd)
+    ContentGui.BackColor := "181818"
+    ContentGui.SetFont("s10 cWhite", UIFont())
+    width := FrameW - 6
+
+    LoadedStrats := []
+    CurrentScrollPos := 0
+
+    targetDir := (mode == "Community") ? StratsDir : RecordingsDir
+
+    loop files, targetDir "\*.strat" {
+        localPath := A_LoopFileFullPath
+
+        sMap := IniRead(localPath, "Settings", "map", "Unknown")
+        sDifficulty := IniRead(localPath, "Settings", "difficulty", "Easy")
+        sTowers := IniRead(localPath, "Settings", "requiredTowers", "None")
+        sDesc := IniRead(localPath, "Info", "desc", "Local recording.")
+        sAuthor := IniRead(localPath, "Info", "author", "You")
+        sTitle := IniRead(localPath, "Info", "title", StrReplace(A_LoopFileName, ".strat", ""))
+        sTime := IniRead(localPath, "Info", "time", "N/A")
+        sIncome := IniRead(localPath, "Info", "income", "N/A")
+        sModifiers := IniRead(localPath, "Settings", "modifiers", "")
+
+        LoadedStrats.Push({
+            fileName: A_LoopFileName,
+            map: sMap,
+            difficulty: sDifficulty,
+            towers: sTowers,
+            desc: sDesc,
+            author: sAuthor,
+            title: sTitle,
+            time: sTime,
+            income: sIncome,
+            modifiers: sModifiers,
+            fullPath: localPath
+        })
+    }
+
+    StartY := 15
+    CardH := 115
+    CardW := 600
+    Gap := 15
+
+    ContentH := StartY
+
+    for index, strat in LoadedStrats {
+        CurrentY := StartY + ((index - 1) * (CardH + Gap))
+        ContentH := CurrentY + CardH + Gap
+
+        C1X := 10
+        C1Y := CurrentY
+
+        hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
+        RenderedBitmaps.Push(hFrameBg)
+        ContentGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
+
+        hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(), 10, 1)
+        RenderedBitmaps.Push(hIconBg)
+        ContentGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
+        
+        hIconBg2 := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(), 10, 1)
+        RenderedBitmaps.Push(hIconBg2)
+        ContentGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg2)
+
+        diffImg := "Resources/Strats/images/" strat.difficulty ".png"
+        if !FileExist(diffImg) {
+            LogToConsole("Missing resource file: " diffImg)
+        } else {
+            ContentGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
+        }
+
+        coinsCount := 0
+        if RegExMatch(strat.income, "i)([\d,]+)\s*coins", &match) {
+            coinsCount := Number(StrReplace(match[1], ","))
+        }
+
+        if (strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore") {
+            rewardIcon := "Resources/Strats/images/GemsMediumPile.png"
+        } else {
+            if (coinsCount >= 8000) {
+                rewardIcon := "Resources/Strats/images/CoinsSmallChest.png"
+            } else if (coinsCount >= 6000) {
+                rewardIcon := "Resources/Strats/images/CoinsMediumPile.png"
+            } else {
+                rewardIcon := "Resources/Strats/images/CoinsSmallPile.png"
+            }
+        }
+
+        if !FileExist(rewardIcon) {
+            LogToConsole("Missing resource file: " rewardIcon)
+        } else {
+            ContentGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
+        }
+
+        ContentGui.SetFont("s11 Bold cWhite", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title : "Unknown Strat")
+
+        ContentGui.SetFont("s9 w500 c7E848E", UIFont())
+        helpDl1 := ContentGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
+        helpDl1.OnEvent("Click", ((t, a, r, m, d) => (*) => StratInfo(t, a, r, m, d))(
+            strat.title,
+            strat.author,
+            strat.towers,
+            (strat.modifiers != "" ? strat.modifiers : "none"),
+            strat.desc
+        ))
+
+        ContentGui.SetFont("s9 w400 cE2E4E7", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers : "None"))
+
+        ContentGui.SetFont("s9 w400 c7E848E", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
+
+        if (strat.difficulty = "Hardcore") {
+            badgeColor1 := "0xFFAB457B", badgeColor2 := "0xFF5C2040"
+        } else if (strat.difficulty = "Molten") {
+            badgeColor1 := "0xFFE09334", badgeColor2 := "0xFF8F5413"
+        } else if (strat.difficulty = "Frost") {
+            badgeColor1 := "0xff34a9e0", badgeColor2 := "0xff17559c"
+        } else if (strat.difficulty = "Fallen") {
+            badgeColor1 := "0xff17559c", badgeColor2 := "0xff351570"
+        } else {
+            badgeColor1 := "0xb900ff2a", badgeColor2 := "0xff1a5f39"
+        }
+
+        hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty != "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
+        RenderedBitmaps.Push(hgmMode)
+        ContentGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
+
+        ContentGui.SetFont("s9 w500 c9CA4B0", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time : "Unknown"))
+        ContentGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income : "Unknown"))
+
+        loadedSlot := 0
+        if (Strategy1Path != "" && StrLower(strat.fullPath) == StrLower(Strategy1Path))
+            loadedSlot := 1
+        else if (Strategy2Path != "" && RotateStrategies && StrLower(strat.fullPath) == StrLower(Strategy2Path))
+            loadedSlot := 2
+
+        isLoaded := (loadedSlot > 0)
+        
+        if (isLoaded) {
+            if (RotateStrategies)
+                btnText := "Currently Loaded (" loadedSlot ")"
+            else
+                btnText := "Currently Loaded"
+        } else {
+            btnText := "Load"
+        }
+
+        if (isLoaded) {
+            loadColor1 := "0xFF4b5563", loadColor2 := "0xFF374151"
+            loadHover1 := "0xFF505A69", loadHover2 := "0xFF3A4557"
+        } else if ((strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore")) {
+            loadColor1 := "0xff961ea1", loadColor2 := "0xff5f237a"
+            loadHover1 := "0xffea00ff", loadHover2 := "0xff8d32b7"
+        } else {
+            loadColor1 := "0xFF147A6E", loadColor2 := "0xFF214B75"
+            loadHover1 := "0xFF1CB5A2", loadHover2 := "0xFF3272B7"
+        }
+
+        if (mode == "MyStrats") {
+            hBtnNormal := CreateGradientButton(145, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", btnText, UIFont(), isLoaded ? 11 : 14, 1)
+            RenderedBitmaps.Push(hBtnNormal)
+            hBtnHover := CreateGradientButton(145, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", btnText, UIFont(), isLoaded ? 11 : 14, 1)
+            RenderedBitmaps.Push(hBtnHover)
+            
+            editColor1 := "0xFF4b5563", editColor2 := "0xFF374151"
+            editHover1 := "0xFF6b7280", editHover2 := "0xFF4b5563"
+            hEditNormal := CreateGradientButton(70, 38, 8, editColor1, editColor2, "0x40000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
+            RenderedBitmaps.Push(hEditNormal)
+            hEditHover := CreateGradientButton(70, 38, 8, editHover1, editHover2, "0x60000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
+            RenderedBitmaps.Push(hEditHover)
+
+            picLoadBtn := ContentGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
+            dl1 := ContentGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans +0x200 Center", "")
+            
+            picEditBtn := ContentGui.Add("Picture", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans", "HBITMAP:*" hEditNormal)
+            dlEdit := ContentGui.Add("Text", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans +0x200 Center", "")
+            
+            dlEdit.SetFont("cFFFFFF s10 Bold", UIFont())
+            dlEdit.StratFile := strat.fullPath
+            dlEdit.OnEvent("Click", EditStratFile)
+            dlEdit.PicControl := picEditBtn
+            dlEdit.ImgNormal := hEditNormal
+            dlEdit.ImgHover := hEditHover
+            dlEdit.GradEnabled := true
+            GradientButtons.Push(dlEdit)
+        } else {
+            hBtnNormal := CreateGradientButton(220, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", btnText, UIFont(), isLoaded ? 12 : 14, 1)
+            RenderedBitmaps.Push(hBtnNormal)
+            hBtnHover := CreateGradientButton(220, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", btnText, UIFont(), isLoaded ? 12 : 14, 1)
+            RenderedBitmaps.Push(hBtnHover)
+            
+            picLoadBtn := ContentGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
+            dl1 := ContentGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
+        }
+
+        dl1.SetFont("cFFFFFF s10 Bold", UIFont())
+        dl1.StratFile := strat.fullPath
+        dl1.StratDiff := strat.difficulty
+        dl1.IsSmallBtn := (mode == "MyStrats")
+        
+        dl1.OnEvent("Click", DownloadStrat)
+        dl1.ImgHover := isLoaded ? hBtnNormal : hBtnHover
+        
+        dl1.PicControl := picLoadBtn
+        dl1.ImgNormal := hBtnNormal
+        dl1.GradEnabled := true
+        GradientButtons.Push(dl1)
+    }
+
+    if (LoadedStrats.Length == 0) {
+        ContentGui.SetFont("s12 c7E848E", UIFont())
+        ContentGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
+        ContentH := FrameH
+    }
+
+    SliderX := FrameW - 10
+    SliderW := 6
+
+    if (ContentH > 0) {
+        SliderH := Round(FrameH * (FrameH / ContentH))
+
+        if (ContentH <= FrameH) {
+            SliderH := FrameH
+        } else {
+            SliderH := Max(30, SliderH)
+        }
+
         sliderPos := 0
+
+        hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
+        RenderedBitmaps.Push(hSlider)
+        hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
+        RenderedBitmaps.Push(hSliderBG)
+
+        SliderBG := ContentGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" (ContentH <= FrameH ? FrameH : FrameH + ContentH) " +BackgroundTrans +0x0100", "HBITMAP:*" hSliderBG)
+        Slider := ContentGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans +0x0100", "HBITMAP:*" hSlider)
+
+        if (ContentH <= FrameH) {
+            SliderBG.Visible := false
+            Slider.Visible := false
+        } else {
+            SliderBG.Visible := true
+            Slider.Visible := true
+        }
     }
-
-    hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
-    hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
-
-    global SliderBG := ChildGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" FrameH + ContentH " +BackgroundTrans",
-        "HBITMAP:*" hSliderBG)
-    global Slider := ChildGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans",
-        "HBITMAP:*" hSlider)
-
-    SliderBG.Visible := true
-    Slider.Visible := true
+    
+    ContentGui.Show("x0 y0 w" FrameW " h" FrameH)
+    
+    if (CurrentTab == "Tab1") {
+        ShowChildGui()
+    }
 }
 
 OnMessage(0x0115, OnScroll)
@@ -1455,13 +1645,19 @@ TAB3.Push(Tab3_Title, Tab3_Line1, Tab3_HostNm, Tab3_HostNm_EDIT, Tab3_PartyMemb,
     Tab3_Btn1, Tab3_Info, MultiplayerEnabledTGL, Tab3_RoleTxt, Tab3_Role_Host, Tab3_Role_Member, Tab3_Title2,
     Tab3_Line3, Tab3_LCondition_All, Tab3_LCondition_Any, Tab3_LConditionTxt)
 
-; tab 4 - WEBHOOK ===========================
+; tab 4 - DISCORD ===========================
 
-MainGui.SetFont("s10 w400 c3A86FF", UIFont())
-global Tab4_Title := MainGui.Add("Text", "x30 y95 vTab4_TITLE BackgroundTrans h22 w110 Hidden", "Discord Webhook")
-HoverEffect.Push(Tab4_Title)
-Tab4_Title.OnEvent("Click", DiscordSettings)
+MainGui.SetFont("s10 w500 c3A86FF", UIFont())
+global Tab4_WebhookTabTitle := MainGui.Add("Text", "x30 y95 BackgroundTrans h22 w130 Hidden", "Discord Webhook")
+global Tab4_BotTabTitle := MainGui.Add("Text", "x170 y95 BackgroundTrans h22 w105 Hidden", "Personal Bot")
+global Tab4_RemoteTabTitle := MainGui.Add("Text", "x285 y95 BackgroundTrans h22 w150 Hidden", "Official Remote")
+for ctrl in [Tab4_WebhookTabTitle, Tab4_BotTabTitle, Tab4_RemoteTabTitle]
+    HoverEffect.Push(ctrl)
+Tab4_WebhookTabTitle.OnEvent("Click", (*) => ShowDiscordPage("Webhook"))
+Tab4_BotTabTitle.OnEvent("Click", (*) => ShowDiscordPage("Bot"))
+Tab4_RemoteTabTitle.OnEvent("Click", (*) => ShowDiscordPage("Remote"))
 global Tab4_Line1 := MainGui.Add("Progress", "x30 y118 w640 h1  Hidden Background333333", 0)
+DiscordNavTab.Push(Tab4_WebhookTabTitle, Tab4_BotTabTitle, Tab4_RemoteTabTitle, Tab4_Line1)
 MainGui.SetFont("s9 w400 cAAAAAA")
 MainGui.Add("Text", "x30 y135 w200 h20 Hidden vTab4_Lbl1", "Webhook URL:")
 global Tab4_Lbl1 := MainGui["Tab4_Lbl1"]
@@ -1498,12 +1694,12 @@ WebhookLinkCtrl2.OnEvent("Change", (*) => SetTimer(CheckWebhookLink2, -700))
 EnableWebhookLink2()
 WebhookSepatateTriumphScreenshotsCtrl.OnEvent("Click", EnableWebhookLink2)
 global Tab4_Info := MainGui.Add("Text", "x30 y400 w640 h100 Hidden",
-    "Webhook sends real-time logs, screenshots, and currency stats to your Discord server.`nUseful to check if your macro is working while being outside.`nHow to get a webhook URL: Create your own Discord Server > Open any channel's settings > Integrations > Create Webhook > Copy Webhook URL.`nYou can also set up a Discord bot by clicking on the 'Discord Webhook' text to view the Discord bot settings."
+    "Webhook sends real-time logs, screenshots, and currency stats to your Discord server.`nUseful to check if your macro is working while being outside.`nHow to get a webhook URL: Create your own Discord Server > Open any channel's settings > Integrations > Create Webhook > Copy Webhook URL."
 )
 global Tab4_Btn1 := MakeActionButton(MainGui, 30, 500, 310, 40, "Test Webhook", TestWebhook, "accent", true)
 global Tab4_Btn2 := MakeActionButton(MainGui, 360, 500, 310, 40, "Save Discord Settings", SaveWebhookSettings, "accent", true)
 
-DiscordWebhookTab.Push(Tab4_Title, Tab4_Line1, Tab4_Line2, Tab4_Btn1, Tab4_Btn2, Tab4_Info, Tab4_Lbl1,
+DiscordWebhookTab.Push(Tab4_Line2, Tab4_Btn1, Tab4_Btn2, Tab4_Info, Tab4_Lbl1,
     WebhookEnabledCtrl, SendCurrCtrl, WebhookLinkCtrl, WebhookLinkCtrl2, DebugLogsCtrl, WebhookScreenshotsCtrl,
     WebhookTriumphScreenshotsCtrl, WebhookSepatateTriumphScreenshotsCtrl)
 
@@ -1538,9 +1734,30 @@ MainGui.SetFont("s12 w400 cFFFFFF")
 
 global Tab4_bot_Btn1 := MakeActionButton(MainGui, 30, 500, 310, 40, "Test Bot", TestBot, "accent", true)
 
-DiscordBotTab.Push(Tab4_Title, Tab4_Line1, Tab4_Line2, BotTokenCtrl, BotEnabledCtrl, Tab4_Btn2, Tab4_bot_Btn1,
+DiscordBotTab.Push(Tab4_Line2, BotTokenCtrl, BotEnabledCtrl, Tab4_Btn2, Tab4_bot_Btn1,
     bot_token_text, bot_prefix_text, BotPrefixCtrl, WebhookUserIDCtrl2, ChannelIDCtrl, channel_id_text, userid_text,
     Tab4_Line3, Tab4_Info_Bot)
+
+; official remote tab
+MainGui.SetFont("s15 w600 cFFFFFF", UIFont())
+global Tab4_RemoteHeading := MainGui.Add("Text", "x30 y150 w640 h30 Hidden", "Connect Ultimate Macro to Discord")
+MainGui.SetFont("s10 w400 cAAAAAA", UIFont())
+global Tab4_RemoteInfo := MainGui.Add("Text", "x30 y190 w640 h62 Hidden",
+    "1. Run /remote link in #bot-controller.`n2. Copy the private connection code Discord shows only to you.`n3. Paste it below and select Link This PC.")
+MainGui.SetFont("s9 w500 cFFFFFF", UIFont())
+global Tab4_RemoteCodeLabel := MainGui.Add("Text", "x30 y270 w250 h20 Hidden", "Private connection code")
+MainGui.SetFont("s10 w400 c000000", UIFont())
+global Tab4_RemoteCodeCtrl := MainGui.Add("Edit", "x30 y294 w640 h30 Hidden")
+MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
+global Tab4_RemoteSecurity := MainGui.Add("Text", "x30 y334 w640 h22 Hidden",
+    "Privacy: stores a random installation ID, Discord ID, version, link/active times, online status, and aggregated coin/gem gains. No HWID.")
+MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
+global Tab4_RemoteConsent := MainGui.Add("Checkbox", "x30 y360 w640 h22 Hidden", "I consent to this limited device data and 30-day security-event retention.")
+global Tab4_RemoteStatus := MainGui.Add("Text", "x30 y455 w640 h28 Center Hidden", "Not linked")
+global Tab4_RemoteConnectBtn := MakeActionButton(MainGui, 180, 400, 340, 40, "Link This PC", OfficialRemoteConnectFromControls, "accent", true)
+
+DiscordRemoteTab.Push(Tab4_RemoteHeading, Tab4_RemoteInfo, Tab4_RemoteCodeLabel, Tab4_RemoteCodeCtrl,
+    Tab4_RemoteSecurity, Tab4_RemoteConsent, Tab4_RemoteStatus, Tab4_RemoteConnectBtn)
 
 ;TAB 5 - SETTINGS ==========================
 
@@ -1724,13 +1941,19 @@ Tab5_BtnClearLogs.OnEvent("Click", ClearStoredLogs)
 
 HoverEffect.Push(Tab5_BtnClearLogs)
 
+global Tab5_BtnExportLogs := MainGui.Add("Text",
+    "x430 y463 w120 h24 Center Background0e0e0f +Border 0x200 Hidden", "Export Logs")
+Tab5_BtnExportLogs.OnEvent("Click", ExportLogsForDevelopers)
+
+HoverEffect.Push(Tab5_BtnExportLogs)
+
 global Tab5_AdvancedBtn := MakeActionButton(MainGui, 30, 500, 180, 40, "Advanced settings", ShowAdvancedSettings, "neutral", true)
 global Tab5_BackBtn := MakeActionButton(MainGui, 170, 500, 180, 40, "Back to settings", ShowMainSettings, "neutral", true)
 global Tab5_AdvancedTitle := MainGui.Add("Text", "x30 y95 w250 h22 Hidden", "Advanced settings")
 global Tab5_AdvancedLine := MainGui.Add("Progress", "x30 y118 w640 h1 Hidden Background333333", 0)
 global Tab5_SaveStatus := MainGui.Add("Text", "x225 y499 w275 h22 Hidden BackgroundTrans", "")
 
-global Tab5_Btn1 := MakeActionButton(MainGui, 30, 500, 640, 40, "Save all settings", SaveAllSettings, "accent", true)
+global Tab5_Btn1 := MakeActionButton(MainGui, 370, 500, 300, 40, "Save all settings", SaveAllSettings, "accent", true)
 
 ; tab 6 - tools ===========================
 
@@ -1825,6 +2048,10 @@ YoutubeImg.OnEvent("Click", YouTubeLink)
 MainGui.Title := "Ultimate Macro"
 MainGui.Show("w700 h565")
 
+; Official Remote Control uses one authenticated long-poll worker instead of a
+; personal Discord bot token. It stays responsive without blocking the macro UI.
+OfficialRemoteInit()
+
 if (AlwaysOnTop = 1) {
     MainGui.Opt("+AlwaysOnTop")
 } else {
@@ -1835,8 +2062,8 @@ SetTimer(() => RemoveInitialFocus(), -50)
 
 global CurrentTab := "Tab1"
 TabCtrl[1].SetFont("cFFFFFF")
+SwitchStrategiesTab("Community")
 ShowTabContent("Tab1")
-ShowChildGui()
 EnableStratRotation()
 
 ; 10ms was 100 sweeps/second of Win32 geometry calls for a purely cosmetic hover
@@ -1946,6 +2173,9 @@ Hoverwatchdog(*) {
                     if RegExMatch(ctrl.name, "i)Title") {
                         ctrl.Opt("BackgroundTrans")
                         ctrl.SetFont("c3A86FF Norm")
+                    } else if (HasProp(ctrl, "IsSelected") && ctrl.IsSelected) {
+                        ctrl.Opt("Background222222")
+                        ctrl.SetFont("c3A86FF Bold")
                     } else {
                         ctrl.Opt("Background0E0E0F")
                         ctrl.SetFont("cFFFFFF Norm")
@@ -2030,6 +2260,9 @@ Hoverwatchdog(*) {
                                 if RegExMatch(oldCtrl.name, "i)title") {
                                     oldCtrl.Opt("BackgroundTrans")
                                     oldCtrl.SetFont("c3A86FF Norm")
+                                } else if (HasProp(oldCtrl, "IsSelected") && oldCtrl.IsSelected) {
+                                    oldCtrl.Opt("Background222222")
+                                    oldCtrl.SetFont("c3A86FF Bold")
                                 } else {
                                     oldCtrl.Opt("Background0E0E0F")
                                     oldCtrl.SetFont("cFFFFFF Norm")
@@ -2053,6 +2286,9 @@ Hoverwatchdog(*) {
                     if RegExMatch(ctrl.name, "i)title") {
                         ctrl.Opt("BackgroundTrans")
                         ctrl.SetFont("c3A86FF Norm")
+                    } else if (HasProp(ctrl, "IsSelected") && ctrl.IsSelected) {
+                        ctrl.Opt("Background222222")
+                        ctrl.SetFont("c3A86FF Bold")
                     } else {
                         ctrl.Opt("Background0E0E0F")
                         ctrl.SetFont("cFFFFFF Norm")
@@ -2149,7 +2385,7 @@ ShowTabContent(tab) {
     if (tab = "Tab1") {
         for ctrl in [Tab1_Section1, Tab1_Line1, Tab1_Lbl1, Strategy1Ctrl, Tab1_Btn1, Tab1_Btn2,
             Tab1_Lbl2, Strategy2Ctrl, Tab1_Btn3, Tab1_Btn4, RotateStrategiesCtrl, AutoEquipCtrl, AutoConfigCtrl, Tab1_Section2,
-            Tab1_Line2,
+            Tab1_Line2, BtnCommStrats, BtnMyStrats,
             Tab1_Start, Tab1_Stop]
             ShowControl(ctrl)
         EnableStratRotation()
@@ -2165,10 +2401,7 @@ ShowTabContent(tab) {
         for ctrl in TAB3
             ShowControl(ctrl)
     } else if (tab = "Tab4") {
-        for ctrl in DiscordWebhookTab
-            ShowControl(ctrl)
-        tab4_Title.Text := "Discord Webhook"
-        EnableWebhookLink2()
+        ShowDiscordPage("Webhook")
     } else if (tab = "Tab5") {
         for ctrl in [Tab5_Section1, Tab5_Line1, Tab5_Lbl1, ChainKeyCtrl,
             Tab5_Lbl2, BeatKeyCtrl, Tab5_Lbl3, CaravanKeyCtrl,
@@ -2187,7 +2420,7 @@ ShowTabContent(tab) {
             RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL,
             CollectPlaytimeRewardsCtrl,
             Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl,
-            Tab5_BtnClearLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_SaveStatus, Tab5_Btn1,
+            Tab5_BtnClearLogs, Tab5_BtnExportLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_SaveStatus, Tab5_Btn1,
             MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown,
             MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown]
             ShowControl(ctrl)
@@ -2263,7 +2496,7 @@ ShowSettingsPage(advanced := false) {
     global UpgTowerTEXT, AlignCamTEXT, DjTrackTEXT, SellTowTEXT, DelRecTEXT, RecInputsTEXT, HoloTEXT, RaiseDeadTEXT
     global PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl, AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl, SellTowerKeyCtrl
     global DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl
-    global Tab5_BtnClearLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_Btn1, Tab5_SaveStatus
+    global Tab5_BtnClearLogs, Tab5_BtnExportLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_Btn1, Tab5_SaveStatus
     global Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl, DebugConsoleCtrl, PotatoModeCtrl
     global MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown
     global KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown
@@ -2276,7 +2509,7 @@ ShowSettingsPage(advanced := false) {
         Tab5_Help11, Tab5_Help12, Tab5_Section3, Tab5_Line3, PlcTowerTEXT, UpgTowerTEXT, AlignCamTEXT, DjTrackTEXT,
         SellTowTEXT, DelRecTEXT, RecInputsTEXT, HoloTEXT, RaiseDeadTEXT, PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl,
         AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl, SellTowerKeyCtrl, DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl,
-        HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl, Tab5_BtnClearLogs]
+        HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl, Tab5_BtnClearLogs, Tab5_BtnExportLogs]
     advancedControls := [Tab5_AdvancedTitle, Tab5_AdvancedLine, DebugConsoleCtrl, PotatoModeCtrl, MouseSpeedLbl,
         MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt,
         KeyDelayUpDown, Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl]
@@ -2285,10 +2518,13 @@ ShowSettingsPage(advanced := false) {
     for ctrl in advancedControls
         ctrl.Visible := advanced
     Tab5_AdvancedBtn.Visible := !advanced
+    Tab5_AdvancedBtn.PicControl.Visible := !advanced
     Tab5_BackBtn.Visible := advanced
+    Tab5_BackBtn.PicControl.Visible := advanced
     Tab5_Btn1.Visible := true
     Tab5_SaveStatus.Visible := true
     Tab5_Btn1.Move(370, 500, 300, 40)
+    Tab5_Btn1.PicControl.Move(370, 500, 300, 40)
     Tab5_SaveStatus.Move(225, 509, 275, 22)
     if advanced {
         Tab5_AdvancedTitle.Move(30, 95, 250, 22)
@@ -2311,8 +2547,10 @@ ShowSettingsPage(advanced := false) {
         AlwaysOnTopCtrl.Move(300, 307)
         LegacyModeCtrl.Move(540, 307)
         Tab5_BackBtn.Move(170, 500, 180, 40)
+        Tab5_BackBtn.PicControl.Move(170, 500, 180, 40)
     } else {
         Tab5_AdvancedBtn.Move(30, 500, 180, 40)
+        Tab5_AdvancedBtn.PicControl.Move(30, 500, 180, 40)
     }
     DllCall("RedrawWindow", "ptr", MainGui.Hwnd, "ptr", 0, "ptr", 0, "uint", 0x185)
 }
@@ -2336,40 +2574,188 @@ YouTubeLink(ctrl, *) {
     Run("https://www.youtube.com/@darksenn")
 }
 
+UpdateStrategyButtons() {
+    global GradientButtons, Strategy1Path, Strategy2Path, RotateStrategies, RenderedBitmaps
+
+    for ctrl in GradientButtons {
+        if !HasProp(ctrl, "StratFile") || !HasProp(ctrl, "StratDiff")
+            continue
+
+        loadedSlot := 0
+        if (Strategy1Path != "" && StrLower(ctrl.StratFile) == StrLower(Strategy1Path))
+            loadedSlot := 1
+        else if (Strategy2Path != "" && RotateStrategies && StrLower(ctrl.StratFile) == StrLower(Strategy2Path))
+            loadedSlot := 2
+
+        isLoaded := (loadedSlot > 0)
+        
+        if (isLoaded) {
+            if (RotateStrategies)
+                btnText := "Currently Loaded (" loadedSlot ")"
+            else
+                btnText := "Currently Loaded"
+        } else {
+            btnText := "Load"
+        }
+
+        if (isLoaded) {
+            loadColor1 := "0xFF4b5563", loadColor2 := "0xFF374151"
+            loadHover1 := "0xFF505A69", loadHover2 := "0xFF3A4557"
+        } else if ((ctrl.StratDiff = "Hardcore" || ctrl.StratDiff = "Voidcore")) {
+            loadColor1 := "0xff961ea1", loadColor2 := "0xff5f237a"
+            loadHover1 := "0xffea00ff", loadHover2 := "0xff8d32b7"
+        } else {
+            loadColor1 := "0xFF147A6E", loadColor2 := "0xFF214B75"
+            loadHover1 := "0xFF1CB5A2", loadHover2 := "0xFF3272B7"
+        }
+
+        width := HasProp(ctrl, "IsSmallBtn") && ctrl.IsSmallBtn ? 145 : 220
+        
+        ; Slightly reduced font size when Loaded so the "(1)" text fits nicely inside smaller buttons
+        fontSize := isLoaded ? (width == 145 ? 9 : 11) : 14 
+        
+        hBtnNormal := CreateGradientButton(width, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", btnText, UIFont(), fontSize, 1)
+        if (!isLoaded)
+            hBtnHover := CreateGradientButton(width, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", btnText, UIFont(), fontSize, 1)
+        else
+            hBtnHover := hBtnNormal
+
+        ; Dispose the old bitmaps and remove them from the tracking array safely
+        if (HasProp(ctrl, "ImgNormal") && ctrl.ImgNormal) {
+            i := RenderedBitmaps.Length
+            while (i > 0) {
+                if (RenderedBitmaps[i] == ctrl.ImgNormal)
+                    RenderedBitmaps.RemoveAt(i)
+                i--
+            }
+            DisposeBitmap(ctrl.ImgNormal)
+        }
+        if (HasProp(ctrl, "ImgHover") && ctrl.ImgHover && ctrl.ImgHover != ctrl.ImgNormal) {
+            i := RenderedBitmaps.Length
+            while (i > 0) {
+                if (RenderedBitmaps[i] == ctrl.ImgHover)
+                    RenderedBitmaps.RemoveAt(i)
+                i--
+            }
+            DisposeBitmap(ctrl.ImgHover)
+        }
+
+        ; Register the new bitmaps to be cleaned up when tabs change
+        RenderedBitmaps.Push(hBtnNormal)
+        if (!isLoaded)
+            RenderedBitmaps.Push(hBtnHover)
+
+        ; Apply to UI instantly without a full page refresh
+        ctrl.ImgNormal := hBtnNormal
+        ctrl.ImgHover := hBtnHover
+        ctrl.PicControl.Value := "HBITMAP:*" hBtnNormal
+    }
+}
+
+global ActiveStratSelectResult := 0
+
+PromptStrategySlot() {
+    global ActiveStratSelectResult
+    ActiveStratSelectResult := 0
+    
+    SlotGui := Gui("+AlwaysOnTop +Border -SysMenu", "Select Slot")
+    SlotGui.BackColor := "181818"
+    
+    ; Force Dark Title Bar (Works on Win10 1809+ and Win11)
+    try DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", SlotGui.Hwnd, "Int", 20, "Int*", 1, "Int", 4)
+    
+    SlotGui.SetFont("s11 w600 cFFFFFF", UIFont())
+    SlotGui.Add("Text", "x20 y20 w260 Center BackgroundTrans", "Select Strategy Slot")
+    
+    SlotGui.SetFont("s10 w400 cAAAAAA", UIFont())
+    SlotGui.Add("Text", "x20 y+10 w260 Center BackgroundTrans", "Where would you like to load this strategy?")
+    
+    SlotGui.SetFont("s10 w600 c000000", UIFont())
+    
+    b1 := SlotGui.Add("Button", "x20 y+25 w125 h35", "Strategy 1")
+    b1.OnEvent("Click", (*) => (ActiveStratSelectResult := 1, SlotGui.Destroy()))
+    
+    b2 := SlotGui.Add("Button", "x+10 w125 h35", "Strategy 2")
+    b2.OnEvent("Click", (*) => (ActiveStratSelectResult := 2, SlotGui.Destroy()))
+    
+    bc := SlotGui.Add("Button", "x20 y+10 w260 h30", "Cancel")
+    bc.OnEvent("Click", (*) => (ActiveStratSelectResult := 0, SlotGui.Destroy()))
+    
+    SlotGui.Show("w300 h185")
+    WinWaitClose("ahk_id " SlotGui.Hwnd)
+    
+    return ActiveStratSelectResult
+}
+
 DownloadStrat(ctrl, *) {
+    global Strategy1Path, Strategy2Path, RotateStrategies, Strategy1Ctrl, Strategy2Ctrl
     nm := ctrl.StratFile
 
-    downloadedStrat := A_WorkingDir "\Resources\Strats" (SubStr(nm, 1, 1) = "\" ? nm : "\" nm)
+    if (RegExMatch(nm, "^[a-zA-Z]:\\")) {
+        downloadedStrat := nm
+    } else {
+        downloadedStrat := A_WorkingDir "\Resources\Strats" (SubStr(nm, 1, 1) = "\" ? nm : "\" nm)
+    }
 
-    if (Strategy1Ctrl.Value = "") {
+    ; Block the click if the strategy is already loaded
+    isAlreadyLoaded := false
+    if (Strategy1Path != "" && StrLower(downloadedStrat) == StrLower(Strategy1Path))
+        isAlreadyLoaded := true
+    else if (Strategy2Path != "" && RotateStrategies && StrLower(downloadedStrat) == StrLower(Strategy2Path))
+        isAlreadyLoaded := true
+
+    if (isAlreadyLoaded)
+        return
+
+    targetSlot := 1
+
+    if (RotateStrategies) {
+        targetSlot := PromptStrategySlot()
+        if (targetSlot == 0)
+            return ; User cancelled
+    }
+
+    if (targetSlot == 1) {
         Strategy1Ctrl.Value := downloadedStrat
         Strategy1Path := downloadedStrat
         IniWrite(downloadedStrat, SettingsFile, "Options", "Strategy1")
-    } else if (Strategy2Ctrl.Value = "" && Strategy2Ctrl.Visible) {
+    } else if (targetSlot == 2) {
         Strategy2Ctrl.Value := downloadedStrat
         Strategy2Path := downloadedStrat
         IniWrite(downloadedStrat, SettingsFile, "Options", "Strategy2")
-    } else {
-        Strategy1Ctrl.Value := downloadedStrat
-        Strategy1Path := downloadedStrat
-        IniWrite(downloadedStrat, SettingsFile, "Options", "Strategy1")
     }
 
     LoadStrategyFile(downloadedStrat)
+    
+    ; Update button graphics seamlessly without refreshing/jumping
+    UpdateStrategyButtons()
+}
+
+EditStratFile(ctrl, *) {
+    global CurrentScrollPos, CurrentStratTabMode
+    stratToEdit := ctrl.StratFile
+    if FileExist(stratToEdit) {
+        RunWait("notepad.exe `"" stratToEdit "`"")
+        savedScroll := CurrentScrollPos
+        RenderStrategies(CurrentStratTabMode)
+        SetScrollPos(savedScroll)
+    } else {
+        MsgBox("Strategy file not found!`n" stratToEdit, "Error", 0x10)
+    }
 }
 
 OnMouseWheel(wp, lp, msg, hwnd) {
-    global ChildHwnd, ChildGui
+    global ChildHwnd, ChildGui, ContentGui
     MouseGetPos(, , &maxH, &ctrlH, 2)
 
     parentH := (ctrlH != "") ? DllCall("GetParent", "Ptr", ctrlH, "Ptr") : 0
-    ch := ChildGui.Hwnd
+    ch := (IsSet(ChildGui) && ChildGui != "") ? ChildGui.Hwnd : 0
+    co := (IsSet(ContentGui) && ContentGui != "") ? ContentGui.Hwnd : 0
 
-    if (maxH = ch || ctrlH = ch || parentH = ch) {
+    if (ch && (maxH = ch || maxH = co || ctrlH = ch || ctrlH = co || parentH = ch || parentH = co)) {
 
         dir := ((wp >> 16) & 0xFFFF) > 0x7FFF ? 1 : 0
         loop 3 {
-
             SendMessage(0x0115, dir, 0, , "ahk_id " ch)
         }
     }
@@ -2399,28 +2785,32 @@ ScrollPosFromThumbY(thumbY) {
 }
 
 SetScrollPos(newPos) {
-    global ChildGui, CurrentScrollPos, Slider
+    global ContentGui, CurrentScrollPos, Slider
+
+    if (!IsSet(ContentGui) || ContentGui == "")
+        return
 
     newPos := Max(0, Min(Round(newPos), ScrollMaxOffset()))
     if (newPos = CurrentScrollPos)
         return
 
-    hwnd := ChildGui.Hwnd
+    hwnd := ContentGui.Hwnd
     DllCall("ScrollWindow", "Ptr", hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
     CurrentScrollPos := newPos
-    Slider.Move(, ScrollThumbY(newPos))
+    if (IsSet(Slider) && Slider)
+        Slider.Move(, ScrollThumbY(newPos))
     DllCall("UpdateWindow", "Ptr", hwnd)
 }
 
 TryBeginScrollDrag() {
-    global ChildGui, Slider, SliderX, SliderW, SliderH, CurrentScrollPos
+    global ContentGui, Slider, SliderX, SliderW, SliderH, CurrentScrollPos, FrameH
     global ScrollDragging, ScrollDragGrab
 
-    if (!IsSet(ChildGui) || !ChildGui || !IsSet(Slider))
+    if (!IsSet(ContentGui) || ContentGui == "" || !IsSet(Slider))
         return false
     if (ScrollMaxOffset() <= 0)
         return false
-    if !DllCall("user32\IsWindowVisible", "Ptr", ChildGui.Hwnd, "Int")
+    if !DllCall("user32\IsWindowVisible", "Ptr", ContentGui.Hwnd, "Int")
         return false
 
     oldMode := A_CoordModeMouse
@@ -2428,13 +2818,14 @@ TryBeginScrollDrag() {
     MouseGetPos(&screenX, &screenY)
     CoordMode("Mouse", oldMode)
 
-    try WinGetPos(&childX, &childY, , &childH, "ahk_id " ChildGui.Hwnd)
+    try WinGetPos(&childX, &childY, , , "ahk_id " ContentGui.Hwnd)
     catch
         return false
 
     localX := screenX - childX
     localY := screenY - childY
-    if (localY < 0 || localY > childH)
+    
+    if (localY < 0 || localY > FrameH)
         return false
     if (localX < SliderX - 5 || localX > SliderX + SliderW + 5)
         return false
@@ -2453,14 +2844,14 @@ TryBeginScrollDrag() {
 }
 
 ScrollDragWatch() {
-    global ChildGui, ScrollDragging, ScrollDragGrab
+    global ContentGui, ScrollDragging, ScrollDragGrab
 
     try {
-        if (!ScrollDragging || !GetKeyState("LButton", "P") || !IsSet(ChildGui) || !ChildGui) {
+        if (!ScrollDragging || !GetKeyState("LButton", "P") || !IsSet(ContentGui) || ContentGui == "") {
             StopScrollDrag()
             return
         }
-        childHwnd := ChildGui.Hwnd
+        childHwnd := ContentGui.Hwnd
         if (!childHwnd || !WinExist("ahk_id " childHwnd)) {
             StopScrollDrag()
             return
@@ -2480,8 +2871,6 @@ ScrollDragWatch() {
 
         SetScrollPos(ScrollPosFromThumbY(screenY - childY - ScrollDragGrab))
     } catch Error as err {
-        ; A destroyed control/window or any unexpected GUI error must not leave
-        ; the high-frequency drag callback alive.
         StopScrollDrag()
     }
 }
@@ -2617,6 +3006,8 @@ EnableStratRotation(*) {
         ; Keep Auto Settings alongside Auto Equip when rotation controls collapse.
         AutoConfigCtrl.Move(285, 190)
     }
+    
+    UpdateStrategyButtons()
 }
 
 EnableAutoEquip(ctrl, *) {
@@ -2667,8 +3058,10 @@ SelectStrat1(ctrl, *) {
         Strategy1Path := f
         IniWrite(f, SettingsFile, "Options", "Strategy1")
         LoadStrategyFile(f)
+        UpdateStrategyButtons()
     }
 }
+
 SelectStrat2(ctrl, *) {
     global Strategy2Path
     targDir := RecordingsDir
@@ -2681,6 +3074,7 @@ SelectStrat2(ctrl, *) {
         Strategy2Ctrl.Value := f
         Strategy2Path := f
         IniWrite(f, SettingsFile, "Options", "Strategy2")
+        UpdateStrategyButtons()
     }
 }
 ClearStrat1(ctrl, *) {
@@ -2688,23 +3082,80 @@ ClearStrat1(ctrl, *) {
     Strategy1Ctrl.Value := ""
     Strategy1Path := ""
     IniWrite(" ", SettingsFile, "Options", "Strategy1")
+    UpdateStrategyButtons()
 }
+
 ClearStrat2(ctrl, *) {
     global Strategy2Path
     Strategy2Ctrl.Value := ""
     Strategy2Path := ""
     IniWrite(" ", SettingsFile, "Options", "Strategy2")
+    UpdateStrategyButtons()
 }
+
 SaveStrat1(ctrl, *) {
     global Strategy1Path, Strategy1Ctrl
     Strategy1Path := Strategy1Ctrl.Text
     IniWrite(Strategy1Ctrl.Text, SettingsFile, "Options", "Strategy1")
+    SetTimer(DebouncedUpdateStrategyButtons, -500)
 }
 
 SaveStrat2(ctrl, *) {
     global Strategy2Path, Strategy2Ctrl
     Strategy2Path := Strategy2Ctrl.Text
     IniWrite(Strategy2Ctrl.Text, SettingsFile, "Options", "Strategy2")
+    SetTimer(DebouncedUpdateStrategyButtons, -500)
+}
+
+DebouncedUpdateStrategyButtons() {
+    UpdateStrategyButtons()
+}
+
+GetStrategyStartProblem() {
+    global MainGui
+
+    if (!IsSet(MainGui) || !MainGui)
+        return "The macro UI is not ready."
+
+    try {
+        v := MainGui.Submit(false)
+    } catch Error as err {
+        return "Could not read the strategy settings: " err.Message
+    }
+
+    partyProblem := SyncPartySettingsFromGui(false)
+    if (partyProblem != "")
+        return partyProblem
+
+    if (v.RotateStrategies = 1) {
+        for num, path in [Trim(v.Strategy1), Trim(v.Strategy2)] {
+            if (path = "" || !FileExist(path))
+                return "Rotation strategy " num " is empty or missing."
+        }
+        return ""
+    }
+
+    if ((Trim(v.Strategy1) != "" && FileExist(Trim(v.Strategy1)))
+        || (Trim(v.Strategy2) != "" && FileExist(Trim(v.Strategy2))))
+        return ""
+
+    return "No valid strategy file is selected."
+}
+
+QueueStrategyStart() {
+    global RunningStrategy, Recording
+
+    if (RunningStrategy)
+        return "The macro is already running."
+    if (Recording)
+        return "The macro is currently recording."
+
+    problem := GetStrategyStartProblem()
+    if (problem != "")
+        return problem
+
+    SetTimer(StartStrategy, -100)
+    return ""
 }
 
 StartStrategy(*) {
@@ -3705,24 +4156,31 @@ ToggleAutoskip() {
 ChangeTargets(towerID, target) {
     global LastOpenedTowerID, needtocheckTowerUI, Towers, PotatoMode, ResV2, ResV1, canBeUpgraded, unfocusX, unfocusY
     global canUseAbility
-    canUseAbility := false
 
-    if (LastOpenedTowerID != towerID) {
-        Click(Towers[towerID].x, Towers[towerID].y)
-        Sleep 250
-    } else {
-        MouseMove(0, ScaleY(50), , "R")
+    if (!Towers.Has(towerID)) {
+        LogToConsole("Cannot change targets: tower " towerID " is no longer available.", true)
+        return false
     }
 
-    LastOpenedTowerID := towerID
-    needtocheckTowerUI := true
-    attempts := 0
     targets := ["First Enemy", "Last Enemy", "Strongest", "Weakest", "Closest", "Farthest", "Random"]
+    canUseAbility := false
 
-    LogToConsole("Changing " towerID " targets to " target "...")
+    try {
+        if (LastOpenedTowerID != towerID) {
+            Click(Towers[towerID].x, Towers[towerID].y)
+            Sleep 250
+        } else {
+            MouseMove(0, ScaleY(50), , "R")
+        }
 
-    upgTime := A_TickCount
-    loop {
+        LastOpenedTowerID := towerID
+        needtocheckTowerUI := true
+        attempts := 0
+
+        LogToConsole("Changing " towerID " targets to " target "...")
+
+        upgTime := A_TickCount
+        loop {
         openedSuccessfully := false
         StartTime := A_TickCount
 
@@ -3784,6 +4242,11 @@ ChangeTargets(towerID, target) {
                 targetIndex := index
         }
 
+        if (targetIndex = 0) {
+            LogToConsole("Cannot change tower " towerID ": unknown target '" target "'.", true)
+            return false
+        }
+
         if (currentIndex == 0)
             currentIndex := 1
 
@@ -3816,7 +4279,7 @@ ChangeTargets(towerID, target) {
         Click(ScaleX(unfocusX), ScaleY(unfocusY))
         Sleep 250
 
-        LastOpenedTowerID := 0
+        LastOpenedTowerID := ""
         Click(Towers[towerID].x, Towers[towerID].y)
         Sleep 250
         LastOpenedTowerID := towerID
@@ -3865,8 +4328,9 @@ ChangeTargets(towerID, target) {
             break
         }
     }
-
-    canUseAbility := true
+    } finally {
+        canUseAbility := true
+    }
 }
 
 CloneTower(towerId, x, y, wait := 0) {
@@ -4536,6 +5000,8 @@ SaveAllSettings(ctrl, *) {
     tempCancelPlacementKey := SubStr(RegExReplace(CancelPlacementKeyCtrl.Value, "\s", ""), 1, 1)
     tempUpgradeTowerGKey := SubStr(RegExReplace(UpgradeTowerGCtrl.Value, "\s", ""), 1, 1)
     tempUpgradeTowerGBKey := SubStr(RegExReplace(UpgradeTowerGBCtrl.Value, "\s", ""), 1, 1)
+    tempRaiseDeadKey := SubStr(RegExReplace(RaiseDeadKeyCtrl.Value, "\s", ""), 1, 1)
+    tempRepoKey := SubStr(RegExReplace(RepoKeyCtrl.Value, "\s", ""), 1, 1)
 
     if (tempChainKey = "")
         tempChainKey := "C"
@@ -4549,6 +5015,10 @@ SaveAllSettings(ctrl, *) {
         tempUpgradeTowerGKey := "E"
     if (tempUpgradeTowerGBKey = "")
         tempUpgradeTowerGBKey := "Z"
+    if (tempRaiseDeadKey = "")
+        tempRaiseDeadKey := "V"
+    if (tempRepoKey = "")
+        tempRepoKey := "L"
 
     tempPlaceTowerKey := NormalizeKey(PlaceTowerKeyCtrl.Value)
     tempUpgradeTowerKey := NormalizeKey(UpgradeTowerKeyCtrl.Value)
@@ -4568,8 +5038,9 @@ SaveAllSettings(ctrl, *) {
                 tempUpgradeTowerGBKey), name: "Upgrade Bottom Path (TDS keybind)" }, { val: tempPlaceTowerKey, name: "Place Tower" }, { val: tempUpgradeTowerKey,
                     name: "Upgrade Tower" }, { val: tempAlignCameraKey, name: "Align Camera" }, { val: tempChangeDJTrackKey,
                         name: "Change DJ Track" }, { val: tempSellTowerKey, name: "Sell Tower" }, { val: tempDeleteTowerRecordingKey,
-                            name: "Delete Tower Recording" }, { val: tempRecordInputsKey, name: "Record Inputs" }, { val: tempHoloKey,
-                                name: "Hologram Tower" }, { val: tempChangeTargetsKey, name: "Change Targets" }
+        name: "Delete Tower Recording" }, { val: tempRecordInputsKey, name: "Record Inputs" }, { val: tempHoloKey,
+                                name: "Hologram Tower" }, { val: tempChangeTargetsKey, name: "Change Targets" }, { val: NormalizeKey("^" tempRaiseDeadKey),
+                                    name: "Raise the Dead" }, { val: NormalizeKey("^" tempRepoKey), name: "Brawler Reposition" }
     ]
 
     for item in KeysToCheck {
@@ -4597,7 +5068,8 @@ SaveAllSettings(ctrl, *) {
     UpgradeTowerGBKey := tempUpgradeTowerGBKey
 
     oldRecordingKeys := [PlaceTowerKey, UpgradeTowerKey, AlignCameraKey, ChangeDJTrackKey,
-        SellTowerKey, DeleteTowerRecordingKey, RecordInputsKey, HoloKey, ChangeTargetsKey]
+        SellTowerKey, DeleteTowerRecordingKey, RecordInputsKey, HoloKey, ChangeTargetsKey,
+        "~^" RepoKey, "~^" RaiseDeadKey]
 
     PlaceTowerKey := tempPlaceTowerKey
     UpgradeTowerKey := tempUpgradeTowerKey
@@ -4608,9 +5080,9 @@ SaveAllSettings(ctrl, *) {
     RecordInputsKey := tempRecordInputsKey
     HoloKey := tempHoloKey
     ChangeTargetsKey := tempChangeTargetsKey
-    RaiseDeadKey := RaiseDeadKeyCtrl.Value
+    RaiseDeadKey := tempRaiseDeadKey
     HologramKey := HologramKeyCtrl.Value
-    RepoKey := RepoKeyCtrl.Value
+    RepoKey := tempRepoKey
 
     RegisterRecordingHotkeys(oldRecordingKeys)
 
@@ -4829,6 +5301,20 @@ ClearStoredLogs(ctrl, *) {
     MsgBox("Cleared " removed " log file" (removed = 1 ? "" : "s") ".", "Clear Logs", "0x1040")
 }
 
+ExportLogsForDevelopers(ctrl, *) {
+    outputPath := A_Desktop "\\UltimateMacro-logs-" FormatTime(, "yyyyMMdd-HHmmss") ".txt"
+    try {
+        if FileExist(outputPath)
+            FileDelete(outputPath)
+        if !RuntimeLogExportBundle(outputPath)
+            throw Error("The diagnostic log bundle could not be created.")
+        MsgBox("Developer logs exported to:`n" outputPath, "Export Logs", "0x1040")
+    } catch Error as err {
+        RuntimeLogError("logs_export_failed", "Developer log export failed", "error=" err.Message)
+        MsgBox("Could not export developer logs.`n`n" err.Message, "Export Logs", "0x1040")
+    }
+}
+
 FormatLogSize(bytes) {
     if (bytes >= 1048576)
         return Format("{:.1f} MB", bytes / 1048576)
@@ -4883,9 +5369,10 @@ CheckWebhookLink(*) {
 }
 
 EnableWebhookLink2(*) {
+    global CurrentTab, DiscordPage, WebhookLinkCtrl2
     v := MainGui.Submit(false)
     toggle := v.WebhookSepatateTriumphScreenshots
-    if toggle = 1 {
+    if (toggle = 1 && IsSet(CurrentTab) && CurrentTab = "Tab4" && DiscordPage = "Webhook") {
         WebhookLinkCtrl2.Visible := true
     } else {
         WebhookLinkCtrl2.Visible := false
@@ -4893,27 +5380,39 @@ EnableWebhookLink2(*) {
 }
 
 DiscordSettings(*) {
-    if tab4_Title.Text = "Discord Webhook" {
-        tab4_Title.Text := "Discord Bot"
-        HideAllTabContent()
-        ShowDiscordSettings()
-    } else {
-        tab4_Title.Text := "Discord Webhook"
-        HideAllTabContent()
-        ShowDiscordSettings()
-    }
+    global DiscordPage
+    ShowDiscordPage(DiscordPage = "Webhook" ? "Bot" : "Webhook")
 }
 
 ShowDiscordSettings(*) {
-    if tab4_Title.Text = "Discord Webhook" {
-        HideAllTabContent()
-        for ctrl in DiscordWebhookTab
-            ShowControl(ctrl)
-    } else {
-        HideAllTabContent()
-        for ctrl in DiscordBotTab
-            ShowControl(ctrl)
-    }
+    global DiscordPage
+    ShowDiscordPage(DiscordPage)
+}
+
+ShowDiscordPage(page, *) {
+    global DiscordPage, DiscordNavTab, DiscordWebhookTab, DiscordBotTab, DiscordRemoteTab
+    global Tab4_WebhookTabTitle, Tab4_BotTabTitle, Tab4_RemoteTabTitle
+
+    if (page != "Webhook" && page != "Bot" && page != "Remote")
+        page := "Webhook"
+    DiscordPage := page
+    HideAllTabContent()
+
+    for ctrl in DiscordNavTab
+        ShowControl(ctrl)
+
+    Tab4_WebhookTabTitle.SetFont(page = "Webhook" ? "c3A86FF" : "c888888")
+    Tab4_BotTabTitle.SetFont(page = "Bot" ? "c3A86FF" : "c888888")
+    Tab4_RemoteTabTitle.SetFont(page = "Remote" ? "c3A86FF" : "c888888")
+
+    controls := page = "Webhook" ? DiscordWebhookTab : (page = "Bot" ? DiscordBotTab : DiscordRemoteTab)
+    for ctrl in controls
+        ShowControl(ctrl)
+
+    if (page = "Webhook")
+        EnableWebhookLink2()
+    else if (page = "Remote")
+        OfficialRemoteRefreshControls()
 }
 
 CheckWebhookLink2(*) {
@@ -5883,7 +6382,7 @@ RunRoblox(doReload := true) {
         SetTimer(CheckPopups, 5000)
 
         startTime := A_TickCount
-        getRobloxPos(, , &w, &h)
+        geometryLogAt := 0
         loop {
             ActivateRoblox()
 
@@ -5894,6 +6393,15 @@ RunRoblox(doReload := true) {
                 } else {
                     return false
                 }
+            }
+
+            if !getRobloxPos(, , &w, &h) || w <= 0 || h <= 0 {
+                if (A_TickCount - geometryLogAt >= 5000) {
+                    RuntimeLogWarn("run_roblox_geometry_wait", "Roblox client geometry is not ready while waiting for the lobby Play button")
+                    geometryLogAt := A_TickCount
+                }
+                Sleep(250)
+                continue
             }
 
             res0 := AdvancedImageSearch("Resources/Play.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.75), Round(
@@ -6122,6 +6630,17 @@ TryClickDifficultyTarget(target, w, h) {
     cardW := Round(w * 0.62)
     cardH := Round(h * 0.76)
 
+    ; Easy's current card artwork can extend outside the centered mode panel.
+    ; Search the Roblox client only for Easy so the macro never scans the
+    ; desktop or debug overlay, while preserving the tighter regions for the
+    ; other modes.
+    if (target = "Easy") {
+        cardX := 0
+        cardY := 0
+        cardW := w
+        cardH := h
+    }
+
     imagePath := "Resources/" target ".png"
     if FileExist(imagePath) {
         res := AdvancedImageSearch(imagePath, cardX, cardY, cardW, cardH)
@@ -6146,11 +6665,21 @@ TryClickDifficultyTarget(target, w, h) {
             }
         }
 
+        ocrX := screenX + Round(screenW * 0.22)
+        ocrY := screenY + Round(screenH * 0.06)
+        ocrW := Round(screenW * 0.62)
+        ocrH := Round(screenH * 0.76)
+        if (target = "Easy") {
+            ocrX := screenX
+            ocrY := screenY
+            ocrW := screenW
+            ocrH := screenH
+        }
         ocrResult := OCR.FromRect(
-            screenX + Round(screenW * 0.22),
-            screenY + Round(screenH * 0.06),
-            Round(screenW * 0.62),
-            Round(screenH * 0.76),
+            ocrX,
+            ocrY,
+            ocrW,
+            ocrH,
             { lang: langCode, scale: 1.45, grayscale: 1 }
         )
         match := ocrResult.FindString(target, { CaseSense: false, IgnoreLinebreaks: true })
@@ -6214,17 +6743,22 @@ JoinGame() {
     readyY := 0
     MacroPhase("matchmaking", 240000)
     RuntimeLogInfo("matchmaking_ready_reset", "Reset Ready coordinates before fresh matchmaking join")
-    if !getRobloxPos(, , &w, &h) {
-        RuntimeLogWarn("matchmaking_geometry_missing", "Roblox client geometry was unavailable before matchmaking")
-        SafeReload()
-        return false
-    }
 
     startTime := A_TickCount
+    geometryLogAt := 0
     loop {
         if (A_TickCount - startTime > 80000) {
             SafeReload()
             return false
+        }
+
+        if !getRobloxPos(, , &w, &h) || w <= 0 || h <= 0 {
+            if (A_TickCount - geometryLogAt >= 5000) {
+                RuntimeLogWarn("matchmaking_geometry_retry", "Roblox client geometry is not ready; retrying the Play-button search")
+                geometryLogAt := A_TickCount
+            }
+            Sleep(250)
+            continue
         }
 
         x1 := Round(w * 0.25)
@@ -6329,7 +6863,9 @@ JoinGame() {
         difficultyStart := A_TickCount
         difficultyDeadline := difficultyStart + 60000
         lastPlayRetry := 0
-        firstModeScrollAt := difficultyStart + 1500
+        ; Give the mode-selection UI time to finish animating before moving the
+        ; pointer and scrolling. Detection still retries during this wait.
+        firstModeScrollAt := difficultyStart + 6000
         lastModeScroll := difficultyStart
         modeScrollAttempts := 0
 
@@ -7377,11 +7913,21 @@ activateTimescale() {
             LogToConsole("Failed to activate timescale! You are out of tickets.", true, false)
 
         } else {
-            res := AdvancedImageSearch("Resources/confirm.png", Round(w * 0.25), Round(h * 0.45), Round(w * 0.50),
-            Round(h * 0.55))
-            if (res.status = "success" && res.score >= 0.67) {
-                Click(res.x, res.y)
-            } else {
+            confirmClicked := false
+            confirmStart := A_TickCount
+            loop {
+                res := AdvancedImageSearch("Resources/confirm.png", Round(w * 0.25), Round(h * 0.45), Round(w * 0.50),
+                Round(h * 0.55))
+                if (res.status = "success" && res.score >= 0.67) {
+                    Click(res.x, res.y)
+                    confirmClicked := true
+                    break
+                }
+                if (A_TickCount - confirmStart >= 2000)
+                    break
+                Sleep(200)
+            }
+            if (!confirmClicked) {
                 LogToConsole("failed to activate timescale. the macro can't see the confirm/get more button... (" res.score ")",
                     true)
                 SafeReload()
@@ -7827,11 +8373,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
         searchArea := XA "|" YA "|" X2 "|" Y2
 
-        try {
-            isGreen := PixelSearch(&gx, &gy, XA, YA, X2, Y2, 0x206235, 12)
-        } catch Error {
-            isGreen := false
-        }
+        isGreen := HasStableUpgradeAffordance(XA, YA, X2, Y2)
         if (isGreen && canBeUpgraded) {
             canUseAbility := false
             if (UseHForUpgrade) {
@@ -7848,7 +8390,12 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                 Click(UpgradeX, UpgradeY)
             }
 
-            Sleep(UpgradeDelay)
+            ; A zero-delay upgrade input can arrive before Roblox has processed the
+            ; previous UI state. Counting it immediately made unaffordable fast
+            ; upgrades look successful in the strategy runtime.
+            settleDelay := Max(250, Integer(UpgradeDelay))
+            Sleep(settleDelay)
+            needtocheckTowerUI := true
 
             Towers[towerID].level += 1
             upgradesDone++
@@ -7887,6 +8434,17 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
         ; Waiting for cash: yield instead of spinning on back-to-back searches.
         Sleep((PotatoMode = 1) ? 200 : 100)
+    }
+}
+
+HasStableUpgradeAffordance(x1, y1, x2, y2) {
+    try {
+        if !PixelSearch(&gx, &gy, x1, y1, x2, y2, 0x206235, 12)
+            return false
+        Sleep(60)
+        return PixelSearch(&gx, &gy, x1, y1, x2, y2, 0x206235, 12)
+    } catch Error {
+        return false
     }
 }
 
@@ -8464,6 +9022,12 @@ ShowDebugConsole() {
     OverlayGraphics := Gdip_GraphicsFromImage(OverlayBitmap)
     Gdip_SetSmoothingMode(OverlayGraphics, 4)
 
+}
+
+DebugOverlayHitTest(wParam, lParam, msg, hwnd) {
+    global OverlayHWND
+    if (hwnd = OverlayHWND)
+        return -1
 }
 
 HideDebugConsole() {
@@ -9107,6 +9671,7 @@ StopApplicationTimers() {
     try SetTimer(ProcessWebhookInstantQueue, 0)
     try SetTimer(Hoverwatchdog, 0)
     try SetTimer(ProcessCommands, 0)
+    try OfficialRemoteShutdown()
 }
 
 ReleaseHeldInput() {
@@ -9330,7 +9895,9 @@ HandleExit(ExitReason, ExitCode) {
 
 CleanupGdip(exitReason, exitCode) {
     global pToken
-    Gdip_Shutdown(pToken)
+    CleanupRenderedBitmaps()
+    if (IsSet(pToken) && pToken)
+        Gdip_Shutdown(pToken)
 }
 
 MainGui.OnEvent("Close", (*) => ExitApp())
