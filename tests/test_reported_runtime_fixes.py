@@ -189,7 +189,7 @@ def validate_matchmaking_ready_map(main: str, validator: str) -> None:
             "the first mode scroll needs a settling grace so Easy stays visible")
     require("TryClickDifficultyTarget(difficulty, w, h)" in join, "Easy and Frost must share reliable targeting")
 
-    require("AdvancedImageSearch(imagePath" in difficulty and "OCR.FromRect(" in difficulty,
+    require("ReliabilitySearchTemplate(target" in difficulty and "OCR.FromRect(" in difficulty,
             "Frost/standard targeting needs template matching plus bounded OCR fallback")
     require("GetRobloxScreenClientRect" in difficulty and "match.Click()" in difficulty,
             "difficulty OCR must capture/click in SCREEN space")
@@ -199,8 +199,8 @@ def validate_matchmaking_ready_map(main: str, validator: str) -> None:
             "map detection needs both time and sample bounds")
     require("mapSamples = 4 || mapSamples = 9" in map_check and "AlignCamera(" in map_check,
             "map detection must realign after transient misses")
-    require("map_detection_failed" in map_check and "SafeReload()" in map_check,
-            "map detection must log and fail safely after its real deadline")
+    require("map_detection_failed" in map_check and "return false" in map_check and "SafeReload()" not in map_check,
+            "map detection must log and fail without forcing a Roblox reload")
 
     require("AdvancedImageSearch" in ready_find, "Ready must prefer its template")
     require("PixelSearch" not in ready_find, "Ready must never click generic green pixels")
@@ -210,8 +210,8 @@ def validate_matchmaking_ready_map(main: str, validator: str) -> None:
             "Ready retry must be bounded by time and count")
     require("disappearedSamples >= 2" in ready_click and "ready_click_confirmed" in ready_click,
             "Ready success needs consecutive post-click disappearance evidence")
-    require("ready_click_timeout" in ready_click and "SafeReload()" in ready_click,
-            "unconfirmed Ready must fail safely")
+    require("ready_click_timeout" in ready_click and "return false" in ready_click and "SafeReload()" not in ready_click,
+            "unconfirmed Ready must fail safely without forcing a Roblox reload")
 
 
 def validate_paths(main: str) -> None:
@@ -264,7 +264,7 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
     # The opening brace is intentional: searching for SetDJTrack(track) alone
     # can select a call and silently validate the wrong body.
     dj = region(main, "SetDJTrack(track) {", "UpdateTowerIndicator(towerID) {")
-    play = region(main, "PlayStrategy() {", "ExecuteStep(step) {")
+    play = region(main, "PlayStrategy() {", "\nExecuteStep(step) {")
     execute = region(main, "ExecuteStep(step) {", "LowerGraphics() {")
     abilities_wrapper = region(main, "UseAbilities(*) {", "UseAbilitiesPass() {")
     abilities = region(main, "UseAbilitiesPass() {", "SetDJTrack(track) {")
@@ -322,7 +322,7 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
             "maxed/unaffordable upgrade loops must remain bounded and yielding")
     require("HasProp(\"hwnd\")" in sell and "Towers.Delete(towerID)" in sell,
             "SellTower must guard optional indicators and remove tower state")
-    require("AdvancedImageSearch(imagePath, cardX, cardY, cardW, cardH)" in arcade,
+    require("ReliabilitySearchTemplate(target, cardX, cardY, cardW, cardH)" in arcade,
             "Arcade search bounds must pass width/height, not bottom-right coordinates")
 
 
@@ -535,7 +535,7 @@ def validate_launch_failure_safety(main: str) -> None:
     timescale = region(main, "activateTimescale() {", "AlignCamera(")
     align_camera = region(main, "AlignCamera(move :=", "getSlots() {")
     reconnect = region(main, "TryReconnect() {", "CheckPopups(*) {")
-    stop_strategy = region(main, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
+    stop_strategy = region(main, "StopStrategy(reload := true, *) {", "StartRecording(ctrl, *) {")
 
     prepare_failure = region(
         run_roblox,
@@ -544,9 +544,9 @@ def validate_launch_failure_safety(main: str) -> None:
     )
     require("auto_settings_prepare_failed" in prepare_failure and
             "GetAutoSettingsLastError()" in prepare_failure and
-            "StopStrategy()" in prepare_failure and "return false" in prepare_failure,
+            "StopStrategy(false)" in prepare_failure and "return false" in prepare_failure,
             "Auto Settings launch failure must log detail, stop once, and return failure")
-    require(run_roblox.count("StopStrategy()") == 1 and "StopStrategy()" not in run_strategy,
+    require(run_roblox.count("StopStrategy(false)") == 1 and "StopStrategy()" not in run_strategy,
             "RunRoblox must remain the single strategy-stop owner after preparation failure")
     require("SafeReload()\n        return" in stop_strategy,
             "StopStrategy must not continue after requesting an asynchronous reload")
@@ -562,7 +562,7 @@ def validate_launch_failure_safety(main: str) -> None:
             "reward and fresh-client fallback launches must both fail fast")
     require("return JoinGame()" in check_restart and "if !WaitForLobbyLoad()" in check_restart,
             "CheckRestart must propagate matchmaking and lobby-load failures")
-    require("if !RunningStrategy\n                return false" in reconnect,
+    require("if (RunningStrategy)" in reconnect and "StopStrategy()" in reconnect,
             "reconnect must stop retrying after RunRoblox has stopped the strategy")
 
     guard = align_camera[:align_camera.index('Click("Right Down")')]
@@ -728,7 +728,7 @@ def validate_auto_settings_hardening(
 
     runtime_timers = region(main_source, "StopRuntimeTimers() {", "; Persistent application/UI timers")
     application_timers = region(main_source, "StopApplicationTimers() {", "ReleaseHeldInput() {")
-    stop_strategy = region(main_source, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
+    stop_strategy = region(main_source, "StopStrategy(reload := true, *) {", "StartRecording(ctrl, *) {")
     require("ProcessCommands" not in runtime_timers,
             "ordinary runtime cleanup must not stop the persistent Discord bot timer")
     require("ProcessCommands" in application_timers and "CheckWebhookLink" in application_timers and

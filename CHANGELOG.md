@@ -1,6 +1,39 @@
 # Changelog
 
+## 1.4.0
+
+### Added
+
+- Resume-aware startup that reuses an existing TDS lobby or Ready screen instead of always restarting Roblox.
+- Pre-run checks for strategy requirements, OCR, display resolution, and Windows scaling.
+- Goals & Smart Strategy tool for measurable coin/gem targets, owned-tower compatibility, reward-per-minute ranking, automatic stopping, and local/Discord completion notices.
+- Custom DJ disc schedules by wave or wave range, such as `18-20:Red;21-30:Green`.
+- Adjustable map-menu, typing, and result-detection delays in Advanced Settings.
+- Live wave reporting in Official Remote status.
+- An in-macro Smart Goals assistant backed by the linked, authenticated ULT Bot service.
+- A dedicated visual Guide tab with setup and troubleshooting guidance.
+- A safe recorded-strategy editor launcher in Tools.
+
+### Fixed
+
+- Community strategy cards now ask which rotation slot to replace and load that selected slot immediately.
+- Generated GUI bitmap handles are tracked and released during shutdown, including hover images that previously had no owner.
+- Unknown in-game startup states fall back safely instead of blindly continuing inputs.
+- Official Remote privacy and consent controls no longer overlap at standard window sizes.
+- Smart Goals no longer requires manually entering every owned tower.
+
+### Security and privacy
+
+- Remote economy totals remain consent-based, aggregated, and protected with server-side sanity limits. They are community estimates, not anti-cheat evidence.
+
 ## Unreleased — reported runtime QA hotfix
+
+### Added
+
+- Official Discord Remote Control page with private per-account linking, status,
+  start, stop and screenshot commands through EngineerBot.
+- Random per-installation identity, Windows DPAPI token protection, automatic
+  token rotation and a clear privacy/consent notice. No hardware ID is collected.
 
 ### Fixed
 

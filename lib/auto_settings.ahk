@@ -667,8 +667,11 @@ WaitForRobloxExitAndRestore(expectedToken) {
     if (expectedToken = "")
         return false
     paths := AutoSettingsPaths()
+    restoreDeadline := A_TickCount + 300000
 
     loop {
+        if (A_TickCount >= restoreDeadline)
+            return AutoSettingsFail("Timed out waiting for Roblox to exit and Auto Settings to restore", paths)
         if !AutoSettingsRestoreRequestMatches(paths, expectedToken)
             return true
         while AutoSettingsRobloxSessionActive("RobloxPlayerBeta.exe") {

@@ -51,7 +51,7 @@ function Assert-DownloadUrl([string]$Value) {
         throw 'The release supplied an invalid download URL.'
     }
     $official = $uri.Scheme -eq 'https' -and $uri.Host -eq 'github.com' -and
-        $uri.AbsolutePath.StartsWith('/DarksenDev/tds-macro/releases/download/', [StringComparison]::OrdinalIgnoreCase)
+        $uri.AbsolutePath.StartsWith('/UltimateMacro/Ultimate-Macro-New-Era/releases/download/', [StringComparison]::OrdinalIgnoreCase)
     $loopbackTest = $uri.Scheme -eq 'http' -and $uri.IsLoopback
     if (-not ($official -or $loopbackTest)) {
         throw "Untrusted update URL rejected: $Value"
@@ -141,7 +141,7 @@ function Assert-RuntimePayload([string]$Root) {
 
 function Assert-PayloadVersion([string]$Root, [string]$Expected) {
     $expectedNormalized = Normalize-VersionLabel $Expected
-    if ($expectedNormalized -notmatch '^\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$') {
+    if ($expectedNormalized -notmatch '^\d+(?:\.\d+){1,3}(?:[A-Za-z]|[-+][0-9A-Za-z.-]+)?$') {
         throw "Invalid expected release version: $Expected"
     }
 

@@ -76,6 +76,9 @@ loop 60 {
     Sleep(500)
 }
 loopCounter := 0
+resultCandidate := ""
+resultSamples := 0
+resultMisses := 0
 
 loop {
     getRobloxPos(, , &w, &h)
@@ -193,42 +196,51 @@ loop {
         CoordMode("Pixel", "Client")
     }
 
+    resultKind := ""
     if (Mod(loopCounter, 2) == 0) {
         resTriumph1 := AdvancedImageSearch(TriumphImg1, w * 0.2, h * 0.2, w * 0.6, h * 0.7)
-
-        if (resTriumph1.status == "success" && resTriumph1.score > 0.7) {
-            if ((WebhookEnabled && WebhookLink != "") || botEnabled) {
-                CloseMain()
-                Sleep 1300
-                SendInfo("Triumph")
-            }
-            RestartMain()
-            ExitApp()
-        }
+        if (resTriumph1.status == "success" && resTriumph1.score > 0.7)
+            resultKind := "Triumph"
     } else {
         resTriumph2 := AdvancedImageSearch(TriumphImg2, w * 0.2, h * 0.2, w * 0.6, h * 0.7)
         Sleep 200
         resLost := AdvancedImageSearch(YouLostImg, w * 0.2, h * 0.2, w * 0.6, h * 0.7)
 
-        if (resTriumph2.status == "success" && resTriumph2.score > 0.7) {
-            if ((WebhookEnabled && WebhookLink != "") || botEnabled) {
-                CloseMain()
-                Sleep 1300
-                SendInfo("Triumph")
-            }
-            RestartMain()
-            ExitApp()
-        }
+        if (resTriumph2.status == "success" && resTriumph2.score > 0.7)
+            resultKind := "Triumph"
+        else if (resLost.status == "success" && resLost.score > 0.7)
+            resultKind := "Loss"
+    }
 
-        if (resLost.status == "success" && resLost.score > 0.7) {
-            if ((WebhookEnabled && WebhookLink != "") || botEnabled) {
-                CloseMain()
-                Sleep 1300
-                SendInfo("Loss")
-            }
-            RestartMain()
-            ExitApp()
+    ; A single result-template hit can come from a stale/partial frame. Require
+    ; the same result classification twice before handing lifecycle control to
+    ; the fresh Main process.
+    if (resultKind != "") {
+        resultMisses := 0
+        if (resultKind = resultCandidate)
+            resultSamples++
+        else
+            resultCandidate := resultKind, resultSamples := 1
+    } else if (resultCandidate != "") {
+        ; The watchdog intentionally alternates result templates to spread scan
+        ; cost. Preserve one candidate across a non-matching alternate sample,
+        ; but discard it quickly if the result frame really disappears.
+        resultMisses++
+        if (resultMisses >= 3) {
+            resultCandidate := ""
+            resultSamples := 0
+            resultMisses := 0
         }
+    }
+
+    if (resultSamples >= 2) {
+        if ((WebhookEnabled && WebhookLink != "") || botEnabled) {
+            CloseMain()
+            Sleep 1300
+            SendInfo(resultCandidate)
+        }
+        RestartMain()
+        ExitApp()
     }
 
     if (Mod(loopCounter, 6) == 0) {
