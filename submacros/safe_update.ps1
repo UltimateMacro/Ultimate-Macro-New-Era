@@ -51,7 +51,7 @@ function Assert-DownloadUrl([string]$Value) {
         throw 'The release supplied an invalid download URL.'
     }
     $official = $uri.Scheme -eq 'https' -and $uri.Host -eq 'github.com' -and
-        $uri.AbsolutePath.StartsWith('/DarksenDev/tds-macro/releases/download/', [StringComparison]::OrdinalIgnoreCase)
+        $uri.AbsolutePath.StartsWith('/UltimateMacro/Ultimate-Macro-New-Era/releases/download/', [StringComparison]::OrdinalIgnoreCase)
     $loopbackTest = $uri.Scheme -eq 'http' -and $uri.IsLoopback
     if (-not ($official -or $loopbackTest)) {
         throw "Untrusted update URL rejected: $Value"
