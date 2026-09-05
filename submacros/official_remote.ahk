@@ -1,5 +1,5 @@
 #Requires AutoHotkey v2.0
-#SingleInstance Force
+#SingleInstance Off
 #NoTrayIcon
 #Include ..\lib\JSON.ahk
 
@@ -188,8 +188,11 @@ RemoteRequest(method, url, body := "", token := "", timeout := 35000, installId 
         wr.SetRequestHeader("Content-Type", "application/json")
     wr.SetTimeouts(10000, 10000, timeout, timeout)
     wr.Send(body)
-    if (wr.Status < 200 || wr.Status >= 300)
+    if (wr.Status < 200 || wr.Status >= 300) {
+        if (wr.Status = 401)
+            throw Error("Your Remote link expired. Run /remote link and connect this PC again.")
         throw Error("Remote server returned HTTP " wr.Status ".")
+    }
     return wr.ResponseText
 }
 

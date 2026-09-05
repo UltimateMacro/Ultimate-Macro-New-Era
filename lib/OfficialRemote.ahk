@@ -127,6 +127,7 @@ OfficialRemoteAsk(prompt) {
     } finally {
         try FileDelete(inputPath)
         try FileDelete(resultPath)
+        OfficialRemoteStartWorker()
     }
 }
 
