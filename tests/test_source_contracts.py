@@ -372,12 +372,12 @@ def validate_transactional_updater(updater: str, safe_updater: str, wrapper: str
     assert "CompareMacroVersions(latestVer, installedVer) <= 0" in updater
     assert "GetCurrentProcessId" in updater
     assert 'command .= " -SelfDelete"' in updater
-  assert "DarksenDev/tds-macro/releases/latest" not in updater
-assert "DarksenDev/tds-macro/releases/download" not in updater
+    assert "DarksenDev/tds-macro/releases/latest" not in updater
+    assert "DarksenDev/tds-macro/releases/download" not in updater
 
     assert "[Parameter(Mandatory = $true)][string]$ExpectedSha256" in safe_updater
-   assert "/UltimateMacro/Ultimate-Macro-New-Era/releases/download/" in safe_updater
-assert "DarksenDev/tds-macro/releases/download" not in safe_updater
+    assert "/UltimateMacro/Ultimate-Macro-New-Era/releases/download/" in safe_updater
+    assert "DarksenDev/tds-macro/releases/download" not in safe_updater
     assert "Refusing to update a filesystem root" in safe_updater
     assert "does not contain Main.ahk" in safe_updater
     assert "A .git entry was detected" in safe_updater
