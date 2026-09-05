@@ -122,7 +122,7 @@ command_buffer := []
 global BotStrategyChoices := []
 global BotStrategyChoiceTime := 0
 
-ver := "1.3.4"
+ver := "1.3.5"
 
 RuntimeLogInstall("Main", ver)
 
