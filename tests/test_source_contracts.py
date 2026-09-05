@@ -364,20 +364,20 @@ def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
     ), "Discord multipart HGLOBAL must be released in finally"
 
 def validate_transactional_updater(updater: str, safe_updater: str, wrapper: str) -> None:
-    assert "https://api.github.com/repos/DarksenDev/tds-macro/releases/latest" in updater
-    assert r"https://github\.com/DarksenDev/tds-macro/releases/download/" in updater
+    assert "https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era/releases/latest" in updater
+    assert r"https://github\.com/UltimateMacro/Ultimate-Macro-New-Era/releases/download/" in updater
     assert 'PreferredAsset := "TDS_Macro.zip"' in updater
     assert "JSON.parse" in updater
     assert 'RegExMatch(candidateDigest, "i)^sha256:[0-9a-f]{64}$")' in updater
     assert "CompareMacroVersions(latestVer, installedVer) <= 0" in updater
     assert "GetCurrentProcessId" in updater
     assert 'command .= " -SelfDelete"' in updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/latest" not in updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/download" not in updater
+  assert "DarksenDev/tds-macro/releases/latest" not in updater
+assert "DarksenDev/tds-macro/releases/download" not in updater
 
     assert "[Parameter(Mandatory = $true)][string]$ExpectedSha256" in safe_updater
-    assert "/DarksenDev/tds-macro/releases/download/" in safe_updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/download" not in safe_updater
+   assert "/UltimateMacro/Ultimate-Macro-New-Era/releases/download/" in safe_updater
+assert "DarksenDev/tds-macro/releases/download" not in safe_updater
     assert "Refusing to update a filesystem root" in safe_updater
     assert "does not contain Main.ahk" in safe_updater
     assert "A .git entry was detected" in safe_updater
