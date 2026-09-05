@@ -129,12 +129,13 @@ OfficialRemoteExecute(command) {
         if (action = "status") {
             strategyPath := IniRead(StateFile, "State", "Strategy", "")
             strategyName := "None selected"
+            wave := Integer(IniRead(StateFile, "State", "Wave", "0"))
             if (strategyPath != "")
                 SplitPath(strategyPath, &strategyName)
             result["result"] := Map(
                 "running", RunningStrategy ? JSON.true : JSON.false,
                 "strategy", strategyName,
-                "wave", "Unknown",
+                "wave", wave > 0 ? wave : "Unknown",
                 "runtime", RunningStrategy ? FormatRuntime(AutorunStartTime) : "Not running"
             )
         } else if (action = "start") {

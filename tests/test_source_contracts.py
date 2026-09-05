@@ -415,7 +415,17 @@ def validate_official_remote(root: Path, main: str) -> None:
     assert "Official Remote" in main
     assert "Tab4_RemoteConsent" in main
     assert "OfficialRemoteShutdown()" in main
-    assert 'global ClientVersion := "1.3.4a"' in worker
+    assert 'global ClientVersion := "1.4.0"' in worker
+    assert 'pollUrl .= "?coins=" coins "&gems=" gems' in worker
+    assert 'DetectTdsSessionState()' in main
+    assert 'RunPreflightCheck(stratFile)' in main
+    assert 'CheckDJTrackSchedule()' in main
+    assert '18-20:Red;21-30:Green' in main
+    assert 'OpenGoalManager(*)' in main
+    assert 'FindBestGoalStrategy(goalType, owned)' in main
+    assert 'Load this strategy into rotation slot 1 or slot 2?' in main
+    assert 'ReleaseGuiBitmaps()' in main
+    assert 'MapMenuDelayCtrl' in main
     assert "CryptProtectData" in worker
     assert "CryptUnprotectData" in worker
     assert "GetOrCreateInstallId" in worker

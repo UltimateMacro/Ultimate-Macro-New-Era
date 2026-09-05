@@ -11,9 +11,13 @@ Ultimate Macro: The New Era is a free, open-source automation tool for Roblox To
 - Strategy Rotation and community `.strat` support
 - Auto Equip towers and Auto Skip recorded waves
 - Adjustable upgrade delay
+- Adjustable map interaction delays and pre-run diagnostics
+- Wave-based custom DJ disc schedules
+- Goals and smart compatible-strategy selection for coin/gem grinds
 - Party and VIP server support
 - Cloning, Necromancer, Brawler repositioning, and split upgrade paths
 - Reconnection and automatic game re-entry
+- Resume-aware startup from an existing TDS lobby or Ready screen
 - Automatic daily and playtime rewards
 - Resolution-aware image detection and OCR
 - Potato Mode and Legacy Mode

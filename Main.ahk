@@ -122,7 +122,7 @@ command_buffer := []
 global BotStrategyChoices := []
 global BotStrategyChoiceTime := 0
 
-ver := "1.3.4a"
+ver := "1.4.0"
 
 RuntimeLogInstall("Main", ver)
 
@@ -216,6 +216,10 @@ global MultiplayerEnabled := IniRead(SettingsFile, "Multiplayer", "MultiplayerEn
 global DefaultMouseSpeed := IniRead(SettingsFile, "Options", "DefaultMouseSpeed", "2")
 global MouseDelay := IniRead(SettingsFile, "Options", "MouseDelay", "10")
 global KeyDelay := IniRead(SettingsFile, "Options", "KeyDelay", "20")
+global MapMenuDelay := Integer(IniRead(SettingsFile, "Delays", "MapMenu", "500"))
+global MapTypingDelay := Integer(IniRead(SettingsFile, "Delays", "MapTyping", "100"))
+global MapResultDelay := Integer(IniRead(SettingsFile, "Delays", "MapResult", "300"))
+global CustomDJTrackSchedule := IniRead(SettingsFile, "Options", "DJTrackSchedule", "")
 
 global PlaceTowerKey := IniRead(SettingsFile, "RecordingHotkeys", "PlaceTowerKey", "f")
 global UpgradeTowerKey := IniRead(SettingsFile, "RecordingHotkeys", "UpgradeTowerKey", "^u")
@@ -235,6 +239,11 @@ global g_IsFirstLaunch := Integer(IniRead(StateFile, "State", "IsFirstLaunch", 1
 global SwapAmount := IniRead(SettingsFile, "Options", "SwapAmount", "4")
 global SwapUnit := IniRead(SettingsFile, "Options", "SwapUnit", "Runs")
 global CurrentRunCount := Integer(IniRead(StateFile, "State", "CurrentRunCount", "0"))
+global GoalEnabled := Integer(IniRead(SettingsFile, "Goal", "Enabled", "0"))
+global GoalType := IniRead(SettingsFile, "Goal", "Type", "Coins")
+global GoalTarget := Integer(IniRead(SettingsFile, "Goal", "Target", "0"))
+global GoalStrategy := IniRead(SettingsFile, "Goal", "Strategy", "")
+global OwnedTowers := IniRead(SettingsFile, "Goal", "OwnedTowers", "")
 
 SendMode("Event")
 SetDefaultMouseSpeed(DefaultMouseSpeed)
@@ -290,7 +299,7 @@ if (TimeScaleMode = "1.5x") {
 
 global UpgradeDelay := IniRead(SettingsFile, "Options", "UpgradeDelay", 200)
 
-global gamemap := "", difficulty := "", requiredTowers := ""
+global gamemap := "", difficulty := "", requiredTowers := "", DJTrackSchedule := "", ActiveDJTrackRule := ""
 global autoChain := "OFF", autoCaravan := "OFF", autoDropTheBeat := "OFF"
 global Commander := false, AutoSkip := "ON", AbilitySpam := "ON"
 
@@ -823,6 +832,7 @@ global HoverTab := []
 global TabCtrl := []
 global HoverEffect := []
 global GradientButtons := []
+global OwnedGuiBitmaps := []
 
 ;tabs
 global Tab3 := []
@@ -1744,6 +1754,19 @@ UseVipServerCtrl.Value := (UseVipServer = "1" || UseVipServer = 1)
 global AlwaysOnTopCtrl := MainGui.Add("Checkbox", "x160 y465 Hidden", "Always On Top")
 AlwaysOnTopCtrl.Value := (AlwaysOnTop = "1" || AlwaysOnTop = 1)
 
+MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
+global MapMenuDelayLbl := MainGui.Add("Text", "x30 y350 w130 h20 Hidden", "Map menu delay (ms):")
+global MapTypingDelayLbl := MainGui.Add("Text", "x245 y350 w130 h20 Hidden", "Before typing (ms):")
+global MapResultDelayLbl := MainGui.Add("Text", "x455 y350 w130 h20 Hidden", "Result check (ms):")
+MainGui.SetFont("s9 w400 c000000", UIFont())
+global MapMenuDelayCtrl := MainGui.Add("Edit", "x165 y347 w65 h22 Number Limit4 Hidden", MapMenuDelay)
+global MapTypingDelayCtrl := MainGui.Add("Edit", "x375 y347 w65 h22 Number Limit4 Hidden", MapTypingDelay)
+global MapResultDelayCtrl := MainGui.Add("Edit", "x585 y347 w65 h22 Number Limit4 Hidden", MapResultDelay)
+MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
+global DJTrackScheduleLbl := MainGui.Add("Text", "x30 y390 w195 h20 Hidden", "DJ schedule (18-20:Red;21:Green):")
+MainGui.SetFont("s9 w400 c000000", UIFont())
+global DJTrackScheduleCtrl := MainGui.Add("Edit", "x245 y387 w405 h22 Hidden", CustomDJTrackSchedule)
+
 global LegacyModeCtrl := MainGui.Add("Checkbox", "x560 y465 Hidden", "Legacy Mode")
 LegacyModeCtrl.Value := (LegacyMode = "1" || LegacyMode = 1)
 LegacyModeCtrl.OnEvent("Click", LegacyModeInfo)
@@ -1779,6 +1802,7 @@ global Tools_Profiles_Line := MainGui.Add("Progress", "x30 y348 w640 h1 Hidden B
 global ProfileExportBtn := MakeActionButton(MainGui, 30, 365, 200, 38, "Export Profile", ExportProfile, "neutral", true)
 global ProfileImportBtn := MakeActionButton(MainGui, 250, 365, 200, 38, "Import Profile", ImportProfile, "neutral", true)
 global ProfileManagerBtn := MakeActionButton(MainGui, 470, 365, 200, 38, "Manage Profiles", ProfileManager, "neutral", true)
+global GoalManagerBtn := MakeActionButton(MainGui, 250, 430, 200, 38, "Goals & Smart Strategy", OpenGoalManager, "accent", true)
 
 global Auto_COA := MainGui.Add("Picture", "x30 y125 w197 h176 Hidden", "Resources/Gui/auto_coa_preview.png")
 
@@ -2254,7 +2278,7 @@ ShowTabContent(tab) {
 
     } else if (tab = "Tab6") {
         for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Tools_Profiles_Section, Tools_Profiles_Line,
-            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, Auto_COA, Auto_Spin, Auto_Consum]
+            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, GoalManagerBtn, Auto_COA, Auto_Spin, Auto_Consum]
             ShowControl(ctrl)
     } else if (tab = "Tab7") {
         Credit_Content.Visible := true
@@ -2299,6 +2323,8 @@ ShowSettingsPage(advanced := false) {
     global Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl, DebugConsoleCtrl, PotatoModeCtrl
     global MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown
     global KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown
+    global MapMenuDelayLbl, MapTypingDelayLbl, MapResultDelayLbl, MapMenuDelayCtrl, MapTypingDelayCtrl, MapResultDelayCtrl
+    global DJTrackScheduleLbl, DJTrackScheduleCtrl
 
     common := [Tab5_Section1, Tab5_Line1, Tab5_Lbl1, ChainKeyCtrl, Tab5_Lbl2, BeatKeyCtrl, Tab5_Lbl3, CaravanKeyCtrl,
         Tab5_Lbl44, RaiseDeadKeyCtrl, Tab5_Lbl55, Tab5_Lbl56, HologramKeyCtrl, RepoKeyCtrl, Tab5_Lbl99, Tab5_LblUPG,
@@ -2312,6 +2338,8 @@ ShowSettingsPage(advanced := false) {
     advancedControls := [Tab5_AdvancedTitle, Tab5_AdvancedLine, DebugConsoleCtrl, PotatoModeCtrl, MouseSpeedLbl,
         MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt,
         KeyDelayUpDown, Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl]
+    advancedControls.Push(MapMenuDelayLbl, MapTypingDelayLbl, MapResultDelayLbl, MapMenuDelayCtrl, MapTypingDelayCtrl, MapResultDelayCtrl)
+    advancedControls.Push(DJTrackScheduleLbl, DJTrackScheduleCtrl)
     for ctrl in common
         ctrl.Visible := !advanced
     for ctrl in advancedControls
@@ -2345,6 +2373,10 @@ ShowSettingsPage(advanced := false) {
         UseVipServerCtrl.Move(100, 307)
         AlwaysOnTopCtrl.Move(300, 307)
         LegacyModeCtrl.Move(540, 307)
+        MapMenuDelayLbl.Move(30, 350), MapMenuDelayCtrl.Move(165, 347)
+        MapTypingDelayLbl.Move(245, 350), MapTypingDelayCtrl.Move(375, 347)
+        MapResultDelayLbl.Move(455, 350), MapResultDelayCtrl.Move(585, 347)
+        DJTrackScheduleLbl.Move(30, 390), DJTrackScheduleCtrl.Move(245, 387)
         Tab5_BackBtn.Move(170, 500, 180, 40)
         Tab5_BackBtn.PicControl.Move(170, 500, 180, 40)
     } else {
@@ -2374,9 +2406,31 @@ YouTubeLink(ctrl, *) {
 }
 
 DownloadStrat(ctrl, *) {
+    global RotateStrategies, CurrentRotationIndex, Strategy1Path, Strategy2Path
     nm := ctrl.StratFile
 
     downloadedStrat := A_WorkingDir "\Resources\Strats" (SubStr(nm, 1, 1) = "\" ? nm : "\" nm)
+
+    if (RotateStrategies = 1) {
+        choice := MsgBox("Load this strategy into rotation slot 1 or slot 2?`n`nYes = Slot 1`nNo = Slot 2`nCancel = Keep current rotation", "Choose rotation slot", "YesNoCancel Icon?")
+        if (choice = "Cancel")
+            return
+        if (choice = "Yes") {
+            Strategy1Ctrl.Value := downloadedStrat
+            Strategy1Path := downloadedStrat
+            CurrentRotationIndex := 1
+            IniWrite(downloadedStrat, SettingsFile, "Options", "Strategy1")
+            IniWrite(1, StateFile, "State", "CurrentRotationIndex")
+        } else {
+            Strategy2Ctrl.Value := downloadedStrat
+            Strategy2Path := downloadedStrat
+            CurrentRotationIndex := 2
+            IniWrite(downloadedStrat, SettingsFile, "Options", "Strategy2")
+            IniWrite(2, StateFile, "State", "CurrentRotationIndex")
+        }
+        LoadStrategyFile(downloadedStrat)
+        return
+    }
 
     if (Strategy1Ctrl.Value = "") {
         Strategy1Ctrl.Value := downloadedStrat
@@ -2801,6 +2855,9 @@ StartStrategy(*) {
         return
     }
 
+    if !RunPreflightCheck(stratFile)
+        return
+
     if (g_IsFirstLaunch = 1) {
         IniWrite(0, StateFile, "State", "IsFirstLaunch")
         MsgBox(
@@ -2815,6 +2872,7 @@ StartStrategy(*) {
     IniDelete(StateFile, "State", "TotalLosses")
     IniDelete(StateFile, "State", "TotalTimeSeconds")
     IniDelete(StateFile, "State", "Timescale")
+    IniDelete(StateFile, "State", "Wave")
     IniDelete(StateFile, "State", "CurrentStratStartTime")
     IniDelete(StateFile, "State", "CurrentRotationIndex")
     IniDelete(StateFile, "State", "CurrentRunCount")
@@ -2863,6 +2921,186 @@ StartStrategy(*) {
     RunStrategy("", true)
 }
 
+OpenGoalManager(*) {
+    global MainGui, GoalType, GoalTarget, OwnedTowers, GoalEnabled
+    goalGui := Gui("+Owner" MainGui.Hwnd " +Border", "Goals & Smart Strategy")
+    goalGui.BackColor := "121212"
+    goalGui.SetFont("s10 cFFFFFF", UIFont())
+    goalGui.Add("Text", "x20 y18 w420", "Choose a measurable grind goal. The macro ranks compatible strategies by reward and estimated time.")
+    goalGui.Add("Text", "x20 y62 w100", "Goal type")
+    typeCtrl := goalGui.Add("DropDownList", "x130 y58 w180", ["Coins", "Gems"])
+    typeCtrl.Text := GoalType
+    goalGui.Add("Text", "x20 y102 w100", "Amount to gain")
+    targetCtrl := goalGui.Add("Edit", "x130 y98 w180 Number", GoalTarget > 0 ? GoalTarget : "")
+    goalGui.Add("Text", "x20 y142 w420", "Owned towers (comma-separated; leave blank to allow every strategy)")
+    ownedCtrl := goalGui.Add("Edit", "x20 y166 w420", OwnedTowers)
+    statusCtrl := goalGui.Add("Text", "x20 y205 w420 h45 cAAAAAA", GoalEnabled ? "A goal is active. Saving replaces it." : "No active goal.")
+    saveBtn := goalGui.Add("Button", "x20 y260 w200 h34", "Choose strategy & save")
+    cancelBtn := goalGui.Add("Button", "x240 y260 w200 h34", "Disable goal")
+    saveBtn.OnEvent("Click", (*) => SaveGoalFromGui(goalGui, typeCtrl, targetCtrl, ownedCtrl, statusCtrl))
+    cancelBtn.OnEvent("Click", (*) => DisableGoal(goalGui))
+    goalGui.Show("w460 h315")
+}
+
+NormalizeTowerName(value) {
+    value := StrLower(Trim(value))
+    value := RegExReplace(value, "i)^(golden|g\.|g|regular|r\.|r)\s+")
+    return RegExReplace(value, "[^a-z0-9]+", "")
+}
+
+StrategyCompatible(required, owned) {
+    if (Trim(owned) = "")
+        return true
+    ownedSet := Map()
+    loop parse, owned, "," {
+        key := NormalizeTowerName(A_LoopField)
+        if (key != "")
+            ownedSet[key] := true
+    }
+    loop parse, required, "," {
+        key := NormalizeTowerName(A_LoopField)
+        if (key != "" && !ownedSet.Has(key))
+            return false
+    }
+    return true
+}
+
+StrategyRewardScore(path, goalType) {
+    income := IniRead(path, "Info", "income", "")
+    if (goalType = "Gems") {
+        if !RegExMatch(income, "i)([\d,]+)\s*gems?", &reward)
+            return 0
+    } else if !RegExMatch(income, "i)([\d,]+)\s*coins?", &reward)
+        return 0
+    amount := Number(StrReplace(reward[1], ","))
+    timeText := IniRead(path, "Info", "time", "")
+    minutes := 30
+    if RegExMatch(timeText, "i)(\d+)\s*(?:m|min)", &duration)
+        minutes := Max(1, Integer(duration[1]))
+    return amount / minutes
+}
+
+FindBestGoalStrategy(goalType, owned) {
+    global StratsDir, RecordingsDir
+    bestPath := "", bestScore := 0
+    for dir in [StratsDir, RecordingsDir] {
+        loop files, dir "\*.strat" {
+            path := A_LoopFileFullPath
+            required := IniRead(path, "Settings", "requiredTowers", "")
+            if !StrategyCompatible(required, owned)
+                continue
+            score := StrategyRewardScore(path, goalType)
+            if (score > bestScore)
+                bestScore := score, bestPath := path
+        }
+    }
+    return bestPath
+}
+
+SaveGoalFromGui(goalGui, typeCtrl, targetCtrl, ownedCtrl, statusCtrl) {
+    global GoalEnabled, GoalType, GoalTarget, GoalStrategy, OwnedTowers, Strategy1Path, Strategy1Ctrl, SettingsFile
+    if !IsNumber(targetCtrl.Value) || Integer(targetCtrl.Value) <= 0 {
+        statusCtrl.Text := "Enter a positive target amount."
+        return
+    }
+    chosen := FindBestGoalStrategy(typeCtrl.Text, ownedCtrl.Value)
+    if (chosen = "") {
+        statusCtrl.Text := "No compatible strategy with matching reward data was found."
+        return
+    }
+    GoalType := typeCtrl.Text
+    GoalTarget := Integer(targetCtrl.Value)
+    OwnedTowers := Trim(ownedCtrl.Value)
+    GoalStrategy := chosen
+    GoalEnabled := 1
+    Strategy1Path := chosen
+    Strategy1Ctrl.Value := chosen
+    IniWrite(1, SettingsFile, "Goal", "Enabled")
+    IniWrite(GoalType, SettingsFile, "Goal", "Type")
+    IniWrite(GoalTarget, SettingsFile, "Goal", "Target")
+    IniWrite(OwnedTowers, SettingsFile, "Goal", "OwnedTowers")
+    IniWrite(GoalStrategy, SettingsFile, "Goal", "Strategy")
+    IniWrite(chosen, SettingsFile, "Options", "Strategy1")
+    LoadStrategyFile(chosen)
+    SplitPath(chosen, &name)
+    statusCtrl.Text := "Selected " name ". Goal saved."
+}
+
+DisableGoal(goalGui := 0) {
+    global GoalEnabled, SettingsFile
+    GoalEnabled := 0
+    IniWrite(0, SettingsFile, "Goal", "Enabled")
+    SetTimer(CheckGoalProgress, 0)
+    if goalGui
+        goalGui.Destroy()
+}
+
+CheckGoalProgress() {
+    global GoalEnabled, GoalType, GoalTarget, StateFile, SettingsFile
+    if !GoalEnabled
+        return
+    sectionKey := GoalType = "Gems" ? "Gems" : "Coins"
+    gained := Integer(IniRead(StateFile, "State", sectionKey, "0"))
+    if (gained < GoalTarget)
+        return
+    GoalEnabled := 0
+    IniWrite(0, SettingsFile, "Goal", "Enabled")
+    SetTimer(CheckGoalProgress, 0)
+    message := "Goal complete: earned " gained " " GoalType "."
+    SendToWebhookInstant(message, , false)
+    MsgBox(message, "Ultimate Macro Goal Complete", "Iconi")
+    StopStrategy()
+}
+
+RunPreflightCheck(stratFile) {
+    problems := []
+    warnings := []
+
+    if !FileExist(stratFile)
+        problems.Push("The selected strategy file is missing.")
+    else if (Trim(IniRead(stratFile, "Settings", "requiredTowers", "")) = "")
+        problems.Push("The strategy does not declare its required towers.")
+
+    if !GetRobloxHWND()
+        warnings.Push("Roblox is not open; Ultimate Macro will launch TDS for you.")
+    if !((A_ScreenWidth = 1920 && A_ScreenHeight = 1080) || (A_ScreenWidth = 1366 && A_ScreenHeight = 768) || (A_ScreenWidth = 1280 && A_ScreenHeight = 720))
+        warnings.Push("Display resolution is " A_ScreenWidth "x" A_ScreenHeight "; 1920x1080, 1366x768, or 1280x720 is recommended.")
+
+    try {
+        hwnd := GetRobloxHWND()
+        if hwnd {
+            dpi := DllCall("User32.dll\GetDpiForWindow", "Ptr", hwnd, "UInt")
+            if (dpi > 0 && Round(dpi / 96 * 100) != 100)
+                warnings.Push("Windows display scaling is about " Round(dpi / 96 * 100) "%; 100% is recommended.")
+        }
+    }
+
+    try {
+        langs := OCR.GetAvailableLanguages()
+        if !RegExMatch(langs, "i)(^|[^a-z])en(?:-[a-z]+)?([^a-z]|$)")
+            problems.Push("English OCR support is unavailable.")
+    } catch Error as err {
+        problems.Push("OCR could not start: " err.Message)
+    }
+
+    if (problems.Length) {
+        message := "Fix these problems before starting:`n`n"
+        for item in problems
+            message .= "• " item "`n"
+        ModernMsgBox("Pre-run check failed", message, "OK", "WARNING")
+        return false
+    }
+    if (warnings.Length) {
+        message := "The run can continue, but check these items:`n`n"
+        for item in warnings
+            message .= "• " item "`n"
+        if (MsgBox(message "`nContinue anyway?", "Pre-run check", "OKCancel Icon!") = "Cancel")
+            return false
+    }
+    RuntimeLogInfo("preflight_passed", "Pre-run checks completed", "strategy=" stratFile)
+    return true
+}
+
 StopStrategy(*) {
     global RunningStrategy, AutorunStartTime, Recording, MacroRecording, InputHookObj
 
@@ -2893,6 +3131,7 @@ StopStrategy(*) {
         IniDelete(StateFile, "State", "TotalLosses")
         IniDelete(StateFile, "State", "TotalTimeSeconds")
         IniDelete(StateFile, "State", "Timescale")
+        IniDelete(StateFile, "State", "Wave")
         IniDelete(StateFile, "State", "CurrentStratStartTime")
         IniDelete(StateFile, "State", "CurrentRotationIndex")
         IniDelete(StateFile, "State", "CurrentRunCount")
@@ -4566,6 +4805,8 @@ SaveAllSettings(ctrl, *) {
     global HoloKey, RaiseDeadKey, ChangeTargetsKey, HologramKey, RepoKey, CollectPlaytimeRewards, UpgradeTowerGKey,
         UpgradeTowerGBKey, UseHForUpgrade, UseNumbersForHotbar
     global UpgradeDelay
+    global MapMenuDelay, MapTypingDelay, MapResultDelay
+    global CustomDJTrackSchedule
 
     tempChainKey := SubStr(RegExReplace(ChainKeyCtrl.Value, "\s", ""), 1, 1)
     tempBeatKey := SubStr(RegExReplace(BeatKeyCtrl.Value, "\s", ""), 1, 1)
@@ -4668,6 +4909,14 @@ SaveAllSettings(ctrl, *) {
     MouseDelay := MouseDelayUpDown.Value
     KeyDelay := KeyDelayUpDown.Value
     UpgradeDelay := UpgradeDelayCtrl.Value
+    MapMenuDelay := IsNumber(MapMenuDelayCtrl.Value) ? Max(50, Min(5000, Integer(MapMenuDelayCtrl.Value))) : 500
+    MapTypingDelay := IsNumber(MapTypingDelayCtrl.Value) ? Max(0, Min(5000, Integer(MapTypingDelayCtrl.Value))) : 100
+    MapResultDelay := IsNumber(MapResultDelayCtrl.Value) ? Max(50, Min(5000, Integer(MapResultDelayCtrl.Value))) : 300
+    CustomDJTrackSchedule := Trim(DJTrackScheduleCtrl.Value)
+    if (CustomDJTrackSchedule != "" && !RegExMatch(CustomDJTrackSchedule, "i)^\s*\d{1,3}(?:\s*-\s*\d{1,3})?\s*:\s*(?:red|green|purple)(?:\s*;\s*\d{1,3}(?:\s*-\s*\d{1,3})?\s*:\s*(?:red|green|purple))*\s*$")) {
+        ModernMsgBox("Invalid DJ schedule", "Use rules like 18-20:Red;21-30:Green. Only Red, Green, and Purple are supported.", "OK", "WARNING")
+        return
+    }
 
     IniWrite(ChainKey, SettingsFile, "Hotkeys", "Chain")
     IniWrite(BeatKey, SettingsFile, "Hotkeys", "Beat")
@@ -4695,6 +4944,10 @@ SaveAllSettings(ctrl, *) {
     IniWrite(MouseDelay, SettingsFile, "Options", "MouseDelay")
     IniWrite(KeyDelay, SettingsFile, "Options", "KeyDelay")
     IniWrite(UpgradeDelay, SettingsFile, "Options", "UpgradeDelay")
+    IniWrite(MapMenuDelay, SettingsFile, "Delays", "MapMenu")
+    IniWrite(MapTypingDelay, SettingsFile, "Delays", "MapTyping")
+    IniWrite(MapResultDelay, SettingsFile, "Delays", "MapResult")
+    IniWrite(CustomDJTrackSchedule, SettingsFile, "Options", "DJTrackSchedule")
 
     IniWrite(PlaceTowerKey, SettingsFile, "RecordingHotkeys", "PlaceTowerKey")
     IniWrite(UpgradeTowerKey, SettingsFile, "RecordingHotkeys", "UpgradeTowerKey")
@@ -5051,7 +5304,7 @@ HelpCheckTheMap(*) {
 LoadStrategyFile(file) {
     global Towers, RecordedSteps, gamemap, difficulty, requiredTowers, autoChain, autoCaravan
     global autoDropTheBeat, AutoSkip, AbilitySpam, MoveEnabled, MoveDirection, MoveDuration
-    global modifiers, Commander, StrategyWidth, StrategyHeight
+    global modifiers, Commander, StrategyWidth, StrategyHeight, DJTrackSchedule, ActiveDJTrackRule, CustomDJTrackSchedule
 
     Towers := Map()
     RecordedSteps := []
@@ -5066,6 +5319,8 @@ LoadStrategyFile(file) {
     AutoSkip := IniRead(file, "Settings", "autoSkip", "ON")
     AbilitySpam := IniRead(file, "Settings", "abilitySpam", "ON")
     modifiers := IniRead(file, "Settings", "modifiers", "")
+    DJTrackSchedule := CustomDJTrackSchedule != "" ? CustomDJTrackSchedule : IniRead(file, "Settings", "djTrackSchedule", "")
+    ActiveDJTrackRule := ""
 
     moveDown := IniRead(file, "Settings", "moveDown", "false")
     tempEnabled := IniRead(file, "Settings", "moveEnabled", "")
@@ -5198,15 +5453,28 @@ RunStrategy(stratFile := "", skipRestart := false) {
             if !CheckRestart()
                 return false
         } else {
-            CloseRoblox()
-            if !RunRoblox()
-                return false
-            if (AutoEquip) {
-                if !EquipTowers(RequiredTowers)
+            sessionState := DetectTdsSessionState()
+            if (sessionState = "ready") {
+                RuntimeLogInfo("startup_resume_ready", "Using the existing TDS ready screen")
+                LogToConsole("TDS ready screen detected; continuing without restarting Roblox.", true, false)
+            } else if (sessionState = "lobby") {
+                RuntimeLogInfo("startup_resume_lobby", "Using the existing TDS lobby")
+                LogToConsole("TDS lobby detected; continuing without restarting Roblox.", true, false)
+                if (AutoEquip && !EquipTowers(RequiredTowers))
+                    return false
+                if !JoinGame()
+                    return false
+            } else {
+                if (GetRobloxHWND())
+                    RuntimeLogWarn("startup_state_unknown", "Existing TDS state could not be resumed safely; relaunching")
+                CloseRoblox()
+                if !RunRoblox()
+                    return false
+                if (AutoEquip && !EquipTowers(RequiredTowers))
+                    return false
+                if !JoinGame()
                     return false
             }
-            if !JoinGame()
-                return false
         }
     } else {
         CloseRoblox()
@@ -5256,12 +5524,29 @@ RunStrategy(stratFile := "", skipRestart := false) {
     return true
 }
 
+DetectTdsSessionState() {
+    global readyX, readyY
+    if !GetRobloxHWND() || !getRobloxPos(, , &w, &h)
+        return "closed"
+    ActivateRoblox()
+    if FindReadyButton(&readyX, &readyY)
+        return "ready"
+    play := AdvancedImageSearch("Resources/Play.png", Round(w * 0.25), Round(h * 0.60), Round(w * 0.75), Round(h * 0.40), 0.5, 1.5)
+    if (play.status = "success" && play.score > 0.65)
+        return "lobby"
+    return "unknown"
+}
+
 PlayStrategy() {
-    global canUseAbility, MultiplayerEnabled, StateFile
+    global canUseAbility, MultiplayerEnabled, StateFile, GoalEnabled, DJTrackSchedule
 
     MacroPhase("playing", 900000)
     IniWrite(A_TickCount, StateFile, "State", "TimeWhenStartedPlaying")
     SetTimer(UseAbilities, 750)
+    if GoalEnabled
+        SetTimer(CheckGoalProgress, 5000)
+    if (Trim(DJTrackSchedule) != "")
+        SetTimer(CheckDJTrackSchedule, 5000)
     if (MultiplayerEnabled) {
         SetTimer(checkCondition, 15000)
     }
@@ -5327,6 +5612,44 @@ PlayStrategy() {
     }
     ;If the macro doesn't replaying again after win/loss it's a watchdog.ahk issue. Please report it if this happened to you.
     ;Do not add anything here.
+}
+
+ReadCurrentWave() {
+    global StateFile
+    if !GetRobloxScreenClientRect(&screenX, &screenY, &screenW, &screenH)
+        return 0
+    try {
+        result := OCR.FromRect(screenX + Round(screenW * 0.25), screenY, Round(screenW * 0.5), Round(screenH * 0.22), {
+            lang: "en-US", scale: 1.5, grayscale: 1
+        })
+        if RegExMatch(result.Text, "i)wave\s*(\d{1,3})", &match) {
+            wave := Integer(match[1])
+            IniWrite(wave, StateFile, "State", "Wave")
+            return wave
+        }
+    } catch Error as err {
+        RuntimeLogWarn("wave_ocr_failed", "Could not read the current wave", "error=" err.Message)
+    }
+    return Integer(IniRead(StateFile, "State", "Wave", "0"))
+}
+
+CheckDJTrackSchedule() {
+    global DJTrackSchedule, ActiveDJTrackRule
+    wave := ReadCurrentWave()
+    if (wave <= 0)
+        return
+    loop parse, DJTrackSchedule, ";" {
+        rule := Trim(A_LoopField)
+        if !RegExMatch(rule, "i)^(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*:\s*(red|green|purple)$", &match)
+            continue
+        firstWave := Integer(match[1])
+        lastWave := match[2] != "" ? Integer(match[2]) : firstWave
+        if (wave >= firstWave && wave <= lastWave && ActiveDJTrackRule != rule) {
+            if SetDJTrack(match[3])
+                ActiveDJTrackRule := rule
+            return
+        }
+    }
 }
 
 ExecuteStep(step) {
@@ -7022,7 +7345,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         SendEvent("{sc012 down}")
         Sleep(1000)
         SendEvent("{sc012 up}")
-        Sleep(500)
+        Sleep(MapMenuDelay)
 
         foundsearchbar := false
         getRobloxPos(&x, &y, &w, &h)
@@ -7042,7 +7365,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
                 break
             }
 
-            Sleep(500)
+            Sleep(MapMenuDelay)
         }
 
         if (!foundsearchbar) {
@@ -7051,10 +7374,10 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             return false
         }
 
-        Sleep(100)
+        Sleep(MapTypingDelay)
         SendText(gamemap)
         loop {
-            Sleep(300)
+            Sleep(MapResultDelay)
             if (InArray(SpecialMaps, gamemap)) {
                 SelectionICON := AdvancedImageSearch("Resources/Maps/" gamemap "_Selection.png", Round(w * 0.1), 0,
                 Round(w * 0.7), h, 0.5, 1.5)
@@ -9144,6 +9467,8 @@ StopRuntimeTimers() {
     try SetTimer(checkCondition, 0)
     try SetTimer(CheckPopups, 0)
     try SetTimer(CancelInviteIfAppeared, 0)
+    try SetTimer(CheckGoalProgress, 0)
+    try SetTimer(CheckDJTrackSchedule, 0)
 }
 
 ; Persistent application/UI timers survive ordinary F2, recording, and strategy
@@ -9380,6 +9705,7 @@ HandleExit(ExitReason, ExitCode) {
 
 CleanupGdip(exitReason, exitCode) {
     global pToken
+    ReleaseGuiBitmaps()
     Gdip_Shutdown(pToken)
 }
 
@@ -9618,7 +9944,7 @@ CreateGradientButton(w, h, r, colorStart, colorEnd, shadowColor, strokeColor, bt
     ReleaseDC(0, hdc)
     Gdip_DeleteGraphics(G)
 
-    return hbm
+    return TrackGuiBitmap(hbm)
 }
 
 CreateFrame(w, h, r, bgColor, strokeOuter, strokeInner) {
@@ -9642,7 +9968,7 @@ CreateFrame(w, h, r, bgColor, strokeOuter, strokeInner) {
     Gdip_DeletePen(pPenOuter), Gdip_DeletePath(pPathOuter)
     Gdip_DeletePath(pPathMain), Gdip_DeleteBrush(pBrushBg)
     SelectObject(hdcMem, obm), DeleteDC(hdcMem), Gdip_DeleteGraphics(G)
-    return hbm
+    return TrackGuiBitmap(hbm)
 }
 
 CreateScrollThumb(w, h, r, colorStart, colorEnd, glowColor) {
@@ -9663,7 +9989,7 @@ CreateScrollThumb(w, h, r, colorStart, colorEnd, glowColor) {
 
     Gdip_DeletePath(pPathMain), Gdip_DeleteBrush(pBrushGrad)
     SelectObject(hdcMem, obm), DeleteDC(hdcMem), Gdip_DeleteGraphics(G)
-    return hbm
+    return TrackGuiBitmap(hbm)
 }
 
 CreateGlowButton(w, h, r, colorStart, colorEnd, glowColor) {
@@ -9704,7 +10030,26 @@ CreateGlowButton(w, h, r, colorStart, colorEnd, glowColor) {
     ReleaseDC(0, hdc)
     Gdip_DeleteGraphics(G)
 
-    return hbm
+    return TrackGuiBitmap(hbm)
+}
+
+TrackGuiBitmap(handle) {
+    global OwnedGuiBitmaps
+    if handle
+        OwnedGuiBitmaps.Push(handle)
+    return handle
+}
+
+ReleaseGuiBitmaps() {
+    global OwnedGuiBitmaps
+    seen := Map()
+    for handle in OwnedGuiBitmaps {
+        if (handle && !seen.Has(handle)) {
+            seen[handle] := true
+            try DeleteObject(handle)
+        }
+    }
+    OwnedGuiBitmaps := []
 }
 
 Gdip_CreateRoundRectanglePath(x, y, w, h, r) {

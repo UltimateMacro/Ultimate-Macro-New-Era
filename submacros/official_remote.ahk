@@ -6,7 +6,7 @@
 SetWorkingDir(A_ScriptDir "\..")
 global RemoteDir := A_AppData "\Ultimate_Macro\Options\Remote"
 global RemoteSettings := RemoteDir "\remote.ini"
-global ClientVersion := "1.3.4a"
+global ClientVersion := "1.4.0"
 if !DirExist(RemoteDir)
     DirCreate(RemoteDir)
 
