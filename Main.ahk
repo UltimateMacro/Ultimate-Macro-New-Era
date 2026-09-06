@@ -1963,7 +1963,7 @@ QA
 MainGui.SetFont("s12 italic w400 cFFFFFF", UIFont())
 global Credit_Support := MainGui.Add("Link", "x30 y390 w640 h90 Hidden", "
 (
-You can *support* me and the macro with <a href="https://www.donationalerts.com/r/darksen1">real money</a> or with <a href="https://www.roblox.com/games/115405526400244/Raise-an-Onett">robux (press donations button when you joined)</a>, do it if you're really enjoying the macro.
+You can *support* me and the macro with <a href="https://www.donationalerts.com/r/neweradevelopers">real money</a> or with <a href="https://www.roblox.com/games/115405526400244/Raise-an-Onett">robux (press donations button when you joined)</a>, do it if you're really enjoying the macro.
 I truly appreciate any support! (Please Donate)
 )"
 )
