@@ -17,6 +17,8 @@ SetWorkingDir(A_ScriptDir "\..\")
 #Include "%A_LineFile%\..\..\lib\OCR.ahk"
 #Include "%A_LineFile%\..\..\lib\Roblox.ahk"
 #Include "%A_LineFile%\..\..\lib\RuntimeLog.ahk"
+#Include "%A_LineFile%\..\..\lib\TowerXP.ahk"
+#Include "%A_LineFile%\..\..\lib\TowerXPResult.ahk"
 
 RuntimeLogInstall("Watchdog", "1.3.4")
 RuntimeLogInfo("watchdog_start", "Watchdog started")
@@ -25,6 +27,7 @@ Opt := A_AppData "\Ultimate_Macro\Options"
 SettingsFile := Opt "\Settings.tds"
 global BotSettings := Opt "\Discord-Bot-Settings.ini"
 global StateFile := A_AppData "\Ultimate_Macro\state.ini"
+global TowerXPStateFile := TowerXPStatePath(Opt)
 
 global WebhookLink := IniRead(SettingsFile, "Webhook", "Link", "")
 tWebhook := IniRead(SettingsFile, "Webhook", "Enabled", 0)
@@ -197,11 +200,7 @@ loop {
         resTriumph1 := AdvancedImageSearch(TriumphImg1, w * 0.2, h * 0.2, w * 0.6, h * 0.7)
 
         if (resTriumph1.status == "success" && resTriumph1.score > 0.7) {
-            if ((WebhookEnabled && WebhookLink != "") || botEnabled) {
-                CloseMain()
-                Sleep 1300
-                SendInfo("Triumph")
-            }
+            HandleConfirmedResult("Triumph", resTriumph1.x, resTriumph1.y, w, h, "triumph-title")
             RestartMain()
             ExitApp()
         }
@@ -211,21 +210,13 @@ loop {
         resLost := AdvancedImageSearch(YouLostImg, w * 0.2, h * 0.2, w * 0.6, h * 0.7)
 
         if (resTriumph2.status == "success" && resTriumph2.score > 0.7) {
-            if ((WebhookEnabled && WebhookLink != "") || botEnabled) {
-                CloseMain()
-                Sleep 1300
-                SendInfo("Triumph")
-            }
+            HandleConfirmedResult("Triumph", resTriumph2.x, resTriumph2.y, w, h, "play-again")
             RestartMain()
             ExitApp()
         }
 
         if (resLost.status == "success" && resLost.score > 0.7) {
-            if ((WebhookEnabled && WebhookLink != "") || botEnabled) {
-                CloseMain()
-                Sleep 1300
-                SendInfo("Loss")
-            }
+            HandleConfirmedResult("Loss", resLost.x, resLost.y, w, h, "loss-title")
             RestartMain()
             ExitApp()
         }
@@ -256,9 +247,52 @@ sY(baseY, Height := 1009) {
     return Round(baseY * (currentHeight / Height))
 }
 
-SendInfo(matchResult := "") {
+HandleConfirmedResult(matchResult, foundX, foundY, clientW, clientH, detectionSource) {
+    global WebhookEnabled, WebhookLink, botEnabled, TowerXPStateFile, SettingsFile, StateFile, ResourcesDir
+
+    outboundEnabled := (WebhookEnabled && WebhookLink != "") || botEnabled
+    trackerEnabled := matchResult = "Triumph" && TowerXPEnabled(TowerXPStateFile, SettingsFile)
+    towerXPResult := TowerXPEmptyResult()
+
+    if (outboundEnabled || trackerEnabled) {
+        CloseMain()
+        Sleep(1300)
+    }
+
+    if (trackerEnabled) {
+        try {
+            towerXPResult := TowerXPProcessTriumph(foundX, foundY, clientW, clientH,
+                TowerXPStateFile, SettingsFile, StateFile, ResourcesDir)
+            for detail in towerXPResult.diagnostics
+                RuntimeLogWarn("tower_xp_scan", detail, "source=" detectionSource)
+            if (towerXPResult.summary != "")
+                RuntimeLogInfo("tower_xp_updated", "Tower XP progression updated",
+                    "source=" detectionSource "; summary=" towerXPResult.summary)
+        } catch Error as err {
+            ; Tower XP is optional. Its failure must never block normal result
+            ; recording or the established match restart flow.
+            RuntimeLogError("tower_xp_error", "Tower XP tracking failed open",
+                "source=" detectionSource "; error=" err.Message)
+            towerXPResult := TowerXPEmptyResult()
+        }
+    }
+
+    if (outboundEnabled)
+        SendInfo(matchResult, towerXPResult)
+
+    if (towerXPResult.stopTriggered) {
+        IniWrite(0, StateFile, "State", "Running")
+        IniWrite("tower-xp-target-complete", StateFile, "State", "LastStopReason")
+        RuntimeLogInfo("tower_xp_stop", "Tower XP stop target reached", "detail=" towerXPResult.stopMessage)
+    }
+}
+
+SendInfo(matchResult := "", towerXPResult := 0) {
     global WebhookLink, StateFile, SendCurrenciesEnabled, WebhookEnabled, WebhookSepatateTriumphScreenshots,
         WebhookLink2
+
+    if !IsObject(towerXPResult)
+        towerXPResult := TowerXPEmptyResult()
 
     if (WebhookSepatateTriumphScreenshots = 1 && WebhookLink2 != "") {
         WebhookLink := WebhookLink2
@@ -496,6 +530,11 @@ SendInfo(matchResult := "") {
         description .= "+" coinVal " Coins (+" totalCoins ")  +" gemVal " Gems (+" totalGems ")`n"
         description .= "-# Total Matches: " totalMatches ", wins: " totalTriumphs ", losses: " totalLosses ", W/R: " winrate "%, W/L ratio: " wlRatioStr ", " coinsPerHour " coins/h, " gemsPerHour " gems/h, " expPerHour " exp/h, avg. time: " avgTimeStr
     }
+
+    if (towerXPResult.summary != "")
+        description .= "`nTower XP: **" towerXPResult.summary "**"
+    if (towerXPResult.stopTriggered)
+        description .= "`n### :dart: Tower XP target reached`nMacro stopped automatically: **" towerXPResult.stopMessage "**"
 
     if (WebhookEnabled && WebhookLink != "") {
         pBitmap := CaptureRobloxClientBitmap()

@@ -20,6 +20,7 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 - Cloning, Necromancer, Brawler repositioning, and split upgrade paths
 - Advanced reconnection and automatic game re-entry
 - Automatic daily and playtime rewards
+- Optional Tower XP Tracker with automatic Triumph progression and configurable max-level stop targets
 - Universal resolution support with improved image detection and OCR
 - Potato Mode and Legacy Mode
 - 1.5x and 2x timescale support
@@ -46,6 +47,12 @@ Ultimate Macro was originally created by **Darksen** on March 30, 2026. After hi
 3. Install **AutoHotkey v2.0**
 4. Run `Main.ahk`
 5. Configure your strategy and start the macro
+
+### Tower XP Tracker
+
+Open **Tools → Tower XP Tracker**, select the towers to track, and enter each tower's current Evolution level plus the XP already earned inside that level. The tracker reads supported reward cards after a confirmed Triumph and saves progression locally in `%APPDATA%\Ultimate_Macro\Options\TowerXP.ini`.
+
+Tracked towers **must use their default skins**. Uncertain or missing OCR results are left unchanged, and tracking can be disabled without changing normal macro behavior. Optional stop rules can end automation when any or all selected stop-target towers reach level 20.
 
 ## 🛠️ Release, tester and development
 

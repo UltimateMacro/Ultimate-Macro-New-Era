@@ -162,6 +162,42 @@ Record environment, commit/release version, Windows version, display scaling,
 Roblox client size, backend, and observed results in the QA sign-off. Redact all
 credentials and private links.
 
+### Tower XP Tracker
+
+1. Open **Tools → Tower XP Tracker** and confirm all eight supported towers fit
+   without clipping at 100% and 125% Windows scaling.
+2. Enable one default-skin tower, enter its current level and in-level XP, win a
+   match, and confirm `%APPDATA%\Ultimate_Macro\Options\TowerXP.ini` advances
+   exactly once for that run.
+3. Repeat with Juggernaut as the only tracked/rewarded tower. Its direct OCR
+   result must update without needing another tower as a fallback.
+4. Use two or more equal reward cards and obstruct one supported card. The
+   missing card may use the two-reading consensus; one reading or a tied result
+   must not be copied.
+5. Win with Discord webhook and Bot both disabled. Progress must still update.
+6. Confirm a Loss, alternate skin, missing template, OCR failure, or duplicate
+   processing leaves progression unchanged and does not interrupt the normal
+   result/restart flow.
+7. Test **Any selected tower** and **All selected towers** stop modes. On a
+   completed target, Main must reopen idle with `Running=0`.
+8. Repeat result detection at 1920x1080 and one smaller supported client size
+   on both OpenCV native and portable GDI+ backends.
+
+### Upgrade-menu recovery
+
+1. Replay a strategy whose custom tower ID (for example `BOSSKILLER`) occupies
+   a Juggernaut hotbar slot and carries legacy `pathLevel=3` metadata. With the
+   tower at level 2 and enough cash, confirm it uses the shared upgrade and
+   reaches level 3 instead of waiting on a path button.
+2. Reproduce a temporarily hidden or obstructed tower menu during an upgrade.
+   Confirm the macro resets that tower's local selection and retries without a
+   full application reload.
+3. Keep an upgrade unaffordable for at least 15 seconds. Confirm the strategy
+   continues waiting and emits `upgrade_waiting` diagnostics.
+4. Keep the menu unavailable through all bounded local recoveries. Confirm only
+   that upgrade step is skipped, abilities are re-enabled, and later strategy
+   steps continue.
+
 ## Ziadod positive-backport QA
 
 Run this after the normal automated suite and before promoting the runtime candidate:

@@ -58,6 +58,8 @@ if (A_PtrSize == 4) {
 #Include *i lib\DiscordCommands.ahk
 #Include lib\RuntimeLog.ahk
 #Include lib\auto_settings.ahk
+#Include lib\TowerXP.ahk
+#Include lib\TowerXPTool.ahk
 
 BootstrapPinnedSourceDependencies() {
     ocrPath := A_ScriptDir "\lib\OCR.ahk"
@@ -566,7 +568,7 @@ DetectUpgrade(*) {
     y2 := region[2] + region[4]
 
     if (mx >= x1 && mx <= x2 && my >= y1 && my <= y2) {
-        if PixelSearch(&gx, &gy, x1, y1, x2, y2, 0x206435, 7) {
+        if UpgradeButtonIsReady(x1, y1, x2, y2, &gx, &gy) {
             if (AdvancedImageSearch("Resources/fully_upgraded.png", x1, y1, region[3], region[4]).score >= 0.69) {
                 return
             }
@@ -1908,6 +1910,11 @@ global ProfileExportBtn := MakeActionButton(MainGui, 30, 365, 200, 38, "Export P
 global ProfileImportBtn := MakeActionButton(MainGui, 250, 365, 200, 38, "Import Profile", ImportProfile, "neutral", true)
 global ProfileManagerBtn := MakeActionButton(MainGui, 470, 365, 200, 38, "Manage Profiles", ProfileManager, "neutral", true)
 
+global TowerXPToolBtn := MakeActionButton(MainGui, 30, 420, 200, 38, "Tower XP Tracker", ShowTowerXPTool, "neutral", true)
+MainGui.SetFont("s9 w400 cC8CDD8")
+global TowerXPToolStatus := MainGui.Add("Text", "x250 y420 w420 h38 Hidden +0x200",
+    TowerXPStatusText(TowerXPStatePath(AppDataOpt)))
+
 global Auto_COA := MainGui.Add("Picture", "x30 y125 w197 h176 Hidden", "Resources/Gui/auto_coa_preview.png")
 
 Auto_COA.OnEvent("Click", RunAutoAbTool)
@@ -2390,7 +2397,8 @@ ShowTabContent(tab) {
 
     } else if (tab = "Tab6") {
         for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Tools_Profiles_Section, Tools_Profiles_Line,
-            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, Auto_COA, Auto_Spin, Auto_Consum]
+            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, TowerXPToolBtn, TowerXPToolStatus,
+            Auto_COA, Auto_Spin, Auto_Consum]
             ShowControl(ctrl)
     } else if (tab = "Tab7") {
         Credit_Content.Visible := true
@@ -4566,15 +4574,30 @@ OnKeyUp(ih, vk, sc) {
 
 global ActivePathSelectTowerID := ""
 
-KnownPathBranchLevel(towerID) {
+KnownPathBranchLevel(towerID, towerSlot := 0) {
     if RegExMatch(towerID, "i)^(Juggernaut|Pursuit|Kingpin)\d*$")
         return 4
     if RegExMatch(towerID, "i)^Hacker\d*$")
         return 5
+
+    ; Custom IDs such as BOSSKILLER do not reveal the tower type. During
+    ; replay, resolve it from the actual hotbar slot so legacy recordings with
+    ; pathLevel=3 still use Juggernaut's current level-4 branch boundary.
+    if (towerSlot > 0) {
+        global requiredTowers
+        slotTowers := StrSplit(requiredTowers, ",")
+        if (towerSlot <= slotTowers.Length) {
+            towerName := Trim(slotTowers[towerSlot])
+            if RegExMatch(towerName, "i)^(Juggernaut|Pursuit|Kingpin)$")
+                return 4
+            if (towerName = "Hacker")
+                return 5
+        }
+    }
     return 0
 }
 
-ResolvePathBranchLevel(towerID, pathLevel := 0) {
+ResolvePathBranchLevel(towerID, pathLevel := 0, towerSlot := 0) {
     suppliedLevel := 0
     try {
         if IsNumber(pathLevel)
@@ -4583,7 +4606,7 @@ ResolvePathBranchLevel(towerID, pathLevel := 0) {
         suppliedLevel := 0
     }
 
-    knownLevel := KnownPathBranchLevel(towerID)
+    knownLevel := KnownPathBranchLevel(towerID, towerSlot)
     if (knownLevel > 0) {
         if (suppliedLevel <= 0)
             return knownLevel
@@ -5515,7 +5538,8 @@ PlayStrategy() {
             escapedID := RegExReplace(currentID, "([\.\^\$\*\+\?\(\)\[\]\{\}\|])", "\$1")
             countUpgrades := (m[3] != "") ? Integer(m[3]) : 1
             currentPath := (m[4] != "") ? Integer(m[4]) : 0
-            currentpathLevel := ResolvePathBranchLevel(currentID, (m[5] != "") ? Integer(m[5]) : 0)
+            currentSlot := Towers.Has(currentID) ? Towers[currentID].slot : 0
+            currentpathLevel := ResolvePathBranchLevel(currentID, (m[5] != "") ? Integer(m[5]) : 0, currentSlot)
 
             lookAhead := i + 1
             while (lookAhead <= RecordedSteps.Length) {
@@ -5523,7 +5547,7 @@ PlayStrategy() {
                 if RegExMatch(nextStep, "i)UpgradeTower\s*\(\s*" escapedID "\s*(?:,\s*(?:false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)", &
                     mN) {
                     nextPath := (mN[2] != "") ? Integer(mN[2]) : 0
-                    nextPathLevel := ResolvePathBranchLevel(currentID, (mN[3] != "") ? Integer(mN[3]) : 0)
+                    nextPathLevel := ResolvePathBranchLevel(currentID, (mN[3] != "") ? Integer(mN[3]) : 0, currentSlot)
                     if (nextPath != currentPath || (nextPath != 0 && nextPathLevel != currentpathLevel))
                         break
                     countUpgrades += (mN[1] != "") ? Integer(mN[1]) : 1
@@ -7979,9 +8003,25 @@ SellTower(towerID) {
     return false
 }
 
+UpgradeButtonIsReady(x1, y1, x2, y2, &foundX := 0, &foundY := 0) {
+    ; TDS uses a shaded green button, and recent UI revisions changed both the
+    ; brightest fill and its gradient. Probe a few observed fill colors across
+    ; the whole button instead of depending on one tiny 80x70 patch.
+    enabledColors := [0x206435, 0x206235, 0x2B8046, 0x1D5930]
+    for color in enabledColors {
+        try {
+            if PixelSearch(&foundX, &foundY, x1, y1, x2, y2, color, 16)
+                return true
+        } catch Error {
+            continue
+        }
+    }
+    return false
+}
+
 UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLevel := 0) {
     global Towers, unfocusX, unfocusY, LastOpenedTowerID, needtocheckTowerUI, UpgradeDelay
-    global PotatoMode, Recording, RecordedSteps, Commander, canUseAbility
+    global PotatoMode, Recording, RecordedSteps, Commander, canUseAbility, canBeUpgraded
 
     static resV2 := 0
     static resV1 := 0
@@ -7993,7 +8033,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
         return false
     }
 
-    effectivePathLevel := ResolvePathBranchLevel(towerID, pathLevel)
+    effectivePathLevel := ResolvePathBranchLevel(towerID, pathLevel, Towers[towerID].slot)
 
     targetX := Towers[towerID].x
     targetY := Towers[towerID].y
@@ -8008,6 +8048,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
     LastOpenedTowerID := towerID
     upgradesDone := 0
     attempts := 0
+    menuRecoveryCount := 0
 
     upgTime := A_TickCount
     ; Absolute deadline for this tower. Waiting for cash and being permanently
@@ -8015,6 +8056,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
     ; mis-aimed green probe) spun this loop forever at 100% CPU.
     upgradeDeadline := A_TickCount
     maxLevelChecked := 0
+    nextWaitLog := A_TickCount + 15000
 
     Sleep(20)
 
@@ -8045,8 +8087,27 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
             if (!openedSuccessfully && canBeUpgraded) {
                 attempts++
                 if (attempts > 30) {
-                    LogToConsole("Tower " towerID " menu not found after 30 attempts, reloading...", true)
-                    SafeReload()
+                    menuRecoveryCount++
+                    RuntimeLogWarn("upgrade_menu_recovery", "Tower menu could not be verified; resetting local selection",
+                        "tower=" towerID "; recovery=" menuRecoveryCount "/3; done=" upgradesDone "/" totalUpgrades)
+                    LogToConsole("Tower " towerID " menu was not found; resetting its selection ("
+                        menuRecoveryCount "/3)...", true)
+                    attempts := 0
+                    canUseAbility := false
+                    Click(ScaleX(unfocusX), ScaleY(unfocusY))
+                    Sleep(200)
+                    LastOpenedTowerID := ""
+                    needtocheckTowerUI := true
+                    Click(targetX, targetY)
+                    Sleep(350)
+                    canUseAbility := true
+                    if (menuRecoveryCount >= 3) {
+                        RuntimeLogWarn("upgrade_menu_unavailable", "Upgrade step skipped without reloading the macro",
+                            "tower=" towerID "; done=" upgradesDone "/" totalUpgrades)
+                        LogToConsole("Tower " towerID " menu stayed unavailable; skipping this upgrade step without restarting the run.", true)
+                        return false
+                    }
+                    continue
                 }
                 variation := Random(-4, 4)
                 Click(targetX, targetY + ScaleY(variation))
@@ -8064,10 +8125,10 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
             UpgradeX := resV2.x + ScaleX(50)
             UpgradeY := resV2.y - ScaleY(220)
 
-            upgAX := resV2.x + ScaleX(20)
-            upgAY := resV2.y - ScaleY(240)
-            upgAW := ScaleX(80)
-            upgAH := ScaleY(70)
+            upgAX := resV2.x - ScaleX(100)
+            upgAY := resV2.y - ScaleY(260)
+            upgAW := ScaleX(300)
+            upgAH := ScaleY(110)
         } else {
             if (!IsObject(ResV1)) {
                 needtocheckTowerUI := true
@@ -8078,10 +8139,10 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
             UpgradeX := resV1.x - ScaleX(164)
             UpgradeY := resV1.y + ScaleY(383)
 
-            upgAX := resV1.x - ScaleX(194)
-            upgAY := resV1.y + ScaleY(363)
-            upgAW := ScaleX(80)
-            upgAH := ScaleY(70)
+            upgAX := resV1.x - ScaleX(344)
+            upgAY := resV1.y + ScaleY(343)
+            upgAW := ScaleX(300)
+            upgAH := ScaleY(110)
         }
 
         nextLevel := Towers[towerID].level + 1
@@ -8091,10 +8152,10 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
         if IsPathSpecificUpgrade(towerID, nextLevel, path, effectivePathLevel) {
             if (path = 2) {
                 if (doResV2) {
-                    region := [resV2.x + ScaleX(20), resV2.y - ScaleY(95), ScaleX(80), ScaleY(70)]
+                    region := [resV2.x - ScaleX(100), resV2.y - ScaleY(115), ScaleX(300), ScaleY(110)]
                     UpgradeY := resV2.y - ScaleY(120)
                 } else {
-                    region := [resV1.x - ScaleX(194), resV1.y + ScaleY(508), ScaleX(80), ScaleY(70)]
+                    region := [resV1.x - ScaleX(344), resV1.y + ScaleY(488), ScaleX(300), ScaleY(110)]
                     UpgradeY := resV1.y + ScaleY(483)
                 }
             }
@@ -8110,11 +8171,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
         searchArea := XA "|" YA "|" X2 "|" Y2
 
-        try {
-            isGreen := PixelSearch(&gx, &gy, XA, YA, X2, Y2, 0x206235, 12)
-        } catch Error {
-            isGreen := false
-        }
+        isGreen := UpgradeButtonIsReady(XA, YA, X2, Y2, &gx, &gy)
         if (isGreen && canBeUpgraded) {
             canUseAbility := false
             if (UseHForUpgrade) {
@@ -8152,6 +8209,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                 return true
 
             upgradeDeadline := A_TickCount
+            nextWaitLog := A_TickCount + 15000
             continue
         }
 
@@ -8166,6 +8224,14 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                 canUseAbility := true
                 return true
             }
+        }
+
+        if (A_TickCount >= nextWaitLog) {
+            waitedSeconds := Round((A_TickCount - upgradeDeadline) / 1000)
+            RuntimeLogInfo("upgrade_waiting", "Waiting for upgrade availability",
+                "tower=" towerID "; waited_s=" waitedSeconds "; done=" upgradesDone "/" totalUpgrades)
+            LogToConsole("Waiting to upgrade " towerID " (cash or upgrade button unavailable, " waitedSeconds "s)...")
+            nextWaitLog := A_TickCount + 15000
         }
 
         ; Waiting for cash: yield instead of spinning on back-to-back searches.

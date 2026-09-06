@@ -5,7 +5,8 @@ param(
         'submacros/auto_coa.ahk',
         'submacros/auto_open_consumable.ahk',
         'submacros/auto_spin.ahk',
-        'tests/test_auto_settings.ahk'
+        'tests/test_auto_settings.ahk',
+        'tests/test_tower_xp.ahk'
     )
 )
 
@@ -123,6 +124,37 @@ try {
         throw "Auto Settings behavioral fixtures failed under AutoHotkey 2.0.26 with exit code $($behavioralProcess.ExitCode)."
     }
     Write-Host 'AutoHotkey behavioral fixtures: PASS (2.0.26)'
+
+    $towerXpScript = [IO.Path]::GetFullPath((Join-Path $repoRoot 'tests/test_tower_xp.ahk'))
+    $towerXpInfo = [Diagnostics.ProcessStartInfo]::new()
+    $towerXpInfo.FileName = $autoHotkey
+    $towerXpInfo.WorkingDirectory = $repoRoot
+    $towerXpInfo.UseShellExecute = $false
+    $towerXpInfo.CreateNoWindow = $true
+    $towerXpInfo.RedirectStandardOutput = $true
+    $towerXpInfo.RedirectStandardError = $true
+    [void]$towerXpInfo.ArgumentList.Add('/ErrorStdOut=UTF-8')
+    [void]$towerXpInfo.ArgumentList.Add($towerXpScript)
+    $towerXpResult = Join-Path $workRoot 'tower-xp-result.txt'
+    [void]$towerXpInfo.ArgumentList.Add($towerXpResult)
+
+    $towerXpProcess = [Diagnostics.Process]::Start($towerXpInfo)
+    if (-not $towerXpProcess.WaitForExit(30000)) {
+        $towerXpProcess.Kill($true)
+        throw 'Tower XP behavioral fixtures timed out under AutoHotkey 2.0.26.'
+    }
+    $towerXpStdout = $towerXpProcess.StandardOutput.ReadToEnd()
+    $towerXpStderr = $towerXpProcess.StandardError.ReadToEnd()
+    if ($towerXpStdout) { Write-Host $towerXpStdout.TrimEnd() }
+    if ($towerXpStderr) { Write-Host $towerXpStderr.TrimEnd() }
+    $towerXpMessage = if (Test-Path -LiteralPath $towerXpResult -PathType Leaf) {
+        (Get-Content -LiteralPath $towerXpResult -Raw).Trim()
+    }
+    else { '' }
+    if ($towerXpProcess.ExitCode -ne 0 -or $towerXpMessage -ne 'Tower XP behavioral fixtures: PASS') {
+        throw "Tower XP behavioral fixtures failed under AutoHotkey 2.0.26 with exit code $($towerXpProcess.ExitCode)."
+    }
+    Write-Host 'Tower XP behavioral fixtures: PASS (2.0.26)'
 }
 finally {
     if (Test-Path -LiteralPath $workRoot) {

@@ -215,7 +215,7 @@ def validate_matchmaking_ready_map(main: str, validator: str) -> None:
 
 
 def validate_paths(main: str) -> None:
-    resolver = region(main, "KnownPathBranchLevel(towerID) {", "ShowTowerPathDialog(towerID) {")
+    resolver = region(main, "KnownPathBranchLevel(towerID, towerSlot := 0) {", "ShowTowerPathDialog(towerID) {")
     recorder = region(main, "DetectUpgrade(*) {", "ScaleX(baseX, Width :=")
     replay = region(main, "UpgradeTower(towerID, skipOpen :=", "isDisconnected() {")
     select_path = region(main, "SelectPath(pathGui, pathNum) {", "TestWebhook(ctrl, *) {")
@@ -258,6 +258,11 @@ def validate_paths(main: str) -> None:
     require(resolve_known("Kingpin9", 3) == 4, "legacy Kingpin level 3 must map to 4")
     require(resolve_known("Hacker1", 4) == 5, "legacy Hacker level 4 must map to 5")
     require(resolve_known("BOSSKILLER", 3) == 3, "custom tower path metadata must not be overwritten")
+
+    require("KnownPathBranchLevel(towerID, towerSlot := 0)" in main and
+            "slotTowers := StrSplit(requiredTowers" in main and
+            "Towers[towerID].slot" in main,
+            "custom tower IDs must resolve known branch levels from their replay hotbar slot")
 
 
 def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
@@ -320,6 +325,17 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
             "ability callbacks must guard stale tower IDs before indexing")
     require("upgradeDeadline" in upgrade and "fully_upgraded.png" in upgrade and "Sleep(" in upgrade,
             "maxed/unaffordable upgrade loops must remain bounded and yielding")
+    require("upgrade_menu_recovery" in upgrade and "upgrade_menu_unavailable" in upgrade,
+            "a missed tower menu must recover locally instead of aborting the run")
+    require("SafeReload()" not in upgrade,
+            "tower-menu detection failure must not reload the entire macro")
+    require("upgrade_waiting" in upgrade,
+            "long cash or upgrade-button waits need structured diagnostics")
+    require("UpgradeButtonIsReady(XA, YA, X2, Y2" in upgrade and
+            "upgAW := ScaleX(300)" in upgrade and "upgAH := ScaleY(110)" in upgrade,
+            "replay must scan the full shaded upgrade button instead of a fragile narrow patch")
+    require("enabledColors := [0x206435, 0x206235, 0x2B8046, 0x1D5930]" in main,
+            "upgrade readiness must support observed TDS green-button gradients")
     require("HasProp(\"hwnd\")" in sell and "Towers.Delete(towerID)" in sell,
             "SellTower must guard optional indicators and remove tower state")
     require("AdvancedImageSearch(imagePath, cardX, cardY, cardW, cardH)" in arcade,

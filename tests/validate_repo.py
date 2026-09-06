@@ -19,6 +19,9 @@ REQUIRED_RUNTIME_FILES = (
     "lib/JSON.ahk",
     "lib/Roblox.ahk",
     "lib/RuntimeLog.ahk",
+    "lib/TowerXP.ahk",
+    "lib/TowerXPResult.ahk",
+    "lib/TowerXPTool.ahk",
     "lib/auto_settings.ahk",
     "submacros/updater.ahk",
     "submacros/update.bat",
@@ -56,6 +59,14 @@ DYNAMIC_RUNTIME_RESOURCES = (
     "Resources/SpecialMode.png",
     "Resources/triumph.png",
     "Resources/YouLost.png",
+    "Resources/TowerXP/Crookboss.png",
+    "Resources/TowerXP/Enforcer.png",
+    "Resources/TowerXP/Juggernaut.png",
+    "Resources/TowerXP/Kingpin.png",
+    "Resources/TowerXP/Minigunner.png",
+    "Resources/TowerXP/Operator.png",
+    "Resources/TowerXP/Scout.png",
+    "Resources/TowerXP/Shotgunner.png",
 )
 
 APPROVED_BINARIES = {

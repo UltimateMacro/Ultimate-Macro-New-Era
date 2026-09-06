@@ -2,6 +2,13 @@
 
 ## Unreleased — reported runtime QA hotfix
 
+### Added
+
+- An optional, modular Tower XP Tracker under Tools. It records supported
+  default-skin Tower Evolution rewards after confirmed Triumph results, keeps
+  progression in a separate local state file, and can stop automation when
+  selected towers reach level 20.
+
 ### Fixed
 
 - Watchdog PID cleanup raising `VarUnset` after an incomplete launch, repeated
@@ -37,6 +44,13 @@
   propagate to the strategy owner before later input can run. Camera alignment
   also requires a live Roblox HWND and CLIENT geometry and always releases the
   right mouse button.
+- A missed tower-upgrade menu now resets and retries the local tower selection
+  before skipping that step; it no longer reloads the entire macro. Replay now
+  recognizes the full green-button gradient and resolves custom tower IDs from
+  their hotbar slot so legacy Juggernaut path metadata does not redirect the
+  level 2-to-3 upgrade. Long waits also emit structured diagnostics.
+- Tower XP level and XP input text is now readable against the native light
+  Edit-control background used by Windows.
 
 ### Improved
 

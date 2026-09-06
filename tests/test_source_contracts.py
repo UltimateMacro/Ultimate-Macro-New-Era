@@ -156,7 +156,7 @@ def validate_bitmap_ownership(main: str, watchdog: str, discord: str) -> None:
     )
 
 def validate_watchdog_result_fallbacks(watchdog: str) -> None:
-    send_info = region(watchdog, 'SendInfo(matchResult := "")', "BinarizeTargetBitmap(pBitmap)")
+    send_info = region(watchdog, 'SendInfo(matchResult := "", towerXPResult := 0)', "BinarizeTargetBitmap(pBitmap)")
     assert "FoundX := 0" in send_info and "FoundY := 0" in send_info
     invalid_coordinates = send_info.find("if (FoundX == 0 && FoundY == 0)")
     currency_ocr = send_info.find('if (SendCurrenciesEnabled = "1")')
@@ -171,8 +171,9 @@ def validate_watchdog_result_fallbacks(watchdog: str) -> None:
 
 
 def validate_watchdog_conditions_and_formatting(watchdog: str) -> None:
-    guarded = 'if ((WebhookEnabled && WebhookLink != "") || botEnabled)'
-    assert watchdog.count(guarded) >= 3, "webhook/bot conditions must preserve explicit precedence"
+    guarded = 'outboundEnabled := (WebhookEnabled && WebhookLink != "") || botEnabled'
+    assert guarded in watchdog, "webhook/bot conditions must preserve explicit precedence"
+    assert "if (outboundEnabled)" in watchdog
     assert 'if (WebhookEnabled && WebhookLink != "" || botEnabled)' not in watchdog
 
     assert 'wlRatioStr := StrReplace(String(wlRatio), ".", ",")' in watchdog, (
@@ -407,12 +408,69 @@ def validate_roblox_coordinates(roblox: str) -> None:
     assert "WinGetClientPos(&x, &y, &width, &height" in screen_region
 
 
+def validate_tower_xp_contracts(
+    main: str,
+    watchdog: str,
+    tower_xp: str,
+    tower_xp_result: str,
+    tower_xp_tool: str,
+) -> None:
+    assert r"#Include lib\TowerXP.ahk" in main
+    assert r"#Include lib\TowerXPTool.ahk" in main
+    assert "ShowTowerXPTool" in main and "TowerXPToolStatus" in main
+
+    assert 'return optionsDir "\\TowerXP.ini"' in tower_xp
+    assert 'lastProcessedRun: ""' in tower_xp
+    assert "bestCount >= minimumAgreement" in tower_xp
+    assert "TowerXPWasRunProcessed" in tower_xp
+    assert "TowerXPEvaluateStopRule" in tower_xp
+
+    assert "DEFAULT SKINS REQUIRED" in tower_xp_tool
+    assert "Set every tracked tower's current level and XP in level before enabling the tracker." in tower_xp_tool
+    assert "Tracks Tower Evolution XP from confirmed Triumph results." not in tower_xp_tool
+    assert "TowerXPPersistConfig" in tower_xp_tool
+    row_controls = region(tower_xp_tool, "for definition in TowerXPDefinitions() {", "TowerXPToolGui.SetFont(\"s8 w600 cFF626E\")")
+    black_font = row_controls.find('TowerXPToolGui.SetFont("s9 w400 c000000")')
+    level_edit = row_controls.find('levelCtrl := TowerXPToolGui.Add("Edit"')
+    xp_edit = row_controls.find('xpCtrl := TowerXPToolGui.Add("Edit"')
+    restored_font = row_controls.find('TowerXPToolGui.SetFont("s9 w400 cFFFFFF")', xp_edit)
+    assert 0 <= black_font < level_edit < xp_edit < restored_font
+    tool_save = region(tower_xp_tool, "TowerXPToolSave(*) {", "TowerXPRefreshMainStatus() {")
+    assert "config := TowerXPReadConfig(statePath)" in tool_save
+
+    assert "searchRegion := TowerXPResultSearchRegion(clientW, clientH)" in tower_xp_result
+    assert "foundY - (430" not in tower_xp_result
+
+    # Reward scanning is observational only: it cannot drive Roblox input or
+    # alter process/application state.
+    forbidden_calls = ("Click", "MouseMove", "MouseClick", "Send", "Run", "ProcessClose", "WinClose")
+    for function_name in forbidden_calls:
+        assert not re.search(rf"(?m)^\s*{function_name}\s*\(", tower_xp_result), (
+            f"TowerXPResult must remain read-only; found {function_name}()"
+        )
+
+    handler = region(watchdog, "HandleConfirmedResult(matchResult, foundX", "SendInfo(matchResult :=")
+    assert 'trackerEnabled := matchResult = "Triumph"' in handler
+    assert "if (trackerEnabled)" in handler
+    assert "if (outboundEnabled)" in handler
+    assert "SendInfo(matchResult, towerXPResult)" in handler
+    assert 'RuntimeLogError("tower_xp_error"' in handler
+    assert 'IniWrite(0, StateFile, "State", "Running")' in handler
+
+    assert 'HandleConfirmedResult("Triumph"' in watchdog
+    assert 'HandleConfirmedResult("Loss"' in watchdog
+    assert 'Tower XP: **" towerXPResult.summary' in watchdog
+
+
 def validate(root: Path) -> None:
     main = read(root / "Main.ahk")
     watchdog = read(root / "submacros" / "watchdog.ahk")
     discord = read(root / "lib" / "Discord.ahk")
     roblox = read(root / "lib" / "Roblox.ahk")
     image_search = read(root / "lib" / "ImageSearch" / "ImageSearch.ahk")
+    tower_xp = read(root / "lib" / "TowerXP.ahk")
+    tower_xp_result = read(root / "lib" / "TowerXPResult.ahk")
+    tower_xp_tool = read(root / "lib" / "TowerXPTool.ahk")
     updater = read(root / "submacros" / "updater.ahk")
     safe_updater = read(root / "submacros" / "safe_update.ps1")
     wrapper = read(root / "submacros" / "update.bat")
@@ -428,6 +486,7 @@ def validate(root: Path) -> None:
     validate_watchdog_retry_lifecycle(watchdog)
     validate_watchdog_pid_lifecycle(main)
     validate_roblox_coordinates(roblox)
+    validate_tower_xp_contracts(main, watchdog, tower_xp, tower_xp_result, tower_xp_tool)
     validate_ready_detection(main)
     validate_community_strategy_update(main)
     validate_webhook_batching(main)
