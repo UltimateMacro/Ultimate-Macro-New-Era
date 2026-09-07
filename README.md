@@ -20,6 +20,8 @@ Ultimate Macro: The New Era is a free, open-source automation tool for Roblox To
 - Resume-aware startup from an existing TDS lobby or Ready screen
 - Automatic daily and playtime rewards
 - Resolution-aware image detection and OCR
+- Optional Tower XP Tracker with automatic Triumph progression and configurable max-level stop targets
+- Universal resolution support with improved image detection and OCR
 - Potato Mode and Legacy Mode
 - 1.5x and 2x TimeScale support
 - Discord webhooks with stats, screenshots, and logs
@@ -47,6 +49,13 @@ Ultimate Macro: The New Era is a free, open-source automation tool for Roblox To
 5. Configure a strategy and start the macro.
 
 ## Development Team
+### Tower XP Tracker
+
+Open **Tools → Tower XP Tracker**, select the towers to track, and enter each tower's current Evolution level plus the XP already earned inside that level. The tracker reads supported reward cards after a confirmed Triumph and saves progression locally in `%APPDATA%\Ultimate_Macro\Options\TowerXP.ini`.
+
+Tracked towers **must use their default skins**. Uncertain or missing OCR results are left unchanged, and tracking can be disabled without changing normal macro behavior. Optional stop rules can end automation when any or all selected stop-target towers reach level 20.
+
+## 🛠️ Release, tester and development
 
 - pizzaroles24
 - ziadod
@@ -56,13 +65,9 @@ Ultimate Macro: The New Era is a free, open-source automation tool for Roblox To
 - salkann
 - aiden
 
-**Development Contributor**
-
-- 4riff
-
 **QA**
 
-- hetzel401
+- nytli
 - tristanm1ce
 - frostzzz
 
@@ -74,6 +79,7 @@ The New Era continues the project and would not exist without his work.
 
 - Original repository: [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
 - Support Darksen: [DonationAlerts](https://www.donationalerts.com/r/darksen1)
+- Support New Era Developers: [DonationAlerts](https://www.donationalerts.com/r/neweradevelopers)
 
 ## License
 
@@ -82,3 +88,4 @@ Licensed under the [GNU General Public License v3.0](LICENSE).
 You may use, modify, fork, and redistribute Ultimate Macro under the license terms while preserving applicable copyright, license, and attribution notices.
 
 # This is The New Era.
+
