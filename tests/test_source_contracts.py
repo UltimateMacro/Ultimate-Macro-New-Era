@@ -365,20 +365,20 @@ def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
     ), "Discord multipart HGLOBAL must be released in finally"
 
 def validate_transactional_updater(updater: str, safe_updater: str, wrapper: str) -> None:
-    assert "https://api.github.com/repos/DarksenDev/tds-macro/releases/latest" in updater
-    assert r"https://github\.com/DarksenDev/tds-macro/releases/download/" in updater
+    assert "https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era/releases/latest" in updater
+    assert r"https://github\.com/UltimateMacro/Ultimate-Macro-New-Era/releases/download/" in updater
     assert 'PreferredAsset := "TDS_Macro.zip"' in updater
     assert "JSON.parse" in updater
     assert 'RegExMatch(candidateDigest, "i)^sha256:[0-9a-f]{64}$")' in updater
     assert "CompareMacroVersions(latestVer, installedVer) <= 0" in updater
     assert "GetCurrentProcessId" in updater
     assert 'command .= " -SelfDelete"' in updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/latest" not in updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/download" not in updater
+    assert "DarksenDev/tds-macro/releases/latest" not in updater
+    assert "DarksenDev/tds-macro/releases/download" not in updater
 
     assert "[Parameter(Mandatory = $true)][string]$ExpectedSha256" in safe_updater
-    assert "/DarksenDev/tds-macro/releases/download/" in safe_updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/download" not in safe_updater
+    assert "/UltimateMacro/Ultimate-Macro-New-Era/releases/download/" in safe_updater
+    assert "DarksenDev/tds-macro/releases/download" not in safe_updater
     assert "Refusing to update a filesystem root" in safe_updater
     assert "does not contain Main.ahk" in safe_updater
     assert "A .git entry was detected" in safe_updater
@@ -408,6 +408,42 @@ def validate_roblox_coordinates(roblox: str) -> None:
     assert "WinGetClientPos(&x, &y, &width, &height" in screen_region
 
 
+def validate_official_remote(root: Path, main: str) -> None:
+    bridge = read(root / "lib" / "OfficialRemote.ahk")
+    worker = read(root / "submacros" / "official_remote.ahk")
+    assert "#Include lib\\OfficialRemote.ahk" in main
+    assert "OfficialRemoteInit()" in main
+    assert "Official Remote" in main
+    assert "Tab4_RemoteConsent" in main
+    assert "OfficialRemoteShutdown()" in main
+    assert 'global ClientVersion := "1.4.0"' in worker
+    assert 'pollUrl .= "?coins=" coins "&gems=" gems' in worker
+    assert 'DetectTdsSessionState()' in main
+    assert 'RunPreflightCheck(stratFile)' in main
+    assert 'CheckDJTrackSchedule()' in main
+    assert '18-20:Red;21-30:Green' in main
+    assert 'OpenGoalManager(*)' in main
+    assert 'FindBestGoalStrategy(goalType, owned)' in main
+    assert 'Load this strategy into rotation slot 1 or slot 2?' in main
+    assert 'ReleaseGuiBitmaps()' in main
+    assert 'MapMenuDelayCtrl' in main
+    assert "CryptProtectData" in worker
+    assert "CryptUnprotectData" in worker
+    assert "GetOrCreateInstallId" in worker
+    assert '"X-ULT-Install-ID"' in worker
+    assert "rotateToken" in worker
+    assert "Tab4_RemoteConsent.Value" in bridge
+    assert '"/v1/remote/assistant"' in worker
+    assert "OfficialRemoteAsk(prompt)" in bridge
+    assert 'tabNames := ["Main", "Record", "Party", "Discord", "Settings", "Tools", "Guide", "Credits"]' in main
+    assert "Guide_TroubleTitle" in main
+    assert "AskGoalAssistant(promptCtrl, answerCtrl, askBtn)" in main
+    assert "OpenRecordedStrategyEditor(*)" in main
+    assert not re.search(r"(?im)^\s*buffer\s*:=\s*Buffer\(", worker), (
+        "a local named buffer shadows AutoHotkey v2's case-insensitive Buffer constructor"
+    )
+    assert "decodedBytes := Buffer(size)" in worker
+    assert "fileBytes := Buffer(file.Length)" in worker
 def validate_tower_xp_contracts(
     main: str,
     watchdog: str,
@@ -494,6 +530,7 @@ def validate(root: Path) -> None:
     validate_discord_retries(discord)
     validate_multipart_handles(main, watchdog, discord)
     validate_transactional_updater(updater, safe_updater, wrapper)
+    validate_official_remote(root, main)
 
 
 if __name__ == "__main__":
@@ -502,3 +539,4 @@ if __name__ == "__main__":
     arguments = parser.parse_args()
     validate(Path(arguments.root).resolve())
     print("source regression contracts: PASS")
+
