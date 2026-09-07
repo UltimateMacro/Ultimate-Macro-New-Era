@@ -18,7 +18,7 @@ SetWorkingDir(A_ScriptDir "\..\")
 #Include "%A_LineFile%\..\..\lib\Roblox.ahk"
 #Include "%A_LineFile%\..\..\lib\RuntimeLog.ahk"
 
-RuntimeLogInstall("Watchdog", "1.3.4")
+RuntimeLogInstall("Watchdog", "1.3.4b")
 RuntimeLogInfo("watchdog_start", "Watchdog started")
 
 Opt := A_AppData "\Ultimate_Macro\Options"

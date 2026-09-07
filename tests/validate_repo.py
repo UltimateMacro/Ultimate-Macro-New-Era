@@ -77,6 +77,15 @@ APPROVED_BINARIES = {
     "submacros/autohotkey64.exe": (
         "37ff15a23a98f0a658298e21f1873ca896a05208810bf796f90ca212ee07c7b1"
     ),
+    "strategylab.exe": (
+        "c040fb3dcc4b901e0de13708e30d66fb78725c297245616840daac6651d5123c"
+    ),
+    "_app/vendor/webviewtoo/32bit/webview2loader.dll": (
+        "7f362fd98cc243ad620f2d0a4a6c223df80f960c4e19a2d9972f4af7938565cf"
+    ),
+    "_app/vendor/webviewtoo/64bit/webview2loader.dll": (
+        "271b57e3ec03c436a15d80cafeb9fd1618a43793233d8b05c9446f8de0a51be4"
+    ),
 }
 
 GENERATED_OR_PRIVATE_PATHS = {
@@ -113,9 +122,17 @@ def tracked_files(root: Path) -> list[str]:
         check=False,
         capture_output=True,
     )
-    if result.returncode != 0:
-        raise RuntimeError("git ls-files failed; repository validation needs a Git checkout")
-    return sorted(item for item in result.stdout.decode("utf-8").split("\0") if item)
+    tracked = sorted(item for item in result.stdout.decode("utf-8").split("\0") if item)
+    # Release archives deliberately omit .git.  A nested extracted archive can
+    # also inherit an unrelated parent repository, whose tracked paths do not
+    # describe this package.  Fall back to the actual package tree in either case.
+    if result.returncode == 0 and "Main.ahk" in tracked:
+        return tracked
+    return sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and ".git" not in path.parts and "__pycache__" not in path.parts
+    )
 
 
 def fail(errors: list[str], message: str) -> None:
@@ -184,17 +201,23 @@ def validate_binary_scope(root: Path, tracked: list[str], errors: list[str]) -> 
             fail(errors, f"expected upstream binary is missing: {required}")
 
 
-def validate_tracked_scope(tracked: list[str], errors: list[str]) -> None:
+def validate_tracked_scope(root: Path, tracked: list[str], errors: list[str]) -> None:
+    source_checkout = (root / ".git").exists()
     for relative in tracked:
         normalized = relative.replace("\\", "/").casefold()
         name = Path(normalized).name
 
-        if normalized in GENERATED_OR_PRIVATE_PATHS:
+        # OCR and JSON are intentionally generated in source checkouts but are
+        # required runtime files in a release archive.
+        if normalized in GENERATED_OR_PRIVATE_PATHS and source_checkout:
             fail(errors, f"generated/private file must not be tracked: {relative}")
         if normalized.startswith(("options/", "recordings/")):
             fail(errors, f"runtime state directory must not be tracked: {relative}")
-        if "strategy lab" in normalized or "strategy_lab" in normalized:
-            fail(errors, f"experimental Strategy Lab file is out of scope: {relative}")
+        # Strategy Lab is an audited, standalone editor package.  Keep its
+        # runtime isolated under _app and require its known executable/loader
+        # hashes through APPROVED_BINARIES above.
+        if ("strategy lab" in normalized or "strategy_lab" in normalized) and normalized != "strategy_lab_readme.txt":
+            fail(errors, f"unexpected Strategy Lab path: {relative}")
         if "remote 2.0" in normalized or "remote2.0" in normalized:
             fail(errors, f"Remote 2.0 file is out of scope: {relative}")
         if "screenshot" in name and Path(normalized).suffix in {".png", ".jpg", ".jpeg"}:
@@ -328,7 +351,7 @@ def validate(root: Path) -> tuple[list[str], list[str]]:
     if (root / "Resources").is_dir():
         validate_resources(root, errors)
     validate_binary_scope(root, tracked, errors)
-    validate_tracked_scope(tracked, errors)
+    validate_tracked_scope(root, tracked, errors)
     validate_text_hygiene(root, tracked, errors)
     validate_dependency_bootstrap(root, errors)
     validate_updater(root, errors)

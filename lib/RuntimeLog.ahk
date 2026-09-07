@@ -219,6 +219,51 @@ RuntimeLogStorePath() {
     return RuntimeLogState.StoreFile
 }
 
+RuntimeLogExportBundle(destination := "") {
+    global RuntimeLogState
+
+    if (destination = "")
+        destination := A_Temp "\\UltimateMacro-logs-" FormatTime(, "yyyyMMdd-HHmmss") "-pid" DllCall("Kernel32\\GetCurrentProcessId", "UInt") ".txt"
+
+    try {
+        if FileExist(destination)
+            FileDelete(destination)
+
+        header := "Ultimate Macro developer diagnostics`n"
+        header .= "Generated: " FormatTime(, "yyyy-MM-dd HH:mm:ss") "`n"
+        header .= "Version: " RuntimeLogState.Version "`n"
+        header .= "AutoHotkey: " A_AhkVersion "`n"
+        header .= "OS: " A_OSVersion "`n"
+        header .= "Architecture: " (A_PtrSize = 8 ? "64-bit" : "32-bit") "`n"
+        header .= "`nLogs are locally redacted before export.`n"
+        FileAppend(header, destination, "UTF-8")
+
+        files := [
+            {label: "Current session", path: RuntimeLogState.SessionFile},
+            {label: "Persistent runtime log", path: RuntimeLogState.StoreFile},
+            {label: "Last crash report", path: RuntimeLogState.Dir "\\last-crash.log"}
+        ]
+        for item in files {
+            if (item.path = "" || !FileExist(item.path))
+                continue
+            try content := FileRead(item.path, "UTF-8")
+            catch
+                continue
+            maxChars := 350000
+            if (StrLen(content) > maxChars)
+                content := "[older content truncated]`n" SubStr(content, StrLen(content) - maxChars + 1)
+            FileAppend("`n===== " item.label " =====`n" content "`n", destination, "UTF-8")
+        }
+        return destination
+    } catch {
+        try {
+            if FileExist(destination)
+                FileDelete(destination)
+        }
+        return ""
+    }
+}
+
 RuntimeLogOnError(err, mode) {
     global RuntimeLogState
 

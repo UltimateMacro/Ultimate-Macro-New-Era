@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ultimate Macro | Strategy Lab</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="titlebar" id="titlebar">
+    <div class="tb-id">
+      <img id="brandIcon" class="tb-mark" alt="Ultimate Macro" hidden />
+      <span id="brandFallback" class="tb-mark tb-mark-text">UM</span>
+      <span class="tb-product">Ultimate Macro</span>
+      <span class="tb-pipe">|</span>
+      <span class="tb-module">Strategy Lab</span>
+    </div>
+
+    <div class="tb-doc">
+      <span class="tb-doc-name" id="docName">No strategy loaded</span>
+      <span class="tb-doc-dot" id="docDirty" title="Unsaved changes" hidden>&#9679;</span>
+      <span class="tb-doc-map" id="docMap"></span>
+    </div>
+
+    <div class="tb-win">
+      <button type="button" class="win-btn" id="winMinBtn" title="Minimize">0</button>
+      <button type="button" class="win-btn" id="winMaxBtn" title="Maximize / Restore">1</button>
+      <button type="button" class="win-btn win-close" id="winCloseBtn" title="Close">r</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="tb-row">
+      <button id="openBtn" class="btn primary" type="button" title="Open an Ultimate Macro .strat file (Ctrl+O)">Open</button>
+      <span class="tb-sep"></span>
+      <button id="saveCopyBtn" class="btn" type="button" title="Write a separate edited copy and leave the original untouched (Ctrl+S)" disabled>Save copy</button>
+      <button id="overwriteBtn" class="btn danger" type="button" title="Overwrite the original after writing a timestamped backup" disabled>Overwrite</button>
+      <span class="tb-sep"></span>
+      <button id="undoBtn" class="btn" type="button" title="Undo last placement move (Ctrl+Z)" disabled>Undo</button>
+      <button id="redoBtn" class="btn" type="button" title="Redo last placement move (Ctrl+Y)" disabled>Redo</button>
+      <span class="tb-spring"></span>
+      <button id="replayStrategyBtn" class="btn" type="button" title="Place and upgrade every tower of this strategy in the Sandbox match that is already open" disabled>Replay in Sandbox</button>
+      <button id="calibrationBtn" class="btn" type="button" title="Open the Sandbox coordinate calibration lab">Calibration</button>
+    </div>
+
+    <div class="tb-row">
+      <span class="tb-key">Map</span>
+      <div class="picker" id="mapPicker">
+        <button id="mapPickerBtn" class="picker-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+          <span id="mapPickerText" class="picker-text">Choose map…</span>
+          <span class="picker-caret"></span>
+        </button>
+        <div id="mapMenu" class="picker-menu" hidden>
+          <div class="picker-search">
+            <input id="mapSearch" type="search" placeholder="Search maps…" autocomplete="off" />
+          </div>
+          <div id="mapMenuList" class="picker-list" role="listbox"></div>
+        </div>
+      </div>
+      <button id="importMapBtn" class="btn" type="button" title="Import a screenshot into the selected map's local cache" disabled>Import</button>
+      <button id="captureMapBtn" class="btn" type="button" title="Align the Roblox camera and capture the client as a lossless PNG" disabled>Capture</button>
+
+      <span class="tb-sep"></span>
+
+      <span class="tb-key">Layer</span>
+      <select id="layerSelect" title="Show every placement or only one loadout slot">
+        <option value="0">All placements</option>
+      </select>
+      <button id="fitBtn" class="btn" type="button" title="Fit the whole map in view (0)">Fit</button>
+      <button id="footprintBtn" class="btn is-on" type="button" title="Show or hide projected TDS placement boundaries">Footprints</button>
+      <span id="zoomLabel" class="tb-readout" title="Zoom relative to fit">100%</span>
+
+      <span class="tb-spring"></span>
+
+      <button id="macroRootBtn" class="tb-chip" type="button" title="Choose which Ultimate Macro installation Strategy Lab reads maps from">
+        <span class="tb-key">Macro</span>
+        <span id="macroStatus" class="tb-chip-value">Detecting…</span>
+      </button>
+    </div>
+  </div>
+
+  <main class="workspace">
+    <section class="stage">
+      <div id="viewport" class="viewport is-empty">
+        <div class="empty" id="emptyState">
+          <div class="empty-rule"></div>
+          <h1>No strategy loaded</h1>
+          <p>Open a <code>.strat</code> file, pick its map, then drag placements without touching the running macro.</p>
+          <button class="btn primary" id="emptyOpenBtn" type="button">Open strategy</button>
+        </div>
+
+        <div id="world" class="world" hidden>
+          <img id="mapImage" class="map-image" draggable="false" alt="Strategy map" />
+          <div id="footprintLayer" class="footprint-layer"></div>
+          <div id="markerLayer" class="marker-layer"></div>
+          <div id="calibrationLayer" class="calibration-layer"></div>
+        </div>
+
+        <div id="viewportLoader" class="viewport-loader" hidden aria-live="polite">
+          <span class="spinner"></span>
+          <span id="viewportLoaderText">Loading…</span>
+        </div>
+      </div>
+
+      <div class="stage-foot">
+        <span class="tb-key">Position</span>
+        <label class="coord">X <input id="xInput" type="number" inputmode="numeric" disabled /></label>
+        <label class="coord">Y <input id="yInput" type="number" inputmode="numeric" disabled /></label>
+        <button id="applyXYBtn" class="btn" type="button" disabled>Apply</button>
+        <span class="tb-spring"></span>
+        <span class="hint">Wheel zoom &nbsp;·&nbsp; Drag map to pan &nbsp;·&nbsp; Drag tower to move &nbsp;·&nbsp; Right-click to place selected</span>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <section class="rail-unit">
+        <div class="head">
+          <span class="head-label">Selected unit</span>
+          <span class="head-rule"></span>
+        </div>
+
+        <div class="unit">
+          <div class="portrait">
+            <img id="portrait" alt="Tower portrait" />
+            <div id="portraitSkeleton" class="portrait-load" hidden></div>
+            <div id="portraitFallback" class="portrait-none">NO<br />ART</div>
+          </div>
+          <div class="unit-copy">
+            <h2 id="selectedName">Nothing selected</h2>
+            <div class="unit-grid">
+              <span>Slot</span><strong id="metaSlot">—</strong>
+              <span>ID</span><strong id="metaId">—</strong>
+              <span>Position</span><strong id="metaPos">—</strong>
+              <span>Plane</span><strong id="metaPlane">—</strong>
+              <span>Ring</span><strong id="metaRing">—</strong>
+              <span>Replay</span><strong id="metaStatus">—</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="ring">
+          <div class="ring-head">
+            <span class="tb-key">Ring size</span>
+            <strong id="footprintValue">—</strong>
+          </div>
+          <input id="footprintInput" type="range" min="0.5" max="4" step="0.05" value="1.5" disabled />
+          <div class="ring-foot">
+            <button id="syncFootprintBtn" class="btn tiny" type="button" disabled>Apply to tower</button>
+            <button id="resetFootprintBtn" class="btn tiny" type="button" disabled>Reset</button>
+          </div>
+        </div>
+
+        <div class="portrait-row">
+          <span class="tb-key">Portraits</span>
+          <strong id="portraitStatusBadge" class="badge">0/0</strong>
+          <span class="tb-spring"></span>
+          <button id="refreshSelectedBtn" class="btn tiny" type="button" title="Fetch a fresh portrait for the selected tower" disabled>Refresh</button>
+          <button id="syncPortraitsBtn" class="btn tiny" type="button" title="Validate the loadout portraits and repair missing or broken ones" disabled>Repair all</button>
+        </div>
+      </section>
+
+      <nav class="rail-tabs" role="tablist">
+        <button class="rail-tab is-active" id="tabPlacements" type="button" role="tab" aria-selected="true" aria-controls="panelPlacements">
+          <span id="placementHeading">Placements</span><span id="placementCount" class="tab-count">0</span>
+        </button>
+        <button class="rail-tab" id="tabStrategy" type="button" role="tab" aria-selected="false" aria-controls="panelStrategy">Strategy</button>
+      </nav>
+
+      <div class="rail-body">
+        <section class="rail-panel" id="panelPlacements" role="tabpanel" aria-labelledby="tabPlacements">
+          <div class="replay-bar" id="replayBar" hidden aria-live="polite">
+            <span class="tb-key">Replay</span>
+            <span class="rp"><strong id="replayPlacedCount">0</strong> placed</span>
+            <span class="rp warn"><strong id="replayUpgradingCount">0</strong> upgrading</span>
+            <span class="rp ok"><strong id="replayUpgradedCount">0</strong> upgraded</span>
+            <span class="rp bad"><strong id="replayFailedCount">0</strong> failed</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th class="c-idx">#</th><th>Unit</th><th class="c-num">X</th><th class="c-num">Y</th></tr>
+              </thead>
+              <tbody id="placementRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="rail-panel" id="panelStrategy" role="tabpanel" aria-labelledby="tabStrategy" hidden>
+          <dl class="info">
+            <dt>Resolution</dt><dd id="resolutionInfo">—</dd>
+            <dt>Map</dt><dd id="mapInfo">—</dd>
+            <dt>Map image</dt><dd id="mapImageInfo">—</dd>
+            <dt>Ring scale</dt><dd id="geometryInfo">—</dd>
+            <dt>Geometry</dt><dd id="geometryConfidenceInfo">—</dd>
+            <dt title="Portraits / verified footprints / projected overlaps">Health</dt><dd id="healthInfo">—</dd>
+            <dt>Encoding</dt><dd id="encodingInfo">—</dd>
+            <dt>File</dt><dd id="fileInfo" class="clip">—</dd>
+          </dl>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span id="statusText">Ready.</span>
+    <span id="summaryText"></span>
+  </footer>
+
+  <div id="calibrationMarkHud" class="mark-hud" hidden>
+    <div class="mark-hud-copy">
+      <span id="calibrationMarkProgress" class="mark-step">MARK 1/5</span>
+      <strong id="calibrationMarkTower">Slot 1</strong>
+      <span id="calibrationMarkInstruction">Click the center of the cyan placement ring.</span>
+    </div>
+    <div class="mark-hud-actions">
+      <button id="calibrationUndoMarkBtn" class="btn" type="button">Undo mark</button>
+      <button id="calibrationReturnBtn" class="btn" type="button">Back to calibration</button>
+    </div>
+  </div>
+
+  <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="confirmModal" class="modal confirm-modal" hidden>
+    <section class="dialog confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+      <header class="dialog-head">
+        <div>
+          <span class="head-label">Confirm</span>
+          <h2 id="confirmTitle">Are you sure?</h2>
+        </div>
+      </header>
+      <div class="confirm-body">
+        <p id="confirmBody"></p>
+        <div class="confirm-actions">
+          <button id="confirmCancelBtn" class="btn" type="button">Cancel</button>
+          <button id="confirmOkBtn" class="btn primary" type="button">Confirm</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="calibrationModal" class="modal" hidden>
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="calibrationTitle">
+      <header class="dialog-head">
+        <div>
+          <span class="head-label">Sandbox calibration</span>
+          <h2 id="calibrationTitle">Coordinate round-trip lab</h2>
+        </div>
+        <button id="calibrationCloseBtn" class="win-btn win-close" type="button" title="Close calibration">r</button>
+      </header>
+
+      <div class="dialog-body">
+        <div class="steps">
+          <p class="steps-intro">
+            Align the camera exactly like the macro does, capture a clean frame, place towers by hand,
+            mark their centers, then replay those coordinates without selecting a map.
+          </p>
+
+          <div class="step">
+            <span class="step-n">1</span>
+            <div class="step-copy">
+              <strong>Clean baseline</strong>
+              <p>Enter Sandbox yourself. Strategy Lab runs the verified camera alignment, then saves a lossless client PNG.</p>
+              <div class="step-actions">
+                <button id="calibrationBaselineBtn" class="btn primary" type="button">Re-align + baseline</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-n">2</span>
+            <div class="step-copy">
+              <strong>Manual tower sample</strong>
+              <p>Place your five test towers in Sandbox. The camera is re-aligned automatically before the screenshot.</p>
+              <div class="step-actions">
+                <button id="calibrationGoSandboxBtn" class="btn" type="button">Go to Sandbox</button>
+                <button id="calibrationManualBtn" class="btn primary" type="button">Re-align + capture towers</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-n">3</span>
+            <div class="step-copy">
+              <strong>Mark centers</strong>
+              <p>Guided marking hides this dialog and asks for one tower at a time on the captured image.</p>
+              <div class="step-actions">
+                <select id="calibrationTowerSelect"></select>
+                <button id="calibrationMarkBtn" class="btn primary" type="button">Start guided marking</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-n">4</span>
+            <div class="step-copy">
+              <strong>Round-trip replay</strong>
+              <p>Sell the towers from the manual sample first so those coordinates are free. Then export a .strat or replay the marked SpawnTower coordinates in the open Sandbox match.</p>
+              <div class="step-actions">
+                <button id="calibrationExportBtn" class="btn" type="button" disabled>Export .strat</button>
+                <button id="calibrationReplayBtn" class="btn primary" type="button" disabled>Replay in Sandbox</button>
+                <button id="calibrationFolderBtn" class="btn" type="button">Session folder</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cal-data">
+          <dl class="info">
+            <dt>Session</dt><dd id="calibrationSessionInfo" class="clip">Not started</dd>
+            <dt>Baseline</dt><dd id="calibrationBaselineInfo" class="clip">—</dd>
+            <dt>Manual sample</dt><dd id="calibrationManualInfo" class="clip">—</dd>
+            <dt>Marks</dt><dd id="calibrationMarkCount">0</dd>
+            <dt>Macro contract</dt><dd id="calibrationMacroInfo" class="clip">Not verified</dd>
+          </dl>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th class="c-idx">#</th><th>Tower</th><th class="c-slot">Slot</th><th class="c-num">X</th><th class="c-num">Y</th><th class="c-act"></th></tr></thead>
+              <tbody id="calibrationRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

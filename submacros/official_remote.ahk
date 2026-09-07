@@ -1,12 +1,12 @@
 #Requires AutoHotkey v2.0
-#SingleInstance Off
+#SingleInstance Force
 #NoTrayIcon
 #Include ..\lib\JSON.ahk
 
 SetWorkingDir(A_ScriptDir "\..")
 global RemoteDir := A_AppData "\Ultimate_Macro\Options\Remote"
 global RemoteSettings := RemoteDir "\remote.ini"
-global ClientVersion := "1.4.0"
+global ClientVersion := "1.3.5"
 if !DirExist(RemoteDir)
     DirCreate(RemoteDir)
 
@@ -24,29 +24,6 @@ if (mode = "setup-file") {
         code := FileRead(inputPath, "UTF-8")
         result := SetupOfficialRemote(code, false)
         FileAppend((result["ok"] ? "OK" : "ERROR") "`n" result["message"], resultPath, "UTF-8")
-    } catch Error as err {
-        if (resultPath != "") {
-            try FileDelete(resultPath)
-            try FileAppend("ERROR`n" err.Message, resultPath, "UTF-8")
-        }
-    }
-    ExitApp()
-}
-if (mode = "ask-file") {
-    resultPath := A_Args.Length >= 3 ? A_Args[3] : ""
-    try {
-        if (A_Args.Length < 3)
-            throw Error("The assistant request is incomplete.")
-        prompt := Trim(FileRead(A_Args[2], "UTF-8"))
-        baseUrl := RTrim(IniRead(RemoteSettings, "Remote", "BaseUrl", ""), "/")
-        token := LoadProtectedToken()
-        if (baseUrl = "" || token = "")
-            throw Error("Link Official Remote first.")
-        response := RemoteRequest("POST", baseUrl "/v1/remote/assistant", JSON.stringify(Map("prompt", prompt)), token, 35000, GetOrCreateInstallId())
-        parsed := JSON.parse(response)
-        if !parsed.Has("answer")
-            throw Error(parsed.Has("error") ? parsed["error"] : "The assistant did not answer.")
-        FileAppend("OK`n" parsed["answer"], resultPath, "UTF-8")
     } catch Error as err {
         if (resultPath != "") {
             try FileDelete(resultPath)
@@ -188,11 +165,8 @@ RemoteRequest(method, url, body := "", token := "", timeout := 35000, installId 
         wr.SetRequestHeader("Content-Type", "application/json")
     wr.SetTimeouts(10000, 10000, timeout, timeout)
     wr.Send(body)
-    if (wr.Status < 200 || wr.Status >= 300) {
-        if (wr.Status = 401)
-            throw Error("Your Remote link expired. Run /remote link and connect this PC again.")
+    if (wr.Status < 200 || wr.Status >= 300)
         throw Error("Remote server returned HTTP " wr.Status ".")
-    }
     return wr.ResponseText
 }
 

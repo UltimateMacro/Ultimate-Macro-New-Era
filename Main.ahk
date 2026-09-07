@@ -122,7 +122,7 @@ command_buffer := []
 global BotStrategyChoices := []
 global BotStrategyChoiceTime := 0
 
-ver := "1.4.0"
+ver := "1.3.5"
 
 RuntimeLogInstall("Main", ver)
 
@@ -144,9 +144,19 @@ else
 
 A_MaxHotkeysPerInterval := 9999
 
+; F2 can be pressed while the script is still loading. Initialize lifecycle
+; flags before registering exit/hotkey paths so early stops are safe.
+global RunningStrategy := false
+global Recording := false
+global MacroRecording := false
+global InputHookObj := ""
+global AutorunStartTime := 0
+global RenderedBitmaps := []
+
 pToken := Gdip_Startup()
 OnExit(CleanupGdip)
 OnExit(HandleExit)
+OnMessage(0x84, DebugOverlayHitTest)
 
 global AppDataOpt := A_AppData "\Ultimate_Macro\Options"
 global SettingsFile := AppDataOpt "\Settings.tds"
@@ -216,10 +226,6 @@ global MultiplayerEnabled := IniRead(SettingsFile, "Multiplayer", "MultiplayerEn
 global DefaultMouseSpeed := IniRead(SettingsFile, "Options", "DefaultMouseSpeed", "2")
 global MouseDelay := IniRead(SettingsFile, "Options", "MouseDelay", "10")
 global KeyDelay := IniRead(SettingsFile, "Options", "KeyDelay", "20")
-global MapMenuDelay := Integer(IniRead(SettingsFile, "Delays", "MapMenu", "500"))
-global MapTypingDelay := Integer(IniRead(SettingsFile, "Delays", "MapTyping", "100"))
-global MapResultDelay := Integer(IniRead(SettingsFile, "Delays", "MapResult", "300"))
-global CustomDJTrackSchedule := IniRead(SettingsFile, "Options", "DJTrackSchedule", "")
 
 global PlaceTowerKey := IniRead(SettingsFile, "RecordingHotkeys", "PlaceTowerKey", "f")
 global UpgradeTowerKey := IniRead(SettingsFile, "RecordingHotkeys", "UpgradeTowerKey", "^u")
@@ -239,11 +245,6 @@ global g_IsFirstLaunch := Integer(IniRead(StateFile, "State", "IsFirstLaunch", 1
 global SwapAmount := IniRead(SettingsFile, "Options", "SwapAmount", "4")
 global SwapUnit := IniRead(SettingsFile, "Options", "SwapUnit", "Runs")
 global CurrentRunCount := Integer(IniRead(StateFile, "State", "CurrentRunCount", "0"))
-global GoalEnabled := Integer(IniRead(SettingsFile, "Goal", "Enabled", "0"))
-global GoalType := IniRead(SettingsFile, "Goal", "Type", "Coins")
-global GoalTarget := Integer(IniRead(SettingsFile, "Goal", "Target", "0"))
-global GoalStrategy := IniRead(SettingsFile, "Goal", "Strategy", "")
-global OwnedTowers := IniRead(SettingsFile, "Goal", "OwnedTowers", "")
 
 SendMode("Event")
 SetDefaultMouseSpeed(DefaultMouseSpeed)
@@ -285,7 +286,7 @@ CancelPlacementKey := IniRead(SettingsFile, "Hotkeys", "CancelPlacement", "Q")
 global UpgradeTowerGKey := IniRead(SettingsFile, "Hotkeys", "UpgradeTower", "E")
 global UpgradeTowerGBKey := IniRead(SettingsFile, "Hotkeys", "UpgradeBottom", "Z")
 TimeScaleMode := IniRead(SettingsFile, "Options", "TimeScaleMode", "OFF")
-global DebugConsole := IniRead(SettingsFile, "Options", "DebugConsole", "1")
+global DebugConsole := IniRead(SettingsFile, "Options", "DebugConsole", "0")
 
 global TimescaleActive := false
 
@@ -299,7 +300,7 @@ if (TimeScaleMode = "1.5x") {
 
 global UpgradeDelay := IniRead(SettingsFile, "Options", "UpgradeDelay", 200)
 
-global gamemap := "", difficulty := "", requiredTowers := "", DJTrackSchedule := "", ActiveDJTrackRule := ""
+global gamemap := "", difficulty := "", requiredTowers := ""
 global autoChain := "OFF", autoCaravan := "OFF", autoDropTheBeat := "OFF"
 global Commander := false, AutoSkip := "ON", AbilitySpam := "ON"
 
@@ -419,7 +420,7 @@ RegisterRecordingHotkeys()
 ;Got this from someone on a Discord server
 RegisterRecordingHotkeys(oldKeys := "") {
     global PlaceTowerKey, UpgradeTowerKey, ChangeDJTrackKey, DeleteTowerRecordingKey, IsRecordingActive
-    global SellTowerKey, AlignCameraKey, RecordInputsKey, HoloKey, ChangeTargetsKey, RepoKey, UpgradeTowerGKey
+    global SellTowerKey, AlignCameraKey, RecordInputsKey, HoloKey, ChangeTargetsKey, RepoKey, RaiseDeadKey, UpgradeTowerGKey
 
     HotIf(IsRecordingActive)
 
@@ -832,7 +833,6 @@ global HoverTab := []
 global TabCtrl := []
 global HoverEffect := []
 global GradientButtons := []
-global OwnedGuiBitmaps := []
 
 ;tabs
 global Tab3 := []
@@ -844,23 +844,23 @@ global DiscordRemoteTab := []
 global DiscordPage := "Webhook"
 ;==
 
-tabNames := ["Main", "Record", "Party", "Discord", "Settings", "Tools", "Guide", "Credits"]
+tabNames := ["Main", "Record", "(Beta) Party", "Discord", "Settings", "Tools", "Credits"]
 
 loop tabNames.Length {
     i := A_Index
-    xTab := 20 + (i - 1) * 82
+    xTab := 20 + (i - 1) * 90
 
-    hBg := MainGui.Add("Progress", "x" xTab " y43 w74 h34 Hidden Background222222 Disabled")
+    hBg := MainGui.Add("Progress", "x" xTab " y43 w80 h34 Hidden Background222222 Disabled")
     HoverTab.Push(hBg)
     SystemHwnds[hBg.Hwnd] := true
 
-    t := MainGui.Add("Text", "x" xTab " y52 w74 h22 Center BackgroundTrans", tabNames[i])
+    t := MainGui.Add("Text", "x" xTab " y52 w80 h22 Center BackgroundTrans", tabNames[i])
     t.OnEvent("Click", SelectTab)
     TabCtrl.Push(t)
     SystemHwnds[t.Hwnd] := true
 }
 
-global TabLine := MainGui.Add("Progress", "x20 y75 w74 h2 BackgroundFFFFFF", 0)
+global TabLine := MainGui.Add("Progress", "x20 y75 w80 h2 BackgroundFFFFFF", 0)
 SystemHwnds[TabLine.Hwnd] := true
 
 sysLine2 := MainGui.Add("Progress", "x0 y77 w700 h1 Background222222", 0)
@@ -934,8 +934,18 @@ global AutoConfigCtrl := MainGui.Add("Checkbox", "x490 y190 vAutoConfigureSettin
 AutoConfigCtrl.OnEvent("Click", EnableAutoConfig)
 
 MainGui.SetFont("s10 w400 c3A86FF", UIFont())
-global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Community Strategies")
+global Tab1_Section2 := MainGui.Add("Text", "x30 y225 h22", "Strategies")
 global Tab1_Line2 := MainGui.Add("Progress", "x30 y248 w640 h1 Background333333", 0)
+
+MainGui.SetFont("s10 w400 c3A86FF", UIFont())
+global BtnCommStrats := MainGui.Add("Text", "x30 y257 w120 h24 Center Background222222 +Border 0x200", "Community")
+MainGui.SetFont("s10 w400 cFFFFFF", UIFont())
+global BtnMyStrats := MainGui.Add("Text", "x160 y257 w120 h24 Center Background0e0e0f +Border 0x200", "My Strats")
+
+BtnCommStrats.OnEvent("Click", (*) => SwitchStrategiesTab("Community"))
+BtnMyStrats.OnEvent("Click", (*) => SwitchStrategiesTab("MyStrats"))
+HoverEffect.Push(BtnCommStrats)
+HoverEffect.Push(BtnMyStrats)
 
 if !DirExist(StratsDir)
     DirCreate(StratsDir)
@@ -961,6 +971,7 @@ if (lastUpdate != "0") {
 if (needUpdate) {
     tempDir := StratsDir "\.download_temp"
     communityBackupDir := StratsDir "\.community_backup"
+    apiStatus := 0
 
     try {
         apiURL := "https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era/contents/Resources/Strats?ref=main"
@@ -972,6 +983,7 @@ if (needUpdate) {
         whr.SetRequestHeader("X-GitHub-Api-Version", "2022-11-28")
         whr.SetTimeouts(5000, 5000, 10000, 10000)
         whr.Send()
+        apiStatus := whr.Status
 
         if (whr.Status != 200)
             throw Error("API request failed with status: " whr.Status)
@@ -1100,7 +1112,10 @@ if (needUpdate) {
             throw commitErr
         }
     } catch Error as err {
-        LogToConsole("Error while downloading strats: " err.Message)
+        if (apiStatus = 403)
+            LogToConsole("Community strategy refresh skipped because GitHub returned 403; keeping local strategies.", false)
+        else
+            LogToConsole("Error while downloading strats: " err.Message)
     } finally {
         if DirExist(tempDir)
             try DirDelete(tempDir, true)
@@ -1110,208 +1125,360 @@ if (needUpdate) {
 }
 
 global FrameX := 30
-global FrameY := 260
+global FrameY := 290
 global FrameW := 640
-global FrameH := 220
+global FrameH := 190
 global ContentH := 400
 global CurrentScrollPos := 0
 global ScrollDragging := false
 global ScrollDragGrab := 0
 global SliderH := 30
+global SliderX := 0
+global SliderW := 0
 global ChildHwnd := 0
+global ChildGui := ""
+global ContentGui := ""
 
-ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
-ChildGui.BackColor := "181818"
-ChildGui.SetFont("s10 cWhite", UIFont())
-width := FrameW - 6
+global IsRenderingStrategies := false
 
-loop files, StratsDir "\*.strat" {
-    localPath := A_LoopFileFullPath
-
-    sMap := IniRead(localPath, "Settings", "map", "")
-    sDifficulty := IniRead(localPath, "Settings", "difficulty", "")
-    sTowers := IniRead(localPath, "Settings", "requiredTowers", "")
-    sDesc := IniRead(localPath, "Info", "desc", "")
-    sAuthor := IniRead(localPath, "Info", "author", "")
-    sTitle := IniRead(localPath, "Info", "title", "")
-    sTime := IniRead(localPath, "Info", "time", "")
-    sIncome := IniRead(localPath, "Info", "income", "")
-    sModifiers := IniRead(localPath, "Settings", "modifiers", "")
-
-    LoadedStrats.Push({
-        fileName: A_LoopFileName,
-        map: sMap,
-        difficulty: sDifficulty,
-        towers: sTowers,
-        desc: sDesc,
-        author: sAuthor,
-        title: sTitle,
-        time: sTime,
-        income: sIncome,
-        modifiers: sModifiers
-    })
-}
-
-StartY := 15
-CardH := 115
-CardW := 600
-Gap := 15
-
-ContentH := StartY
-
-for index, strat in LoadedStrats {
-    CurrentY := StartY + ((index - 1) * (CardH + Gap))
-    ContentH := CurrentY + CardH + Gap
-
-    C1X := 10
-    C1Y := CurrentY
-
-    hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
-    ChildGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
-
-    hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(),
-        10, 1)
-    ChildGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
-
-    diffImg := "Resources/Strats/images/" strat.difficulty ".png"
-    if !FileExist(diffImg) {
-        LogToConsole("Missing resource file: " diffImg)
-    } else {
-        ChildGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
-    }
-
-    ChildGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
-
-    coinsCount := 0
-    if RegExMatch(strat.income, "i)([\d,]+)\s*coins", &match) {
-        coinsCount := Number(StrReplace(match[1], ","))
-    }
-
-    if (strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore") {
-        rewardIcon := "Resources/Strats/images/GemsMediumPile.png"
-    } else {
-        if (coinsCount >= 8000) {
-            rewardIcon := "Resources/Strats/images/CoinsSmallChest.png"
-        } else if (coinsCount >= 6000) {
-            rewardIcon := "Resources/Strats/images/CoinsMediumPile.png"
-        } else {
-            rewardIcon := "Resources/Strats/images/CoinsSmallPile.png"
+DisposeBitmap(hBitmap) {
+    if (hBitmap) {
+        try {
+            DeleteObject(hBitmap)
+        } catch Error as e {
         }
     }
-
-    if !FileExist(rewardIcon) {
-        LogToConsole("Missing resource file: " rewardIcon)
-    } else {
-        ChildGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
-    }
-
-    ChildGui.SetFont("s11 Bold cWhite", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title :
-        "Unknown Strat")
-
-    ChildGui.SetFont("s9 w500 c7E848E", UIFont())
-    helpDl1 := ChildGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
-    helpDl1.OnEvent("Click", ((t, a, r, m, d) => (*) => StratInfo(t, a, r, m, d))(
-        strat.title,
-        strat.author,
-        strat.towers,
-        (strat.modifiers != "" ? strat.modifiers : "none"),
-        strat.desc
-    ))
-
-    ChildGui.SetFont("s9 w400 cE2E4E7", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers :
-        "None"))
-
-    ChildGui.SetFont("s9 w400 c7E848E", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
-
-    if (strat.difficulty = "Hardcore") {
-        badgeColor1 := "0xFFAB457B", badgeColor2 := "0xFF5C2040"
-    } else if (strat.difficulty = "Molten") {
-        badgeColor1 := "0xFFE09334", badgeColor2 := "0xFF8F5413"
-    } else if (strat.difficulty = "Frost") {
-        badgeColor1 := "0xff34a9e0", badgeColor2 := "0xff17559c"
-    } else if (strat.difficulty = "Fallen") {
-        badgeColor1 := "0xff17559c", badgeColor2 := "0xff351570"
-    } else {
-        badgeColor1 := "0xb900ff2a", badgeColor2 := "0xff1a5f39"
-    }
-
-    hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty !=
-        "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
-    ChildGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
-
-    ChildGui.SetFont("s9 w500 c9CA4B0", UIFont())
-    ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time :
-        "Unknown"))
-    ChildGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income :
-        "Unknown"))
-
-    if ((strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore")) {
-        hBtnNormal := CreateGradientButton(220, 38, 8, "0xff961ea1", "0xff5f237a", "0x40000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-        hBtnHover := CreateGradientButton(220, 38, 8, "0xffea00ff", "0xff8d32b7", "0x60000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-    } else {
-        hBtnNormal := CreateGradientButton(220, 38, 8, "0xFF147A6E", "0xFF214B75", "0x40000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-        hBtnHover := CreateGradientButton(220, 38, 8, "0xFF1CB5A2", "0xFF3272B7", "0x60000000", "0x5dffffff", "Load",
-            UIFont(), 14, 1)
-    }
-
-    picLoadBtn := ChildGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal
-    )
-
-    dl1 := ChildGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
-    dl1.SetFont("cFFFFFF s10 Bold", UIFont())
-
-    dl1.StratFile := strat.fileName
-    dl1.OnEvent("Click", DownloadStrat)
-
-    dl1.PicControl := picLoadBtn
-    dl1.ImgNormal := hBtnNormal
-    dl1.ImgHover := hBtnHover
-    GradientButtons.Push(dl1)
 }
 
-if (LoadedStrats.Length == 0) {
-    ChildGui.SetFont("s12 c7E848E", UIFont())
-    ChildGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
-    ContentH := 220
+CleanupRenderedBitmaps() {
+    global RenderedBitmaps
+    if (!IsSet(RenderedBitmaps) || !IsObject(RenderedBitmaps)) {
+        RenderedBitmaps := []
+        return
+    }
+    for index, hBitmap in RenderedBitmaps {
+        DisposeBitmap(hBitmap)
+    }
+    RenderedBitmaps := []
 }
 
-SliderX := FrameW - 10
-SliderW := 6
+global CurrentStratTabMode := ""
 
-if (ContentH > 0) {
-    SliderH := Round(FrameH * (FrameH / ContentH))
+SwitchStrategiesTab(mode) {
+    global BtnCommStrats, BtnMyStrats, IsRenderingStrategies, CurrentStratTabMode
+    
+    if (IsRenderingStrategies)
+        return
+        
+    IsRenderingStrategies := true
+    
+    try {
+        CleanupRenderedBitmaps()
+        
+        if (mode == "Community") {
+            BtnCommStrats.IsSelected := true
+            BtnMyStrats.IsSelected := false
+            
+            BtnCommStrats.Opt("Background222222")
+            BtnCommStrats.SetFont("c3A86FF Bold")
+            BtnMyStrats.Opt("Background0e0e0f")
+            BtnMyStrats.SetFont("cFFFFFF Norm")
+        } else {
+            BtnCommStrats.IsSelected := false
+            BtnMyStrats.IsSelected := true
+            
+            BtnMyStrats.Opt("Background222222")
+            BtnMyStrats.SetFont("c3A86FF Bold")
+            BtnCommStrats.Opt("Background0e0e0f")
+            BtnCommStrats.SetFont("cFFFFFF Norm")
+        }
+        
+        BtnCommStrats.Redraw()
+        BtnMyStrats.Redraw()
+        
+        RenderStrategies(mode)
+        
+        CurrentStratTabMode := mode
+    } finally {
+        IsRenderingStrategies := false
+    }
+}
 
-    if (ContentH <= FrameH) {
-        SliderH := FrameH
-    } else {
-        SliderH := Max(30, SliderH)
+RenderStrategies(mode := "Community") {
+    global ChildGui, ContentGui, MainGui, LoadedStrats, GradientButtons
+    global FrameX, FrameY, FrameW, FrameH, ContentH, CurrentScrollPos, SliderH, SliderBG, Slider
+    global StratsDir, RecordingsDir, CurrentTab, ChildHwnd, RenderedBitmaps, SliderX, SliderW
+    global Strategy1Path, Strategy2Path, RotateStrategies
+
+    CleanupRenderedBitmaps()
+    
+    newGradBtns := []
+    if IsSet(GradientButtons) {
+        for btn in GradientButtons {
+            if !HasProp(btn, "StratFile")
+                newGradBtns.Push(btn)
+        }
+    }
+    GradientButtons := newGradBtns
+
+    if (!IsSet(ChildGui) || ChildGui == "") {
+        ChildGui := Gui("-Caption +E0x20 +Border +Parent" MainGui.Hwnd)
+        ChildGui.BackColor := "181818"
+        ChildGui.SetFont("s10 cWhite", UIFont())
+        ChildHwnd := ChildGui.Hwnd
     }
 
-    if (ContentH > FrameH && CurrentScrollPos > 0) {
-        maxScroll := ContentH - FrameH
-        scrollPercent := CurrentScrollPos / maxScroll
-        sliderPos := Round(scrollPercent * (FrameH - SliderH))
-        sliderPos := Max(0, Min(sliderPos, FrameH - SliderH))
-    } else {
+    if (IsSet(ContentGui) && ContentGui != "") {
+        try ContentGui.Destroy()
+        catch
+        ContentGui := ""
+    }
+
+    ContentGui := Gui("-Caption +Parent" ChildGui.Hwnd)
+    ContentGui.BackColor := "181818"
+    ContentGui.SetFont("s10 cWhite", UIFont())
+    width := FrameW - 6
+
+    LoadedStrats := []
+    CurrentScrollPos := 0
+
+    targetDir := (mode == "Community") ? StratsDir : RecordingsDir
+
+    loop files, targetDir "\*.strat" {
+        localPath := A_LoopFileFullPath
+
+        sMap := IniRead(localPath, "Settings", "map", "Unknown")
+        sDifficulty := IniRead(localPath, "Settings", "difficulty", "Easy")
+        sTowers := IniRead(localPath, "Settings", "requiredTowers", "None")
+        sDesc := IniRead(localPath, "Info", "desc", "Local recording.")
+        sAuthor := IniRead(localPath, "Info", "author", "You")
+        sTitle := IniRead(localPath, "Info", "title", StrReplace(A_LoopFileName, ".strat", ""))
+        sTime := IniRead(localPath, "Info", "time", "N/A")
+        sIncome := IniRead(localPath, "Info", "income", "N/A")
+        sModifiers := IniRead(localPath, "Settings", "modifiers", "")
+
+        LoadedStrats.Push({
+            fileName: A_LoopFileName,
+            map: sMap,
+            difficulty: sDifficulty,
+            towers: sTowers,
+            desc: sDesc,
+            author: sAuthor,
+            title: sTitle,
+            time: sTime,
+            income: sIncome,
+            modifiers: sModifiers,
+            fullPath: localPath
+        })
+    }
+
+    StartY := 15
+    CardH := 115
+    CardW := 600
+    Gap := 15
+
+    ContentH := StartY
+
+    for index, strat in LoadedStrats {
+        CurrentY := StartY + ((index - 1) * (CardH + Gap))
+        ContentH := CurrentY + CardH + Gap
+
+        C1X := 10
+        C1Y := CurrentY
+
+        hFrameBg := CreateFrame(CardW, CardH, 10, "0xff161616", "0xff1d1d1d", "0x62302d2d")
+        RenderedBitmaps.Push(hFrameBg)
+        ContentGui.Add("Picture", "x" C1X " y" C1Y " w" CardW " h" CardH " +BackgroundTrans", "HBITMAP:*" hFrameBg)
+
+        hIconBg := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(), 10, 1)
+        RenderedBitmaps.Push(hIconBg)
+        ContentGui.Add("Picture", "x" (C1X + 10) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg)
+        
+        hIconBg2 := CreateGradientButton(56, 56, 8, "0xff2f353f", "0xff15171b", "0xff000000", "0x232c3a50", "", UIFont(), 10, 1)
+        RenderedBitmaps.Push(hIconBg2)
+        ContentGui.Add("Picture", "x" (C1X + 75) " y" (C1Y + 30) " w76 h76 +BackgroundTrans", "HBITMAP:*" hIconBg2)
+
+        diffImg := "Resources/Strats/images/" strat.difficulty ".png"
+        if !FileExist(diffImg) {
+            LogToConsole("Missing resource file: " diffImg)
+        } else {
+            ContentGui.Add("Picture", "x" (C1X + 20) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", diffImg)
+        }
+
+        coinsCount := 0
+        if RegExMatch(strat.income, "i)([\d,]+)\s*coins", &match) {
+            coinsCount := Number(StrReplace(match[1], ","))
+        }
+
+        if (strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore") {
+            rewardIcon := "Resources/Strats/images/GemsMediumPile.png"
+        } else {
+            if (coinsCount >= 8000) {
+                rewardIcon := "Resources/Strats/images/CoinsSmallChest.png"
+            } else if (coinsCount >= 6000) {
+                rewardIcon := "Resources/Strats/images/CoinsMediumPile.png"
+            } else {
+                rewardIcon := "Resources/Strats/images/CoinsSmallPile.png"
+            }
+        }
+
+        if !FileExist(rewardIcon) {
+            LogToConsole("Missing resource file: " rewardIcon)
+        } else {
+            ContentGui.Add("Picture", "x" (C1X + 85) " y" (C1Y + 40) " h56 w56 +BackgroundTrans", rewardIcon)
+        }
+
+        ContentGui.SetFont("s11 Bold cWhite", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 15) " y" (C1Y + 12) " +BackgroundTrans", strat.title != "" ? strat.title : "Unknown Strat")
+
+        ContentGui.SetFont("s9 w500 c7E848E", UIFont())
+        helpDl1 := ContentGui.Add("Text", "x" (C1X + 580) " y" (C1Y + 10) " +BackgroundTrans", "?")
+        helpDl1.OnEvent("Click", ((t, a, r, m, d) => (*) => StratInfo(t, a, r, m, d))(
+            strat.title,
+            strat.author,
+            strat.towers,
+            (strat.modifiers != "" ? strat.modifiers : "none"),
+            strat.desc
+        ))
+
+        ContentGui.SetFont("s9 w400 cE2E4E7", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 15) " w340 +BackgroundTrans", (strat.towers != "" ? strat.towers : "None"))
+
+        ContentGui.SetFont("s9 w400 c7E848E", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 260) " y" (C1Y + 36) " w320 +BackgroundTrans", strat.desc)
+
+        if (strat.difficulty = "Hardcore") {
+            badgeColor1 := "0xFFAB457B", badgeColor2 := "0xFF5C2040"
+        } else if (strat.difficulty = "Molten") {
+            badgeColor1 := "0xFFE09334", badgeColor2 := "0xFF8F5413"
+        } else if (strat.difficulty = "Frost") {
+            badgeColor1 := "0xff34a9e0", badgeColor2 := "0xff17559c"
+        } else if (strat.difficulty = "Fallen") {
+            badgeColor1 := "0xff17559c", badgeColor2 := "0xff351570"
+        } else {
+            badgeColor1 := "0xb900ff2a", badgeColor2 := "0xff1a5f39"
+        }
+
+        hgmMode := CreateGradientButton(102, 28, 3, badgeColor1, badgeColor2, "0x40000000", "0x7effffff", strat.difficulty != "" ? strat.difficulty : "Easy", UIFont(), 11, 1)
+        RenderedBitmaps.Push(hgmMode)
+        ContentGui.Add("Picture", "x" (C1X + 145) " y" (C1Y + 35) " w102 h28 +BackgroundTrans", "HBITMAP:*" hgmMode)
+
+        ContentGui.SetFont("s9 w500 c9CA4B0", UIFont())
+        ContentGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 65) " +BackgroundTrans", "🕒 " (strat.time != "" ? strat.time : "Unknown"))
+        ContentGui.Add("Text", "x" (C1X + 155) " y" (C1Y + 83) " +BackgroundTrans", "⛃ " (strat.income != "" ? strat.income : "Unknown"))
+
+        isLoaded := false
+        if (Strategy1Path != "" && StrLower(strat.fullPath) == StrLower(Strategy1Path))
+            isLoaded := true
+        else if (Strategy2Path != "" && RotateStrategies && StrLower(strat.fullPath) == StrLower(Strategy2Path))
+            isLoaded := true
+
+        btnText := isLoaded ? "Currently Loaded" : "Load"
+
+        if (isLoaded) {
+            loadColor1 := "0xFF4b5563", loadColor2 := "0xFF374151"
+            loadHover1 := "0xFF505A69", loadHover2 := "0xFF3A4557"
+        } else if ((strat.difficulty = "Hardcore" || strat.difficulty = "Voidcore")) {
+            loadColor1 := "0xff961ea1", loadColor2 := "0xff5f237a"
+            loadHover1 := "0xffea00ff", loadHover2 := "0xff8d32b7"
+        } else {
+            loadColor1 := "0xFF147A6E", loadColor2 := "0xFF214B75"
+            loadHover1 := "0xFF1CB5A2", loadHover2 := "0xFF3272B7"
+        }
+
+        if (mode == "MyStrats") {
+            hBtnNormal := CreateGradientButton(145, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", btnText, UIFont(), isLoaded ? 11 : 14, 1)
+            RenderedBitmaps.Push(hBtnNormal)
+            hBtnHover := CreateGradientButton(145, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", btnText, UIFont(), isLoaded ? 11 : 14, 1)
+            RenderedBitmaps.Push(hBtnHover)
+            
+            editColor1 := "0xFF4b5563", editColor2 := "0xFF374151"
+            editHover1 := "0xFF6b7280", editHover2 := "0xFF4b5563"
+            hEditNormal := CreateGradientButton(70, 38, 8, editColor1, editColor2, "0x40000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
+            RenderedBitmaps.Push(hEditNormal)
+            hEditHover := CreateGradientButton(70, 38, 8, editHover1, editHover2, "0x60000000", "0x5dffffff", "Edit", UIFont(), 12, 1)
+            RenderedBitmaps.Push(hEditHover)
+
+            picLoadBtn := ContentGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
+            dl1 := ContentGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w145 h38 +BackgroundTrans +0x200 Center", "")
+            
+            picEditBtn := ContentGui.Add("Picture", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans", "HBITMAP:*" hEditNormal)
+            dlEdit := ContentGui.Add("Text", "x" (C1X + 515) " y" (C1Y + 68) " w70 h38 +BackgroundTrans +0x200 Center", "")
+            
+            dlEdit.SetFont("cFFFFFF s10 Bold", UIFont())
+            dlEdit.StratFile := strat.fullPath
+            dlEdit.OnEvent("Click", EditStratFile)
+            dlEdit.PicControl := picEditBtn
+            dlEdit.ImgNormal := hEditNormal
+            dlEdit.ImgHover := hEditHover
+            dlEdit.GradEnabled := true
+            GradientButtons.Push(dlEdit)
+        } else {
+            hBtnNormal := CreateGradientButton(220, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", btnText, UIFont(), isLoaded ? 12 : 14, 1)
+            RenderedBitmaps.Push(hBtnNormal)
+            hBtnHover := CreateGradientButton(220, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", btnText, UIFont(), isLoaded ? 12 : 14, 1)
+            RenderedBitmaps.Push(hBtnHover)
+            
+            picLoadBtn := ContentGui.Add("Picture", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans", "HBITMAP:*" hBtnNormal)
+            dl1 := ContentGui.Add("Text", "x" (C1X + 365) " y" (C1Y + 68) " w220 h38 +BackgroundTrans +0x200 Center", "")
+        }
+
+        dl1.SetFont("cFFFFFF s10 Bold", UIFont())
+        dl1.StratFile := strat.fullPath
+        dl1.StratDiff := strat.difficulty
+        dl1.IsSmallBtn := (mode == "MyStrats")
+        
+        dl1.OnEvent("Click", DownloadStrat)
+        dl1.ImgHover := isLoaded ? hBtnNormal : hBtnHover
+        
+        dl1.PicControl := picLoadBtn
+        dl1.ImgNormal := hBtnNormal
+        dl1.GradEnabled := true
+        GradientButtons.Push(dl1)
+    }
+
+    if (LoadedStrats.Length == 0) {
+        ContentGui.SetFont("s12 c7E848E", UIFont())
+        ContentGui.Add("Text", "x0 y0 w" FrameW " h" FrameH " +BackgroundTrans Center +0x200", "No strategies found.")
+        ContentH := FrameH
+    }
+
+    SliderX := FrameW - 10
+    SliderW := 6
+
+    if (ContentH > 0) {
+        SliderH := Round(FrameH * (FrameH / ContentH))
+
+        if (ContentH <= FrameH) {
+            SliderH := FrameH
+        } else {
+            SliderH := Max(30, SliderH)
+        }
+
         sliderPos := 0
+
+        hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
+        RenderedBitmaps.Push(hSlider)
+        hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
+        RenderedBitmaps.Push(hSliderBG)
+
+        SliderBG := ContentGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" (ContentH <= FrameH ? FrameH : FrameH + ContentH) " +BackgroundTrans +0x0100", "HBITMAP:*" hSliderBG)
+        Slider := ContentGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans +0x0100", "HBITMAP:*" hSlider)
+
+        if (ContentH <= FrameH) {
+            SliderBG.Visible := false
+            Slider.Visible := false
+        } else {
+            SliderBG.Visible := true
+            Slider.Visible := true
+        }
     }
-
-    hSlider := CreateScrollThumb(SliderW, SliderH, 3, "0xFF6EA7FF", "0xff4076ce", "0xd4d4d4")
-    hSliderBG := CreateScrollThumb(SliderW, FrameH, 3, "0xff000000", "0xff000000", "0x000000")
-
-    global SliderBG := ChildGui.Add("Picture", "x" SliderX " y0 w" SliderW " h" FrameH + ContentH " +BackgroundTrans",
-        "HBITMAP:*" hSliderBG)
-    global Slider := ChildGui.Add("Picture", "x" SliderX " y" sliderPos " w" SliderW " h" SliderH " +BackgroundTrans",
-        "HBITMAP:*" hSlider)
-
-    SliderBG.Visible := true
-    Slider.Visible := true
+    
+    ContentGui.Show("x0 y0 w" FrameW " h" FrameH)
+    
+    if (CurrentTab == "Tab1") {
+        ShowChildGui()
+    }
 }
 
 OnMessage(0x0115, OnScroll)
@@ -1573,12 +1740,12 @@ global Tab4_RemoteCodeLabel := MainGui.Add("Text", "x30 y270 w250 h20 Hidden", "
 MainGui.SetFont("s10 w400 c000000", UIFont())
 global Tab4_RemoteCodeCtrl := MainGui.Add("Edit", "x30 y294 w640 h30 Hidden")
 MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
-global Tab4_RemoteSecurity := MainGui.Add("Text", "x30 y334 w640 h38 +Wrap Hidden",
+global Tab4_RemoteSecurity := MainGui.Add("Text", "x30 y334 w640 h22 Hidden",
     "Privacy: stores a random installation ID, Discord ID, version, link/active times, online status, and aggregated coin/gem gains. No HWID.")
 MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
-global Tab4_RemoteConsent := MainGui.Add("Checkbox", "x30 y378 w640 h22 Hidden", "I consent to this limited device data and 30-day security-event retention.")
-global Tab4_RemoteStatus := MainGui.Add("Text", "x30 y472 w640 h28 Center Hidden", "Not linked")
-global Tab4_RemoteConnectBtn := MakeActionButton(MainGui, 180, 420, 340, 40, "Link This PC", OfficialRemoteConnectFromControls, "accent", true)
+global Tab4_RemoteConsent := MainGui.Add("Checkbox", "x30 y360 w640 h22 Hidden", "I consent to this limited device data and 30-day security-event retention.")
+global Tab4_RemoteStatus := MainGui.Add("Text", "x30 y455 w640 h28 Center Hidden", "Not linked")
+global Tab4_RemoteConnectBtn := MakeActionButton(MainGui, 180, 400, 340, 40, "Link This PC", OfficialRemoteConnectFromControls, "accent", true)
 
 DiscordRemoteTab.Push(Tab4_RemoteHeading, Tab4_RemoteInfo, Tab4_RemoteCodeLabel, Tab4_RemoteCodeCtrl,
     Tab4_RemoteSecurity, Tab4_RemoteConsent, Tab4_RemoteStatus, Tab4_RemoteConnectBtn)
@@ -1754,19 +1921,6 @@ UseVipServerCtrl.Value := (UseVipServer = "1" || UseVipServer = 1)
 global AlwaysOnTopCtrl := MainGui.Add("Checkbox", "x160 y465 Hidden", "Always On Top")
 AlwaysOnTopCtrl.Value := (AlwaysOnTop = "1" || AlwaysOnTop = 1)
 
-MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
-global MapMenuDelayLbl := MainGui.Add("Text", "x30 y350 w130 h20 Hidden", "Map menu delay (ms):")
-global MapTypingDelayLbl := MainGui.Add("Text", "x245 y350 w130 h20 Hidden", "Before typing (ms):")
-global MapResultDelayLbl := MainGui.Add("Text", "x455 y350 w130 h20 Hidden", "Result check (ms):")
-MainGui.SetFont("s9 w400 c000000", UIFont())
-global MapMenuDelayCtrl := MainGui.Add("Edit", "x165 y347 w65 h22 Number Limit4 Hidden", MapMenuDelay)
-global MapTypingDelayCtrl := MainGui.Add("Edit", "x375 y347 w65 h22 Number Limit4 Hidden", MapTypingDelay)
-global MapResultDelayCtrl := MainGui.Add("Edit", "x585 y347 w65 h22 Number Limit4 Hidden", MapResultDelay)
-MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
-global DJTrackScheduleLbl := MainGui.Add("Text", "x30 y390 w195 h20 Hidden", "DJ schedule (18-20:Red;21:Green):")
-MainGui.SetFont("s9 w400 c000000", UIFont())
-global DJTrackScheduleCtrl := MainGui.Add("Edit", "x245 y387 w405 h22 Hidden", CustomDJTrackSchedule)
-
 global LegacyModeCtrl := MainGui.Add("Checkbox", "x560 y465 Hidden", "Legacy Mode")
 LegacyModeCtrl.Value := (LegacyMode = "1" || LegacyMode = 1)
 LegacyModeCtrl.OnEvent("Click", LegacyModeInfo)
@@ -1777,6 +1931,12 @@ global Tab5_BtnClearLogs := MainGui.Add("Text",
 Tab5_BtnClearLogs.OnEvent("Click", ClearStoredLogs)
 
 HoverEffect.Push(Tab5_BtnClearLogs)
+
+global Tab5_BtnExportLogs := MainGui.Add("Text",
+    "x430 y463 w120 h24 Center Background0e0e0f +Border 0x200 Hidden", "Export Logs")
+Tab5_BtnExportLogs.OnEvent("Click", ExportLogsForDevelopers)
+
+HoverEffect.Push(Tab5_BtnExportLogs)
 
 global Tab5_AdvancedBtn := MakeActionButton(MainGui, 30, 500, 180, 40, "Advanced settings", ShowAdvancedSettings, "neutral", true)
 global Tab5_BackBtn := MakeActionButton(MainGui, 170, 500, 180, 40, "Back to settings", ShowMainSettings, "neutral", true)
@@ -1802,8 +1962,6 @@ global Tools_Profiles_Line := MainGui.Add("Progress", "x30 y348 w640 h1 Hidden B
 global ProfileExportBtn := MakeActionButton(MainGui, 30, 365, 200, 38, "Export Profile", ExportProfile, "neutral", true)
 global ProfileImportBtn := MakeActionButton(MainGui, 250, 365, 200, 38, "Import Profile", ImportProfile, "neutral", true)
 global ProfileManagerBtn := MakeActionButton(MainGui, 470, 365, 200, 38, "Manage Profiles", ProfileManager, "neutral", true)
-global GoalManagerBtn := MakeActionButton(MainGui, 250, 430, 200, 38, "Goals & Smart Strategy", OpenGoalManager, "accent", true)
-global StrategyEditorBtn := MakeActionButton(MainGui, 470, 430, 200, 38, "Edit Recorded Strategy", OpenRecordedStrategyEditor, "neutral", true)
 
 global Auto_COA := MainGui.Add("Picture", "x30 y125 w197 h176 Hidden", "Resources/Gui/auto_coa_preview.png")
 
@@ -1818,26 +1976,7 @@ global Auto_Consum := MainGui.Add("Picture", "x450 y125 w200 h140 Hidden",
 
 Auto_Consum.OnEvent("Click", RunAutoConsumableTool)
 
-; tab 7 - guide =============================
-
-MainGui.SetFont("s18 bold cFFFFFF", UIFont())
-global Guide_Title := MainGui.Add("Text", "x30 y96 w640 h32 Hidden", "Getting Started")
-MainGui.SetFont("s10 w400 cAAAAAA", UIFont())
-global Guide_Intro := MainGui.Add("Text", "x30 y132 w640 h44 +Wrap Hidden", "1. Use 1920x1080, 100% Windows scaling and Large TDS UI.  2. Pick or record a strategy.  3. Run Preflight, then Start. Keep Roblox chat closed and screen shake off.")
-global Guide_Line := MainGui.Add("Progress", "x30 y180 w640 h1 Hidden Background333333", 0)
-global Guide_Image1 := MainGui.Add("Picture", "x30 y195 w190 h135 Hidden", "Resources/Gui/auto_coa_preview.png")
-global Guide_Image2 := MainGui.Add("Picture", "x255 y195 w190 h135 Hidden", "Resources/Gui/auto_spin_preview.png")
-global Guide_Image3 := MainGui.Add("Picture", "x480 y195 w190 h135 Hidden", "Resources/Gui/auto_open_consumable_preview.png")
-MainGui.SetFont("s9 w400 cFFFFFF", UIFont())
-global Guide_Caption1 := MainGui.Add("Text", "x30 y336 w190 h38 Center +Wrap Hidden", "Choose a strategy and verify its required towers.")
-global Guide_Caption2 := MainGui.Add("Text", "x255 y336 w190 h38 Center +Wrap Hidden", "Use Record to create and edit your own strategy.")
-global Guide_Caption3 := MainGui.Add("Text", "x480 y336 w190 h38 Center +Wrap Hidden", "Connect Official Remote for private controls and AI help.")
-MainGui.SetFont("s10 bold c3A86FF", UIFont())
-global Guide_TroubleTitle := MainGui.Add("Text", "x30 y390 w640 h24 Hidden", "Troubleshooting checklist")
-MainGui.SetFont("s9 w400 cAAAAAA", UIFont())
-global Guide_Trouble := MainGui.Add("Text", "x30 y418 w640 h92 +Wrap Hidden", "Update Windows and graphics drivers. Confirm Roblox is visible, OCR English is installed, display scaling is 100%, resolution is supported, the taskbar is visible, and no multi-client tool is open. Export diagnostic logs from Tools when reporting a repeatable issue.")
-
-; tab 8 - credits ===========================
+; tab 7 - credits ===========================
 
 MainGui.SetFont("s18 bold cFFFFFF", UIFont())
 global Credit_TITLE := MainGui.Add("Text", "x30 y95 w640 Hidden Center", "Ultimate Macro")
@@ -1914,8 +2053,8 @@ SetTimer(() => RemoveInitialFocus(), -50)
 
 global CurrentTab := "Tab1"
 TabCtrl[1].SetFont("cFFFFFF")
+SwitchStrategiesTab("Community")
 ShowTabContent("Tab1")
-ShowChildGui()
 EnableStratRotation()
 
 ; 10ms was 100 sweeps/second of Win32 geometry calls for a purely cosmetic hover
@@ -1955,8 +2094,8 @@ SelectTab(ctrl, *) {
     CurrentTab := newTab
     TabCtrl[idx].SetFont("cFFFFFF")
 
-    newX := 20 + (idx - 1) * 82
-    TabLine.Move(newX, , 74)
+    newX := 20 + (idx - 1) * 90
+    TabLine.Move(newX, , 80)
 
     ShowTabContent(newTab)
 }
@@ -2025,6 +2164,9 @@ Hoverwatchdog(*) {
                     if RegExMatch(ctrl.name, "i)Title") {
                         ctrl.Opt("BackgroundTrans")
                         ctrl.SetFont("c3A86FF Norm")
+                    } else if (HasProp(ctrl, "IsSelected") && ctrl.IsSelected) {
+                        ctrl.Opt("Background222222")
+                        ctrl.SetFont("c3A86FF Bold")
                     } else {
                         ctrl.Opt("Background0E0E0F")
                         ctrl.SetFont("cFFFFFF Norm")
@@ -2109,6 +2251,9 @@ Hoverwatchdog(*) {
                                 if RegExMatch(oldCtrl.name, "i)title") {
                                     oldCtrl.Opt("BackgroundTrans")
                                     oldCtrl.SetFont("c3A86FF Norm")
+                                } else if (HasProp(oldCtrl, "IsSelected") && oldCtrl.IsSelected) {
+                                    oldCtrl.Opt("Background222222")
+                                    oldCtrl.SetFont("c3A86FF Bold")
                                 } else {
                                     oldCtrl.Opt("Background0E0E0F")
                                     oldCtrl.SetFont("cFFFFFF Norm")
@@ -2132,6 +2277,9 @@ Hoverwatchdog(*) {
                     if RegExMatch(ctrl.name, "i)title") {
                         ctrl.Opt("BackgroundTrans")
                         ctrl.SetFont("c3A86FF Norm")
+                    } else if (HasProp(ctrl, "IsSelected") && ctrl.IsSelected) {
+                        ctrl.Opt("Background222222")
+                        ctrl.SetFont("c3A86FF Bold")
                     } else {
                         ctrl.Opt("Background0E0E0F")
                         ctrl.SetFont("cFFFFFF Norm")
@@ -2228,7 +2376,7 @@ ShowTabContent(tab) {
     if (tab = "Tab1") {
         for ctrl in [Tab1_Section1, Tab1_Line1, Tab1_Lbl1, Strategy1Ctrl, Tab1_Btn1, Tab1_Btn2,
             Tab1_Lbl2, Strategy2Ctrl, Tab1_Btn3, Tab1_Btn4, RotateStrategiesCtrl, AutoEquipCtrl, AutoConfigCtrl, Tab1_Section2,
-            Tab1_Line2,
+            Tab1_Line2, BtnCommStrats, BtnMyStrats,
             Tab1_Start, Tab1_Stop]
             ShowControl(ctrl)
         EnableStratRotation()
@@ -2263,7 +2411,7 @@ ShowTabContent(tab) {
             RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL,
             CollectPlaytimeRewardsCtrl,
             Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl,
-            Tab5_BtnClearLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_SaveStatus, Tab5_Btn1,
+            Tab5_BtnClearLogs, Tab5_BtnExportLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_SaveStatus, Tab5_Btn1,
             MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown,
             MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown]
             ShowControl(ctrl)
@@ -2298,13 +2446,9 @@ ShowTabContent(tab) {
 
     } else if (tab = "Tab6") {
         for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Tools_Profiles_Section, Tools_Profiles_Line,
-            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, GoalManagerBtn, StrategyEditorBtn, Auto_COA, Auto_Spin, Auto_Consum]
+            ProfileExportBtn, ProfileImportBtn, ProfileManagerBtn, Auto_COA, Auto_Spin, Auto_Consum]
             ShowControl(ctrl)
     } else if (tab = "Tab7") {
-        for ctrl in [Guide_Title, Guide_Intro, Guide_Line, Guide_Image1, Guide_Image2, Guide_Image3,
-            Guide_Caption1, Guide_Caption2, Guide_Caption3, Guide_TroubleTitle, Guide_Trouble]
-            ShowControl(ctrl)
-    } else if (tab = "Tab8") {
         Credit_Content.Visible := true
         Credit_Info.Visible := true
         Credit_Support.Visible := true
@@ -2343,12 +2487,10 @@ ShowSettingsPage(advanced := false) {
     global UpgTowerTEXT, AlignCamTEXT, DjTrackTEXT, SellTowTEXT, DelRecTEXT, RecInputsTEXT, HoloTEXT, RaiseDeadTEXT
     global PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl, AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl, SellTowerKeyCtrl
     global DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl
-    global Tab5_BtnClearLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_Btn1, Tab5_SaveStatus
+    global Tab5_BtnClearLogs, Tab5_BtnExportLogs, Tab5_AdvancedBtn, Tab5_BackBtn, Tab5_AdvancedTitle, Tab5_AdvancedLine, Tab5_Btn1, Tab5_SaveStatus
     global Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl, DebugConsoleCtrl, PotatoModeCtrl
     global MouseSpeedLbl, MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown
     global KeyDelayLbl, KeyDelayTxt, KeyDelayUpDown
-    global MapMenuDelayLbl, MapTypingDelayLbl, MapResultDelayLbl, MapMenuDelayCtrl, MapTypingDelayCtrl, MapResultDelayCtrl
-    global DJTrackScheduleLbl, DJTrackScheduleCtrl
 
     common := [Tab5_Section1, Tab5_Line1, Tab5_Lbl1, ChainKeyCtrl, Tab5_Lbl2, BeatKeyCtrl, Tab5_Lbl3, CaravanKeyCtrl,
         Tab5_Lbl44, RaiseDeadKeyCtrl, Tab5_Lbl55, Tab5_Lbl56, HologramKeyCtrl, RepoKeyCtrl, Tab5_Lbl99, Tab5_LblUPG,
@@ -2358,12 +2500,10 @@ ShowSettingsPage(advanced := false) {
         Tab5_Help11, Tab5_Help12, Tab5_Section3, Tab5_Line3, PlcTowerTEXT, UpgTowerTEXT, AlignCamTEXT, DjTrackTEXT,
         SellTowTEXT, DelRecTEXT, RecInputsTEXT, HoloTEXT, RaiseDeadTEXT, PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl,
         AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl, SellTowerKeyCtrl, DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl,
-        HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl, Tab5_BtnClearLogs]
+        HoloKeyCtrl, ChangeTargetsCTRL, CollectPlaytimeRewardsCtrl, Tab5_BtnClearLogs, Tab5_BtnExportLogs]
     advancedControls := [Tab5_AdvancedTitle, Tab5_AdvancedLine, DebugConsoleCtrl, PotatoModeCtrl, MouseSpeedLbl,
         MouseSpeedTxt, MouseSpeedUpDown, MouseDelayLbl, MouseDelayTxt, MouseDelayUpDown, KeyDelayLbl, KeyDelayTxt,
         KeyDelayUpDown, Tab5_Line4, Tab5_Lbl4, VipLinkCtrl, UseVipServerCtrl, AlwaysOnTopCtrl, LegacyModeCtrl]
-    advancedControls.Push(MapMenuDelayLbl, MapTypingDelayLbl, MapResultDelayLbl, MapMenuDelayCtrl, MapTypingDelayCtrl, MapResultDelayCtrl)
-    advancedControls.Push(DJTrackScheduleLbl, DJTrackScheduleCtrl)
     for ctrl in common
         ctrl.Visible := !advanced
     for ctrl in advancedControls
@@ -2397,10 +2537,6 @@ ShowSettingsPage(advanced := false) {
         UseVipServerCtrl.Move(100, 307)
         AlwaysOnTopCtrl.Move(300, 307)
         LegacyModeCtrl.Move(540, 307)
-        MapMenuDelayLbl.Move(30, 350), MapMenuDelayCtrl.Move(165, 347)
-        MapTypingDelayLbl.Move(245, 350), MapTypingDelayCtrl.Move(375, 347)
-        MapResultDelayLbl.Move(455, 350), MapResultDelayCtrl.Move(585, 347)
-        DJTrackScheduleLbl.Move(30, 390), DJTrackScheduleCtrl.Move(245, 387)
         Tab5_BackBtn.Move(170, 500, 180, 40)
         Tab5_BackBtn.PicControl.Move(170, 500, 180, 40)
     } else {
@@ -2429,32 +2565,91 @@ YouTubeLink(ctrl, *) {
     Run("https://www.youtube.com/@darksenn")
 }
 
+UpdateStrategyButtons() {
+    global GradientButtons, Strategy1Path, Strategy2Path, RotateStrategies, RenderedBitmaps
+
+    for ctrl in GradientButtons {
+        if !HasProp(ctrl, "StratFile") || !HasProp(ctrl, "StratDiff")
+            continue
+
+        isLoaded := false
+        if (Strategy1Path != "" && StrLower(ctrl.StratFile) == StrLower(Strategy1Path))
+            isLoaded := true
+        else if (Strategy2Path != "" && RotateStrategies && StrLower(ctrl.StratFile) == StrLower(Strategy2Path))
+            isLoaded := true
+
+        btnText := isLoaded ? "Currently Loaded" : "Load"
+
+        if (isLoaded) {
+            loadColor1 := "0xFF4b5563", loadColor2 := "0xFF374151"
+            loadHover1 := "0xFF505A69", loadHover2 := "0xFF3A4557"
+        } else if ((ctrl.StratDiff = "Hardcore" || ctrl.StratDiff = "Voidcore")) {
+            loadColor1 := "0xff961ea1", loadColor2 := "0xff5f237a"
+            loadHover1 := "0xffea00ff", loadHover2 := "0xff8d32b7"
+        } else {
+            loadColor1 := "0xFF147A6E", loadColor2 := "0xFF214B75"
+            loadHover1 := "0xFF1CB5A2", loadHover2 := "0xFF3272B7"
+        }
+
+        width := HasProp(ctrl, "IsSmallBtn") && ctrl.IsSmallBtn ? 145 : 220
+        
+        hBtnNormal := CreateGradientButton(width, 38, 8, loadColor1, loadColor2, "0x40000000", "0x5dffffff", btnText, UIFont(), isLoaded ? (width==145?10:12) : 14, 1)
+        if (!isLoaded)
+            hBtnHover := CreateGradientButton(width, 38, 8, loadHover1, loadHover2, "0x60000000", "0x5dffffff", btnText, UIFont(), isLoaded ? (width==145?10:12) : 14, 1)
+        else
+            hBtnHover := hBtnNormal
+
+        ; Dispose the old bitmaps and remove them from the tracking array safely
+        if (HasProp(ctrl, "ImgNormal") && ctrl.ImgNormal) {
+            i := RenderedBitmaps.Length
+            while (i > 0) {
+                if (RenderedBitmaps[i] == ctrl.ImgNormal)
+                    RenderedBitmaps.RemoveAt(i)
+                i--
+            }
+            DisposeBitmap(ctrl.ImgNormal)
+        }
+        if (HasProp(ctrl, "ImgHover") && ctrl.ImgHover && ctrl.ImgHover != ctrl.ImgNormal) {
+            i := RenderedBitmaps.Length
+            while (i > 0) {
+                if (RenderedBitmaps[i] == ctrl.ImgHover)
+                    RenderedBitmaps.RemoveAt(i)
+                i--
+            }
+            DisposeBitmap(ctrl.ImgHover)
+        }
+
+        ; Register the new bitmaps to be cleaned up when tabs change
+        RenderedBitmaps.Push(hBtnNormal)
+        if (!isLoaded)
+            RenderedBitmaps.Push(hBtnHover)
+
+        ; Apply to UI instantly without a full page refresh
+        ctrl.ImgNormal := hBtnNormal
+        ctrl.ImgHover := hBtnHover
+        ctrl.PicControl.Value := "HBITMAP:*" hBtnNormal
+    }
+}
+
 DownloadStrat(ctrl, *) {
-    global RotateStrategies, CurrentRotationIndex, Strategy1Path, Strategy2Path
+    global Strategy1Path, Strategy2Path, RotateStrategies
     nm := ctrl.StratFile
 
-    downloadedStrat := A_WorkingDir "\Resources\Strats" (SubStr(nm, 1, 1) = "\" ? nm : "\" nm)
-
-    if (RotateStrategies = 1) {
-        choice := MsgBox("Load this strategy into rotation slot 1 or slot 2?`n`nYes = Slot 1`nNo = Slot 2`nCancel = Keep current rotation", "Choose rotation slot", "YesNoCancel Icon?")
-        if (choice = "Cancel")
-            return
-        if (choice = "Yes") {
-            Strategy1Ctrl.Value := downloadedStrat
-            Strategy1Path := downloadedStrat
-            CurrentRotationIndex := 1
-            IniWrite(downloadedStrat, SettingsFile, "Options", "Strategy1")
-            IniWrite(1, StateFile, "State", "CurrentRotationIndex")
-        } else {
-            Strategy2Ctrl.Value := downloadedStrat
-            Strategy2Path := downloadedStrat
-            CurrentRotationIndex := 2
-            IniWrite(downloadedStrat, SettingsFile, "Options", "Strategy2")
-            IniWrite(2, StateFile, "State", "CurrentRotationIndex")
-        }
-        LoadStrategyFile(downloadedStrat)
-        return
+    if (RegExMatch(nm, "^[a-zA-Z]:\\")) {
+        downloadedStrat := nm
+    } else {
+        downloadedStrat := A_WorkingDir "\Resources\Strats" (SubStr(nm, 1, 1) = "\" ? nm : "\" nm)
     }
+
+    ; Block the click if the strategy is already loaded
+    isAlreadyLoaded := false
+    if (Strategy1Path != "" && StrLower(downloadedStrat) == StrLower(Strategy1Path))
+        isAlreadyLoaded := true
+    else if (Strategy2Path != "" && RotateStrategies && StrLower(downloadedStrat) == StrLower(Strategy2Path))
+        isAlreadyLoaded := true
+
+    if (isAlreadyLoaded)
+        return
 
     if (Strategy1Ctrl.Value = "") {
         Strategy1Ctrl.Value := downloadedStrat
@@ -2471,20 +2666,36 @@ DownloadStrat(ctrl, *) {
     }
 
     LoadStrategyFile(downloadedStrat)
+    
+    ; Update button graphics seamlessly without refreshing/jumping
+    UpdateStrategyButtons()
+}
+
+EditStratFile(ctrl, *) {
+    global CurrentScrollPos, CurrentStratTabMode
+    stratToEdit := ctrl.StratFile
+    if FileExist(stratToEdit) {
+        RunWait("notepad.exe `"" stratToEdit "`"")
+        savedScroll := CurrentScrollPos
+        RenderStrategies(CurrentStratTabMode)
+        SetScrollPos(savedScroll)
+    } else {
+        MsgBox("Strategy file not found!`n" stratToEdit, "Error", 0x10)
+    }
 }
 
 OnMouseWheel(wp, lp, msg, hwnd) {
-    global ChildHwnd, ChildGui
+    global ChildHwnd, ChildGui, ContentGui
     MouseGetPos(, , &maxH, &ctrlH, 2)
 
     parentH := (ctrlH != "") ? DllCall("GetParent", "Ptr", ctrlH, "Ptr") : 0
-    ch := ChildGui.Hwnd
+    ch := (IsSet(ChildGui) && ChildGui != "") ? ChildGui.Hwnd : 0
+    co := (IsSet(ContentGui) && ContentGui != "") ? ContentGui.Hwnd : 0
 
-    if (maxH = ch || ctrlH = ch || parentH = ch) {
+    if (ch && (maxH = ch || maxH = co || ctrlH = ch || ctrlH = co || parentH = ch || parentH = co)) {
 
         dir := ((wp >> 16) & 0xFFFF) > 0x7FFF ? 1 : 0
         loop 3 {
-
             SendMessage(0x0115, dir, 0, , "ahk_id " ch)
         }
     }
@@ -2514,28 +2725,32 @@ ScrollPosFromThumbY(thumbY) {
 }
 
 SetScrollPos(newPos) {
-    global ChildGui, CurrentScrollPos, Slider
+    global ContentGui, CurrentScrollPos, Slider
+
+    if (!IsSet(ContentGui) || ContentGui == "")
+        return
 
     newPos := Max(0, Min(Round(newPos), ScrollMaxOffset()))
     if (newPos = CurrentScrollPos)
         return
 
-    hwnd := ChildGui.Hwnd
+    hwnd := ContentGui.Hwnd
     DllCall("ScrollWindow", "Ptr", hwnd, "Int", 0, "Int", CurrentScrollPos - newPos, "Ptr", 0, "Ptr", 0)
     CurrentScrollPos := newPos
-    Slider.Move(, ScrollThumbY(newPos))
+    if (IsSet(Slider) && Slider)
+        Slider.Move(, ScrollThumbY(newPos))
     DllCall("UpdateWindow", "Ptr", hwnd)
 }
 
 TryBeginScrollDrag() {
-    global ChildGui, Slider, SliderX, SliderW, SliderH, CurrentScrollPos
+    global ContentGui, Slider, SliderX, SliderW, SliderH, CurrentScrollPos, FrameH
     global ScrollDragging, ScrollDragGrab
 
-    if (!IsSet(ChildGui) || !ChildGui || !IsSet(Slider))
+    if (!IsSet(ContentGui) || ContentGui == "" || !IsSet(Slider))
         return false
     if (ScrollMaxOffset() <= 0)
         return false
-    if !DllCall("user32\IsWindowVisible", "Ptr", ChildGui.Hwnd, "Int")
+    if !DllCall("user32\IsWindowVisible", "Ptr", ContentGui.Hwnd, "Int")
         return false
 
     oldMode := A_CoordModeMouse
@@ -2543,13 +2758,14 @@ TryBeginScrollDrag() {
     MouseGetPos(&screenX, &screenY)
     CoordMode("Mouse", oldMode)
 
-    try WinGetPos(&childX, &childY, , &childH, "ahk_id " ChildGui.Hwnd)
+    try WinGetPos(&childX, &childY, , , "ahk_id " ContentGui.Hwnd)
     catch
         return false
 
     localX := screenX - childX
     localY := screenY - childY
-    if (localY < 0 || localY > childH)
+    
+    if (localY < 0 || localY > FrameH)
         return false
     if (localX < SliderX - 5 || localX > SliderX + SliderW + 5)
         return false
@@ -2568,14 +2784,14 @@ TryBeginScrollDrag() {
 }
 
 ScrollDragWatch() {
-    global ChildGui, ScrollDragging, ScrollDragGrab
+    global ContentGui, ScrollDragging, ScrollDragGrab
 
     try {
-        if (!ScrollDragging || !GetKeyState("LButton", "P") || !IsSet(ChildGui) || !ChildGui) {
+        if (!ScrollDragging || !GetKeyState("LButton", "P") || !IsSet(ContentGui) || ContentGui == "") {
             StopScrollDrag()
             return
         }
-        childHwnd := ChildGui.Hwnd
+        childHwnd := ContentGui.Hwnd
         if (!childHwnd || !WinExist("ahk_id " childHwnd)) {
             StopScrollDrag()
             return
@@ -2595,8 +2811,6 @@ ScrollDragWatch() {
 
         SetScrollPos(ScrollPosFromThumbY(screenY - childY - ScrollDragGrab))
     } catch Error as err {
-        ; A destroyed control/window or any unexpected GUI error must not leave
-        ; the high-frequency drag callback alive.
         StopScrollDrag()
     }
 }
@@ -2732,6 +2946,8 @@ EnableStratRotation(*) {
         ; Keep Auto Settings alongside Auto Equip when rotation controls collapse.
         AutoConfigCtrl.Move(285, 190)
     }
+    
+    UpdateStrategyButtons()
 }
 
 EnableAutoEquip(ctrl, *) {
@@ -2782,8 +2998,10 @@ SelectStrat1(ctrl, *) {
         Strategy1Path := f
         IniWrite(f, SettingsFile, "Options", "Strategy1")
         LoadStrategyFile(f)
+        UpdateStrategyButtons()
     }
 }
+
 SelectStrat2(ctrl, *) {
     global Strategy2Path
     targDir := RecordingsDir
@@ -2796,6 +3014,7 @@ SelectStrat2(ctrl, *) {
         Strategy2Ctrl.Value := f
         Strategy2Path := f
         IniWrite(f, SettingsFile, "Options", "Strategy2")
+        UpdateStrategyButtons()
     }
 }
 ClearStrat1(ctrl, *) {
@@ -2803,23 +3022,80 @@ ClearStrat1(ctrl, *) {
     Strategy1Ctrl.Value := ""
     Strategy1Path := ""
     IniWrite(" ", SettingsFile, "Options", "Strategy1")
+    UpdateStrategyButtons()
 }
+
 ClearStrat2(ctrl, *) {
     global Strategy2Path
     Strategy2Ctrl.Value := ""
     Strategy2Path := ""
     IniWrite(" ", SettingsFile, "Options", "Strategy2")
+    UpdateStrategyButtons()
 }
+
 SaveStrat1(ctrl, *) {
     global Strategy1Path, Strategy1Ctrl
     Strategy1Path := Strategy1Ctrl.Text
     IniWrite(Strategy1Ctrl.Text, SettingsFile, "Options", "Strategy1")
+    SetTimer(DebouncedUpdateStrategyButtons, -500)
 }
 
 SaveStrat2(ctrl, *) {
     global Strategy2Path, Strategy2Ctrl
     Strategy2Path := Strategy2Ctrl.Text
     IniWrite(Strategy2Ctrl.Text, SettingsFile, "Options", "Strategy2")
+    SetTimer(DebouncedUpdateStrategyButtons, -500)
+}
+
+DebouncedUpdateStrategyButtons() {
+    UpdateStrategyButtons()
+}
+
+GetStrategyStartProblem() {
+    global MainGui
+
+    if (!IsSet(MainGui) || !MainGui)
+        return "The macro UI is not ready."
+
+    try {
+        v := MainGui.Submit(false)
+    } catch Error as err {
+        return "Could not read the strategy settings: " err.Message
+    }
+
+    partyProblem := SyncPartySettingsFromGui(false)
+    if (partyProblem != "")
+        return partyProblem
+
+    if (v.RotateStrategies = 1) {
+        for num, path in [Trim(v.Strategy1), Trim(v.Strategy2)] {
+            if (path = "" || !FileExist(path))
+                return "Rotation strategy " num " is empty or missing."
+        }
+        return ""
+    }
+
+    if ((Trim(v.Strategy1) != "" && FileExist(Trim(v.Strategy1)))
+        || (Trim(v.Strategy2) != "" && FileExist(Trim(v.Strategy2))))
+        return ""
+
+    return "No valid strategy file is selected."
+}
+
+QueueStrategyStart() {
+    global RunningStrategy, Recording
+
+    if (RunningStrategy)
+        return "The macro is already running."
+    if (Recording)
+        return "The macro is currently recording."
+
+    problem := GetStrategyStartProblem()
+    if (problem != "")
+        return problem
+
+    SetTimer(StartStrategy, -100)
+    return ""
 }
 
 StartStrategy(*) {
@@ -2879,9 +3155,6 @@ StartStrategy(*) {
         return
     }
 
-    if !RunPreflightCheck(stratFile)
-        return
-
     if (g_IsFirstLaunch = 1) {
         IniWrite(0, StateFile, "State", "IsFirstLaunch")
         MsgBox(
@@ -2896,7 +3169,6 @@ StartStrategy(*) {
     IniDelete(StateFile, "State", "TotalLosses")
     IniDelete(StateFile, "State", "TotalTimeSeconds")
     IniDelete(StateFile, "State", "Timescale")
-    IniDelete(StateFile, "State", "Wave")
     IniDelete(StateFile, "State", "CurrentStratStartTime")
     IniDelete(StateFile, "State", "CurrentRotationIndex")
     IniDelete(StateFile, "State", "CurrentRunCount")
@@ -2942,233 +3214,27 @@ StartStrategy(*) {
     CurrentRunCount := 0
     IniWrite(0, StateFile, "State", "CurrentRunCount")
 
-    RunStrategy("", true)
-}
-
-OpenGoalManager(*) {
-    global MainGui, GoalType, GoalTarget, GoalEnabled
-    goalGui := Gui("+Owner" MainGui.Hwnd " +Border", "Smart Goals Assistant")
-    goalGui.BackColor := "121212"
-    goalGui.SetFont("s10 cFFFFFF", UIFont())
-    goalGui.Add("Text", "x20 y16 w520 h38 +Wrap", "Tell the assistant what you want to grind, or set a goal directly. Tower entry is no longer required; all downloaded strategies are considered.")
-    promptCtrl := goalGui.Add("Edit", "x20 y62 w440 h30", "")
-    promptCtrl.SetFont("c000000", UIFont())
-    askBtn := goalGui.Add("Button", "x470 y62 w70 h30", "Ask AI")
-    answerCtrl := goalGui.Add("Edit", "x20 y102 w520 h86 Multi ReadOnly +VScroll -Wrap Background1B1B1B", "Ask for a recommended mode, strategy, setup, or troubleshooting help.")
-    answerCtrl.SetFont("cFFFFFF", UIFont())
-    goalGui.Add("Text", "x20 y205 w100", "Goal type")
-    typeCtrl := goalGui.Add("DropDownList", "x130 y201 w180", ["Coins", "Gems"])
-    typeCtrl.SetFont("c000000", UIFont())
-    typeCtrl.Text := GoalType
-    goalGui.Add("Text", "x20 y245 w100", "Amount to gain")
-    targetCtrl := goalGui.Add("Edit", "x130 y241 w180 Number", GoalTarget > 0 ? GoalTarget : "")
-    targetCtrl.SetFont("c000000", UIFont())
-    statusCtrl := goalGui.Add("Text", "x20 y286 w520 h44 cAAAAAA +Wrap", GoalEnabled ? "A goal is active. Saving replaces it." : "No active goal. Smart selection uses compatible reward and duration data from downloaded strategies.")
-    saveBtn := goalGui.Add("Button", "x20 y342 w250 h38", "Choose best strategy & save")
-    cancelBtn := goalGui.Add("Button", "x290 y342 w250 h38", "Disable goal")
-    askBtn.OnEvent("Click", (*) => AskGoalAssistant(promptCtrl, answerCtrl, askBtn))
-    saveBtn.OnEvent("Click", (*) => SaveGoalFromGui(goalGui, typeCtrl, targetCtrl, statusCtrl))
-    cancelBtn.OnEvent("Click", (*) => DisableGoal(goalGui))
-    goalGui.Show("w560 h400")
-}
-
-OpenRecordedStrategyEditor(*) {
-    global RecordingsDir
-    selected := FileSelect(1, RecordingsDir, "Choose a recorded strategy to edit", "Strategy files (*.strat)")
-    if (selected = "")
-        return
-    if !FileExist(selected) {
-        ModernMsgBox("Strategy Editor", "That strategy file no longer exists.", "OK", "WARNING")
-        return
-    }
-    Run('notepad.exe "' selected '"')
-}
-
-AskGoalAssistant(promptCtrl, answerCtrl, askBtn) {
-    prompt := Trim(promptCtrl.Value)
-    if (prompt = "") {
-        answerCtrl.Value := "Type what you want help with first."
-        return
-    }
-    askBtn.Enabled := false
-    answerCtrl.Value := "Thinking..."
-    try {
-        answerCtrl.Value := OfficialRemoteAsk(prompt)
-    } catch Error as err {
-        answerCtrl.Value := "Could not reach the assistant: " SubStr(err.Message, 1, 220)
-    } finally {
-        askBtn.Enabled := true
-    }
-}
-
-NormalizeTowerName(value) {
-    value := StrLower(Trim(value))
-    value := RegExReplace(value, "i)^(golden|g\.|g|regular|r\.|r)\s+")
-    return RegExReplace(value, "[^a-z0-9]+", "")
-}
-
-StrategyCompatible(required, owned) {
-    if (Trim(owned) = "")
-        return true
-    ownedSet := Map()
-    loop parse, owned, "," {
-        key := NormalizeTowerName(A_LoopField)
-        if (key != "")
-            ownedSet[key] := true
-    }
-    loop parse, required, "," {
-        key := NormalizeTowerName(A_LoopField)
-        if (key != "" && !ownedSet.Has(key))
-            return false
-    }
-    return true
-}
-
-StrategyRewardScore(path, goalType) {
-    income := IniRead(path, "Info", "income", "")
-    if (goalType = "Gems") {
-        if !RegExMatch(income, "i)([\d,]+)\s*gems?", &reward)
-            return 0
-    } else if !RegExMatch(income, "i)([\d,]+)\s*coins?", &reward)
-        return 0
-    amount := Number(StrReplace(reward[1], ","))
-    timeText := IniRead(path, "Info", "time", "")
-    minutes := 30
-    if RegExMatch(timeText, "i)(\d+)\s*(?:m|min)", &duration)
-        minutes := Max(1, Integer(duration[1]))
-    return amount / minutes
-}
-
-FindBestGoalStrategy(goalType, owned) {
-    global StratsDir, RecordingsDir
-    bestPath := "", bestScore := 0
-    for dir in [StratsDir, RecordingsDir] {
-        loop files, dir "\*.strat" {
-            path := A_LoopFileFullPath
-            required := IniRead(path, "Settings", "requiredTowers", "")
-            if !StrategyCompatible(required, owned)
-                continue
-            score := StrategyRewardScore(path, goalType)
-            if (score > bestScore)
-                bestScore := score, bestPath := path
+    if !RunStrategy("", true) {
+        if (RunningStrategy) {
+            RuntimeLogError("strategy_lifecycle_failed", "Strategy lifecycle ended before completing its transition")
+            StopStrategy()
         }
     }
-    return bestPath
-}
-
-SaveGoalFromGui(goalGui, typeCtrl, targetCtrl, statusCtrl) {
-    global GoalEnabled, GoalType, GoalTarget, GoalStrategy, OwnedTowers, Strategy1Path, Strategy1Ctrl, SettingsFile
-    if !IsNumber(targetCtrl.Value) || Integer(targetCtrl.Value) <= 0 {
-        statusCtrl.Text := "Enter a positive target amount."
-        return
-    }
-    chosen := FindBestGoalStrategy(typeCtrl.Text, "")
-    if (chosen = "") {
-        statusCtrl.Text := "No compatible strategy with matching reward data was found."
-        return
-    }
-    GoalType := typeCtrl.Text
-    GoalTarget := Integer(targetCtrl.Value)
-    OwnedTowers := ""
-    GoalStrategy := chosen
-    GoalEnabled := 1
-    Strategy1Path := chosen
-    Strategy1Ctrl.Value := chosen
-    IniWrite(1, SettingsFile, "Goal", "Enabled")
-    IniWrite(GoalType, SettingsFile, "Goal", "Type")
-    IniWrite(GoalTarget, SettingsFile, "Goal", "Target")
-    IniWrite(OwnedTowers, SettingsFile, "Goal", "OwnedTowers")
-    IniWrite(GoalStrategy, SettingsFile, "Goal", "Strategy")
-    IniWrite(chosen, SettingsFile, "Options", "Strategy1")
-    LoadStrategyFile(chosen)
-    SplitPath(chosen, &name)
-    statusCtrl.Text := "Selected " name ". Goal saved."
-}
-
-DisableGoal(goalGui := 0) {
-    global GoalEnabled, SettingsFile
-    GoalEnabled := 0
-    IniWrite(0, SettingsFile, "Goal", "Enabled")
-    SetTimer(CheckGoalProgress, 0)
-    if goalGui
-        goalGui.Destroy()
-}
-
-CheckGoalProgress() {
-    global GoalEnabled, GoalType, GoalTarget, StateFile, SettingsFile
-    if !GoalEnabled
-        return
-    sectionKey := GoalType = "Gems" ? "Gems" : "Coins"
-    gained := Integer(IniRead(StateFile, "State", sectionKey, "0"))
-    if (gained < GoalTarget)
-        return
-    GoalEnabled := 0
-    IniWrite(0, SettingsFile, "Goal", "Enabled")
-    SetTimer(CheckGoalProgress, 0)
-    message := "Goal complete: earned " gained " " GoalType "."
-    SendToWebhookInstant(message, , false)
-    MsgBox(message, "Ultimate Macro Goal Complete", "Iconi")
-    StopStrategy()
-}
-
-RunPreflightCheck(stratFile) {
-    problems := []
-    warnings := []
-
-    if !FileExist(stratFile)
-        problems.Push("The selected strategy file is missing.")
-    else if (Trim(IniRead(stratFile, "Settings", "requiredTowers", "")) = "")
-        problems.Push("The strategy does not declare its required towers.")
-
-    if !GetRobloxHWND()
-        warnings.Push("Roblox is not open; Ultimate Macro will launch TDS for you.")
-    if !((A_ScreenWidth = 1920 && A_ScreenHeight = 1080) || (A_ScreenWidth = 1366 && A_ScreenHeight = 768) || (A_ScreenWidth = 1280 && A_ScreenHeight = 720))
-        warnings.Push("Display resolution is " A_ScreenWidth "x" A_ScreenHeight "; 1920x1080, 1366x768, or 1280x720 is recommended.")
-
-    try {
-        hwnd := GetRobloxHWND()
-        if hwnd {
-            dpi := DllCall("User32.dll\GetDpiForWindow", "Ptr", hwnd, "UInt")
-            if (dpi > 0 && Round(dpi / 96 * 100) != 100)
-                warnings.Push("Windows display scaling is about " Round(dpi / 96 * 100) "%; 100% is recommended.")
-        }
-    }
-
-    try {
-        langs := OCR.GetAvailableLanguages()
-        if !RegExMatch(langs, "i)(^|[^a-z])en(?:-[a-z]+)?([^a-z]|$)")
-            problems.Push("English OCR support is unavailable.")
-    } catch Error as err {
-        problems.Push("OCR could not start: " err.Message)
-    }
-
-    if (problems.Length) {
-        message := "Fix these problems before starting:`n`n"
-        for item in problems
-            message .= "• " item "`n"
-        ModernMsgBox("Pre-run check failed", message, "OK", "WARNING")
-        return false
-    }
-    if (warnings.Length) {
-        message := "The run can continue, but check these items:`n`n"
-        for item in warnings
-            message .= "• " item "`n"
-        if (MsgBox(message "`nContinue anyway?", "Pre-run check", "OKCancel Icon!") = "Cancel")
-            return false
-    }
-    RuntimeLogInfo("preflight_passed", "Pre-run checks completed", "strategy=" stratFile)
-    return true
 }
 
 StopStrategy(*) {
     global RunningStrategy, AutorunStartTime, Recording, MacroRecording, InputHookObj
 
+    wasRunning := RunningStrategy
+    if (wasRunning)
+        RunningStrategy := false
+
     StopRuntimeTimers()
-    if (RunningStrategy || Recording || MacroRecording)
+    if (wasRunning || Recording || MacroRecording)
         ReleaseHeldInput()
     KillSubmacros()
 
-    if (RunningStrategy) {
+    if (wasRunning) {
         if (AutorunStartTime > 0) {
             runtime := FormatRuntime(AutorunStartTime)
             Coins := IniRead(StateFile, "State", "Coins", "0")
@@ -3190,7 +3256,6 @@ StopStrategy(*) {
         IniDelete(StateFile, "State", "TotalLosses")
         IniDelete(StateFile, "State", "TotalTimeSeconds")
         IniDelete(StateFile, "State", "Timescale")
-        IniDelete(StateFile, "State", "Wave")
         IniDelete(StateFile, "State", "CurrentStratStartTime")
         IniDelete(StateFile, "State", "CurrentRotationIndex")
         IniDelete(StateFile, "State", "CurrentRunCount")
@@ -3199,7 +3264,6 @@ StopStrategy(*) {
         IniDelete(StateFile, "State", "HeartbeatPhase")
         IniDelete(StateFile, "State", "HeartbeatTick")
         IniDelete(StateFile, "State", "HeartbeatTimeout")
-        RunningStrategy := false
         SafeReload()
         return
     }
@@ -4011,8 +4075,10 @@ SimplicityPath() {
             }
 
             if (!FoundMap) {
-                if (attempts > 3)
+                if (attempts > 3) {
                     SafeReload()
+                    return false
+                }
                 LogToConsole("Can't detect the correct position! Resetting..", true)
                 resetCharacter()
                 Sleep(7500)
@@ -4040,24 +4106,31 @@ ToggleAutoskip() {
 ChangeTargets(towerID, target) {
     global LastOpenedTowerID, needtocheckTowerUI, Towers, PotatoMode, ResV2, ResV1, canBeUpgraded, unfocusX, unfocusY
     global canUseAbility
-    canUseAbility := false
 
-    if (LastOpenedTowerID != towerID) {
-        Click(Towers[towerID].x, Towers[towerID].y)
-        Sleep 250
-    } else {
-        MouseMove(0, ScaleY(50), , "R")
+    if (!Towers.Has(towerID)) {
+        LogToConsole("Cannot change targets: tower " towerID " is no longer available.", true)
+        return false
     }
 
-    LastOpenedTowerID := towerID
-    needtocheckTowerUI := true
-    attempts := 0
     targets := ["First Enemy", "Last Enemy", "Strongest", "Weakest", "Closest", "Farthest", "Random"]
+    canUseAbility := false
 
-    LogToConsole("Changing " towerID " targets to " target "...")
+    try {
+        if (LastOpenedTowerID != towerID) {
+            Click(Towers[towerID].x, Towers[towerID].y)
+            Sleep 250
+        } else {
+            MouseMove(0, ScaleY(50), , "R")
+        }
 
-    upgTime := A_TickCount
-    loop {
+        LastOpenedTowerID := towerID
+        needtocheckTowerUI := true
+        attempts := 0
+
+        LogToConsole("Changing " towerID " targets to " target "...")
+
+        upgTime := A_TickCount
+        loop {
         openedSuccessfully := false
         StartTime := A_TickCount
 
@@ -4078,6 +4151,7 @@ ChangeTargets(towerID, target) {
                 if (attempts > 30) {
                     LogToConsole("Tower " towerID " menu not found after 30 attempts, reloading...", true)
                     SafeReload()
+                    return false
                 }
                 variation := Random(-4, 4)
                 Click(Towers[towerID].x, Towers[towerID].y + ScaleY(variation))
@@ -4119,6 +4193,11 @@ ChangeTargets(towerID, target) {
                 targetIndex := index
         }
 
+        if (targetIndex = 0) {
+            LogToConsole("Cannot change tower " towerID ": unknown target '" target "'.", true)
+            return false
+        }
+
         if (currentIndex == 0)
             currentIndex := 1
 
@@ -4151,7 +4230,7 @@ ChangeTargets(towerID, target) {
         Click(ScaleX(unfocusX), ScaleY(unfocusY))
         Sleep 250
 
-        LastOpenedTowerID := 0
+        LastOpenedTowerID := ""
         Click(Towers[towerID].x, Towers[towerID].y)
         Sleep 250
         LastOpenedTowerID := towerID
@@ -4200,8 +4279,9 @@ ChangeTargets(towerID, target) {
             break
         }
     }
-
-    canUseAbility := true
+    } finally {
+        canUseAbility := true
+    }
 }
 
 CloneTower(towerId, x, y, wait := 0) {
@@ -4383,6 +4463,7 @@ BrawlerReposition(towerId, x, y) {
                 if (attempts > 30) {
                     LogToConsole("Tower " towerID " menu not found after 30 attempts, reloading...", true)
                     SafeReload()
+                    return false
                 }
                 variation := Random(-4, 4)
                 Click(Towers[towerId].x, Towers[towerId].y + ScaleY(variation))
@@ -4864,8 +4945,6 @@ SaveAllSettings(ctrl, *) {
     global HoloKey, RaiseDeadKey, ChangeTargetsKey, HologramKey, RepoKey, CollectPlaytimeRewards, UpgradeTowerGKey,
         UpgradeTowerGBKey, UseHForUpgrade, UseNumbersForHotbar
     global UpgradeDelay
-    global MapMenuDelay, MapTypingDelay, MapResultDelay
-    global CustomDJTrackSchedule
 
     tempChainKey := SubStr(RegExReplace(ChainKeyCtrl.Value, "\s", ""), 1, 1)
     tempBeatKey := SubStr(RegExReplace(BeatKeyCtrl.Value, "\s", ""), 1, 1)
@@ -4873,6 +4952,8 @@ SaveAllSettings(ctrl, *) {
     tempCancelPlacementKey := SubStr(RegExReplace(CancelPlacementKeyCtrl.Value, "\s", ""), 1, 1)
     tempUpgradeTowerGKey := SubStr(RegExReplace(UpgradeTowerGCtrl.Value, "\s", ""), 1, 1)
     tempUpgradeTowerGBKey := SubStr(RegExReplace(UpgradeTowerGBCtrl.Value, "\s", ""), 1, 1)
+    tempRaiseDeadKey := SubStr(RegExReplace(RaiseDeadKeyCtrl.Value, "\s", ""), 1, 1)
+    tempRepoKey := SubStr(RegExReplace(RepoKeyCtrl.Value, "\s", ""), 1, 1)
 
     if (tempChainKey = "")
         tempChainKey := "C"
@@ -4886,6 +4967,10 @@ SaveAllSettings(ctrl, *) {
         tempUpgradeTowerGKey := "E"
     if (tempUpgradeTowerGBKey = "")
         tempUpgradeTowerGBKey := "Z"
+    if (tempRaiseDeadKey = "")
+        tempRaiseDeadKey := "V"
+    if (tempRepoKey = "")
+        tempRepoKey := "L"
 
     tempPlaceTowerKey := NormalizeKey(PlaceTowerKeyCtrl.Value)
     tempUpgradeTowerKey := NormalizeKey(UpgradeTowerKeyCtrl.Value)
@@ -4905,8 +4990,9 @@ SaveAllSettings(ctrl, *) {
                 tempUpgradeTowerGBKey), name: "Upgrade Bottom Path (TDS keybind)" }, { val: tempPlaceTowerKey, name: "Place Tower" }, { val: tempUpgradeTowerKey,
                     name: "Upgrade Tower" }, { val: tempAlignCameraKey, name: "Align Camera" }, { val: tempChangeDJTrackKey,
                         name: "Change DJ Track" }, { val: tempSellTowerKey, name: "Sell Tower" }, { val: tempDeleteTowerRecordingKey,
-                            name: "Delete Tower Recording" }, { val: tempRecordInputsKey, name: "Record Inputs" }, { val: tempHoloKey,
-                                name: "Hologram Tower" }, { val: tempChangeTargetsKey, name: "Change Targets" }
+        name: "Delete Tower Recording" }, { val: tempRecordInputsKey, name: "Record Inputs" }, { val: tempHoloKey,
+                                name: "Hologram Tower" }, { val: tempChangeTargetsKey, name: "Change Targets" }, { val: NormalizeKey("^" tempRaiseDeadKey),
+                                    name: "Raise the Dead" }, { val: NormalizeKey("^" tempRepoKey), name: "Brawler Reposition" }
     ]
 
     for item in KeysToCheck {
@@ -4934,7 +5020,8 @@ SaveAllSettings(ctrl, *) {
     UpgradeTowerGBKey := tempUpgradeTowerGBKey
 
     oldRecordingKeys := [PlaceTowerKey, UpgradeTowerKey, AlignCameraKey, ChangeDJTrackKey,
-        SellTowerKey, DeleteTowerRecordingKey, RecordInputsKey, HoloKey, ChangeTargetsKey]
+        SellTowerKey, DeleteTowerRecordingKey, RecordInputsKey, HoloKey, ChangeTargetsKey,
+        "~^" RepoKey, "~^" RaiseDeadKey]
 
     PlaceTowerKey := tempPlaceTowerKey
     UpgradeTowerKey := tempUpgradeTowerKey
@@ -4945,9 +5032,9 @@ SaveAllSettings(ctrl, *) {
     RecordInputsKey := tempRecordInputsKey
     HoloKey := tempHoloKey
     ChangeTargetsKey := tempChangeTargetsKey
-    RaiseDeadKey := RaiseDeadKeyCtrl.Value
+    RaiseDeadKey := tempRaiseDeadKey
     HologramKey := HologramKeyCtrl.Value
-    RepoKey := RepoKeyCtrl.Value
+    RepoKey := tempRepoKey
 
     RegisterRecordingHotkeys(oldRecordingKeys)
 
@@ -4968,14 +5055,6 @@ SaveAllSettings(ctrl, *) {
     MouseDelay := MouseDelayUpDown.Value
     KeyDelay := KeyDelayUpDown.Value
     UpgradeDelay := UpgradeDelayCtrl.Value
-    MapMenuDelay := IsNumber(MapMenuDelayCtrl.Value) ? Max(50, Min(5000, Integer(MapMenuDelayCtrl.Value))) : 500
-    MapTypingDelay := IsNumber(MapTypingDelayCtrl.Value) ? Max(0, Min(5000, Integer(MapTypingDelayCtrl.Value))) : 100
-    MapResultDelay := IsNumber(MapResultDelayCtrl.Value) ? Max(50, Min(5000, Integer(MapResultDelayCtrl.Value))) : 300
-    CustomDJTrackSchedule := Trim(DJTrackScheduleCtrl.Value)
-    if (CustomDJTrackSchedule != "" && !RegExMatch(CustomDJTrackSchedule, "i)^\s*\d{1,3}(?:\s*-\s*\d{1,3})?\s*:\s*(?:red|green|purple)(?:\s*;\s*\d{1,3}(?:\s*-\s*\d{1,3})?\s*:\s*(?:red|green|purple))*\s*$")) {
-        ModernMsgBox("Invalid DJ schedule", "Use rules like 18-20:Red;21-30:Green. Only Red, Green, and Purple are supported.", "OK", "WARNING")
-        return
-    }
 
     IniWrite(ChainKey, SettingsFile, "Hotkeys", "Chain")
     IniWrite(BeatKey, SettingsFile, "Hotkeys", "Beat")
@@ -5003,10 +5082,6 @@ SaveAllSettings(ctrl, *) {
     IniWrite(MouseDelay, SettingsFile, "Options", "MouseDelay")
     IniWrite(KeyDelay, SettingsFile, "Options", "KeyDelay")
     IniWrite(UpgradeDelay, SettingsFile, "Options", "UpgradeDelay")
-    IniWrite(MapMenuDelay, SettingsFile, "Delays", "MapMenu")
-    IniWrite(MapTypingDelay, SettingsFile, "Delays", "MapTyping")
-    IniWrite(MapResultDelay, SettingsFile, "Delays", "MapResult")
-    IniWrite(CustomDJTrackSchedule, SettingsFile, "Options", "DJTrackSchedule")
 
     IniWrite(PlaceTowerKey, SettingsFile, "RecordingHotkeys", "PlaceTowerKey")
     IniWrite(UpgradeTowerKey, SettingsFile, "RecordingHotkeys", "UpgradeTowerKey")
@@ -5178,6 +5253,20 @@ ClearStoredLogs(ctrl, *) {
     MsgBox("Cleared " removed " log file" (removed = 1 ? "" : "s") ".", "Clear Logs", "0x1040")
 }
 
+ExportLogsForDevelopers(ctrl, *) {
+    outputPath := A_Desktop "\\UltimateMacro-logs-" FormatTime(, "yyyyMMdd-HHmmss") ".txt"
+    try {
+        if FileExist(outputPath)
+            FileDelete(outputPath)
+        if !RuntimeLogExportBundle(outputPath)
+            throw Error("The diagnostic log bundle could not be created.")
+        MsgBox("Developer logs exported to:`n" outputPath, "Export Logs", "0x1040")
+    } catch Error as err {
+        RuntimeLogError("logs_export_failed", "Developer log export failed", "error=" err.Message)
+        MsgBox("Could not export developer logs.`n`n" err.Message, "Export Logs", "0x1040")
+    }
+}
+
 FormatLogSize(bytes) {
     if (bytes >= 1048576)
         return Format("{:.1f} MB", bytes / 1048576)
@@ -5232,9 +5321,10 @@ CheckWebhookLink(*) {
 }
 
 EnableWebhookLink2(*) {
+    global CurrentTab, DiscordPage, WebhookLinkCtrl2
     v := MainGui.Submit(false)
     toggle := v.WebhookSepatateTriumphScreenshots
-    if toggle = 1 {
+    if (toggle = 1 && IsSet(CurrentTab) && CurrentTab = "Tab4" && DiscordPage = "Webhook") {
         WebhookLinkCtrl2.Visible := true
     } else {
         WebhookLinkCtrl2.Visible := false
@@ -5363,11 +5453,26 @@ HelpCheckTheMap(*) {
 LoadStrategyFile(file) {
     global Towers, RecordedSteps, gamemap, difficulty, requiredTowers, autoChain, autoCaravan
     global autoDropTheBeat, AutoSkip, AbilitySpam, MoveEnabled, MoveDirection, MoveDuration
-    global modifiers, Commander, StrategyWidth, StrategyHeight, DJTrackSchedule, ActiveDJTrackRule, CustomDJTrackSchedule
+    global modifiers, Commander, StrategyWidth, StrategyHeight, TimescaleActive
+    global LastOpenedTowerID, needtocheckTowerUI, canUseAbility, canBeUpgraded
+    global ActiveRTowerID, CachedMenuUI, CachedResV2, CachedResV1, isUpgradeAuthorized
 
     Towers := Map()
     RecordedSteps := []
     DeleteAllIndicators()
+
+    ; A strategy reload is a new run boundary. Do not carry selection, upgrade,
+    ; ability, or TimeScale observations into the next match.
+    TimescaleActive := false
+    LastOpenedTowerID := ""
+    needtocheckTowerUI := true
+    canUseAbility := true
+    canBeUpgraded := true
+    ActiveRTowerID := false
+    CachedMenuUI := { x: 0, y: 0 }
+    CachedResV2 := ""
+    CachedResV1 := ""
+    isUpgradeAuthorized := false
 
     gamemap := IniRead(file, "Settings", "map", "")
     difficulty := IniRead(file, "Settings", "difficulty", "")
@@ -5378,8 +5483,6 @@ LoadStrategyFile(file) {
     AutoSkip := IniRead(file, "Settings", "autoSkip", "ON")
     AbilitySpam := IniRead(file, "Settings", "abilitySpam", "ON")
     modifiers := IniRead(file, "Settings", "modifiers", "")
-    DJTrackSchedule := CustomDJTrackSchedule != "" ? CustomDJTrackSchedule : IniRead(file, "Settings", "djTrackSchedule", "")
-    ActiveDJTrackRule := ""
 
     moveDown := IniRead(file, "Settings", "moveDown", "false")
     tempEnabled := IniRead(file, "Settings", "moveEnabled", "")
@@ -5442,13 +5545,17 @@ RunStrategy(stratFile := "", skipRestart := false) {
     global unfocusX, unfocusY, UseTimeScale, TimeScaleMultiplier, TimeScaleMode
     global SettingsFile, requiredTowers, modifiers, LastOpenedTowerID
     global LastSkipCheck, SKIP_CHECK_INTERVAL, AutorunStartTime, StateFile
-    global WebhookEnabled, CurrentStratStartTime, CurrentRunCount, gamemap, AutoEquip
+    global WebhookEnabled, CurrentStratStartTime, CurrentRunCount, gamemap, AutoEquip, IsRestarting
 
     if (RunningStrategy != true)
         return
 
-    if (!skiprestart)
-        isDisconnected()
+    ; A restart-button run may stay on the same map. The next lifecycle pass
+    ; must still begin with a fresh map/camera check.
+    IsRestarting := false
+
+    if (!skiprestart && !isDisconnected())
+        return false
 
     switched := false
     if (RotateStrategies) {
@@ -5512,28 +5619,15 @@ RunStrategy(stratFile := "", skipRestart := false) {
             if !CheckRestart()
                 return false
         } else {
-            sessionState := DetectTdsSessionState()
-            if (sessionState = "ready") {
-                RuntimeLogInfo("startup_resume_ready", "Using the existing TDS ready screen")
-                LogToConsole("TDS ready screen detected; continuing without restarting Roblox.", true, false)
-            } else if (sessionState = "lobby") {
-                RuntimeLogInfo("startup_resume_lobby", "Using the existing TDS lobby")
-                LogToConsole("TDS lobby detected; continuing without restarting Roblox.", true, false)
-                if (AutoEquip && !EquipTowers(RequiredTowers))
-                    return false
-                if !JoinGame()
-                    return false
-            } else {
-                if (GetRobloxHWND())
-                    RuntimeLogWarn("startup_state_unknown", "Existing TDS state could not be resumed safely; relaunching")
-                CloseRoblox()
-                if !RunRoblox()
-                    return false
-                if (AutoEquip && !EquipTowers(RequiredTowers))
-                    return false
-                if !JoinGame()
+            CloseRoblox()
+            if !RunRoblox()
+                return false
+            if (AutoEquip) {
+                if !EquipTowers(RequiredTowers)
                     return false
             }
+            if !JoinGame()
+                return false
         }
     } else {
         CloseRoblox()
@@ -5579,33 +5673,20 @@ RunStrategy(stratFile := "", skipRestart := false) {
     if !ClickReady()
         return false
 
-    PlayStrategy()
+    if !PlayStrategy() {
+        if (RunningStrategy)
+            StopStrategy()
+        return false
+    }
     return true
 }
 
-DetectTdsSessionState() {
-    global readyX, readyY
-    if !GetRobloxHWND() || !getRobloxPos(, , &w, &h)
-        return "closed"
-    ActivateRoblox()
-    if FindReadyButton(&readyX, &readyY)
-        return "ready"
-    play := AdvancedImageSearch("Resources/Play.png", Round(w * 0.25), Round(h * 0.60), Round(w * 0.75), Round(h * 0.40), 0.5, 1.5)
-    if (play.status = "success" && play.score > 0.65)
-        return "lobby"
-    return "unknown"
-}
-
 PlayStrategy() {
-    global canUseAbility, MultiplayerEnabled, StateFile, GoalEnabled, DJTrackSchedule
+    global canUseAbility, MultiplayerEnabled, StateFile, RunningStrategy
 
     MacroPhase("playing", 900000)
     IniWrite(A_TickCount, StateFile, "State", "TimeWhenStartedPlaying")
     SetTimer(UseAbilities, 750)
-    if GoalEnabled
-        SetTimer(CheckGoalProgress, 5000)
-    if (Trim(DJTrackSchedule) != "")
-        SetTimer(CheckDJTrackSchedule, 5000)
     if (MultiplayerEnabled) {
         SetTimer(checkCondition, 15000)
     }
@@ -5649,7 +5730,12 @@ PlayStrategy() {
             SetDJTrack(t[1])
             i++
         } else if RegExMatch(step, "i)SpawnTower\s*\(.*\)") {
-            ExecuteStep(step)
+            if !ExecuteStep(step) {
+                if (IsSet(RunningStrategy) && !RunningStrategy)
+                    return false
+                RuntimeLogWarn("placement_step_failed", "Placement did not complete; continuing with the next step",
+                    "step=" i)
+            }
             i++
         } else {
             try {
@@ -5673,44 +5759,6 @@ PlayStrategy() {
     ;Do not add anything here.
 }
 
-ReadCurrentWave() {
-    global StateFile
-    if !GetRobloxScreenClientRect(&screenX, &screenY, &screenW, &screenH)
-        return 0
-    try {
-        result := OCR.FromRect(screenX + Round(screenW * 0.25), screenY, Round(screenW * 0.5), Round(screenH * 0.22), {
-            lang: "en-US", scale: 1.5, grayscale: 1
-        })
-        if RegExMatch(result.Text, "i)wave\s*(\d{1,3})", &match) {
-            wave := Integer(match[1])
-            IniWrite(wave, StateFile, "State", "Wave")
-            return wave
-        }
-    } catch Error as err {
-        RuntimeLogWarn("wave_ocr_failed", "Could not read the current wave", "error=" err.Message)
-    }
-    return Integer(IniRead(StateFile, "State", "Wave", "0"))
-}
-
-CheckDJTrackSchedule() {
-    global DJTrackSchedule, ActiveDJTrackRule
-    wave := ReadCurrentWave()
-    if (wave <= 0)
-        return
-    loop parse, DJTrackSchedule, ";" {
-        rule := Trim(A_LoopField)
-        if !RegExMatch(rule, "i)^(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*:\s*(red|green|purple)$", &match)
-            continue
-        firstWave := Integer(match[1])
-        lastWave := match[2] != "" ? Integer(match[2]) : firstWave
-        if (wave >= firstWave && wave <= lastWave && ActiveDJTrackRule != rule) {
-            if SetDJTrack(match[3])
-                ActiveDJTrackRule := rule
-            return
-        }
-    }
-}
-
 ExecuteStep(step) {
     global Commander, unfocusX, unfocusY, StrategyWidth, StrategyHeight
     step := RegExReplace(step, "\s*;.*$", "")
@@ -5718,8 +5766,7 @@ ExecuteStep(step) {
     if (step = "")
         return
     if RegExMatch(step, "i)SpawnTower\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d)\s*,\s*(.*?)\s*\)", &m) {
-        SpawnTower(m[1], m[2], m[3], Trim(m[4]))
-        return
+        return SpawnTower(m[1], m[2], m[3], Trim(m[4]))
     }
     if RegExMatch(step,
         "i)UpgradeTower\s*\(\s*([^,]+?)\s*(?:,\s*(false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)", &
@@ -6070,7 +6117,23 @@ EquipTowers(towers) {
                 if (PixelSearch(&eX, &eY, resEquip.x - ScaleX(40), resEquip.y - ScaleY(25),
                     resEquip.x + ScaleX(40), resEquip.y + ScaleY(25), 0x45DC4A, 7)) {
                     Click(resEquip.x, resEquip.y)
-                    towerEquipped := true
+                    verifyDeadline := A_TickCount + 1800
+                    loop {
+                        resUnequip := AdvancedImageSearch("Resources\\unequip.png", X1, Y1, W, H,
+                            0.3 * baseScale, 1.4, 0.025)
+                        if (resUnequip.status == "success" && resUnequip.score > 0.63) {
+                            towerEquipped := true
+                            RuntimeLogInfo("autoequip_tower_confirmed", "Auto Equip state changed after click",
+                                "tower=" tower)
+                            break
+                        }
+                        if (A_TickCount >= verifyDeadline)
+                            break
+                        Sleep(150)
+                    }
+
+                    if !towerEquipped
+                        continue
 
                     if (goldtower) {
                         GoldStart := A_TickCount
@@ -6314,7 +6377,7 @@ RunRoblox(doReload := true) {
         SetTimer(CheckPopups, 5000)
 
         startTime := A_TickCount
-        getRobloxPos(, , &w, &h)
+        geometryLogAt := 0
         loop {
             ActivateRoblox()
 
@@ -6325,6 +6388,15 @@ RunRoblox(doReload := true) {
                 } else {
                     return false
                 }
+            }
+
+            if !getRobloxPos(, , &w, &h) || w <= 0 || h <= 0 {
+                if (A_TickCount - geometryLogAt >= 5000) {
+                    RuntimeLogWarn("run_roblox_geometry_wait", "Roblox client geometry is not ready while waiting for the lobby Play button")
+                    geometryLogAt := A_TickCount
+                }
+                Sleep(250)
+                continue
             }
 
             res0 := AdvancedImageSearch("Resources/Play.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.75), Round(
@@ -6563,6 +6635,15 @@ TryClickDifficultyTarget(target, w, h) {
         }
     }
 
+    ; Hardcore has a locked-state label reading "Unlock Hardcore". OCR cannot
+    ; safely distinguish that label from the actual mode card, so fail closed
+    ; when the dedicated card image is unavailable instead of clicking unlock.
+    if (target = "Hardcore") {
+        RuntimeLogWarn("difficulty_hardcore_image_missing",
+            "Hardcore image was not detected; refusing ambiguous OCR fallback")
+        return false
+    }
+
     ; OCR fallback tolerates changed card artwork while staying inside the game
     ; card panel (never the macro log/console). OCR uses SCREEN coordinates.
     try {
@@ -6577,11 +6658,15 @@ TryClickDifficultyTarget(target, w, h) {
             }
         }
 
+        ocrX := screenX + Round(screenW * 0.22)
+        ocrY := screenY + Round(screenH * 0.06)
+        ocrW := Round(screenW * 0.62)
+        ocrH := Round(screenH * 0.76)
         ocrResult := OCR.FromRect(
-            screenX + Round(screenW * 0.22),
-            screenY + Round(screenH * 0.06),
-            Round(screenW * 0.62),
-            Round(screenH * 0.76),
+            ocrX,
+            ocrY,
+            ocrW,
+            ocrH,
             { lang: langCode, scale: 1.45, grayscale: 1 }
         )
         match := ocrResult.FindString(target, { CaseSense: false, IgnoreLinebreaks: true })
@@ -6645,17 +6730,22 @@ JoinGame() {
     readyY := 0
     MacroPhase("matchmaking", 240000)
     RuntimeLogInfo("matchmaking_ready_reset", "Reset Ready coordinates before fresh matchmaking join")
-    if !getRobloxPos(, , &w, &h) {
-        RuntimeLogWarn("matchmaking_geometry_missing", "Roblox client geometry was unavailable before matchmaking")
-        SafeReload()
-        return false
-    }
 
     startTime := A_TickCount
+    geometryLogAt := 0
     loop {
         if (A_TickCount - startTime > 80000) {
             SafeReload()
             return false
+        }
+
+        if !getRobloxPos(, , &w, &h) || w <= 0 || h <= 0 {
+            if (A_TickCount - geometryLogAt >= 5000) {
+                RuntimeLogWarn("matchmaking_geometry_retry", "Roblox client geometry is not ready; retrying the Play-button search")
+                geometryLogAt := A_TickCount
+            }
+            Sleep(250)
+            continue
         }
 
         x1 := Round(w * 0.25)
@@ -6760,7 +6850,9 @@ JoinGame() {
         difficultyStart := A_TickCount
         difficultyDeadline := difficultyStart + 60000
         lastPlayRetry := 0
-        firstModeScrollAt := difficultyStart + 1500
+        ; Give the mode-selection UI time to finish animating before moving the
+        ; pointer and scrolling. Detection still retries during this wait.
+        firstModeScrollAt := difficultyStart + 6000
         lastModeScroll := difficultyStart
         modeScrollAttempts := 0
 
@@ -6826,6 +6918,8 @@ JoinGame() {
             return false
         }
         if (A_TickCount - startTime > 40000) {
+            RuntimeLogWarn("party_size_timeout", "Party-size selection did not appear after mode selection",
+                "difficulty=" difficulty "; multiplayer=" MultiplayerEnabled)
             SafeReload()
             return false
         }
@@ -7397,14 +7491,17 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         }
 
         if !(e_pr.score >= 0.75) {
-            LogToConsole("The macro can't see the E prompt (" e_pr.score "), retrying again... ", true)
-            return SelectMap(readyX, readyY)
+            LogToConsole("The macro can't see the E prompt (" e_pr.score "). Map selection is ambiguous; reloading...", true)
+            RuntimeLogWarn("map_selection_ambiguous", "Map interaction was not confirmed; refusing recursive re-entry",
+                "map=" gamemap "; score=" e_pr.score)
+            SafeReload()
+            return false
         }
 
         SendEvent("{sc012 down}")
         Sleep(1000)
         SendEvent("{sc012 up}")
-        Sleep(MapMenuDelay)
+        Sleep(500)
 
         foundsearchbar := false
         getRobloxPos(&x, &y, &w, &h)
@@ -7424,7 +7521,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
                 break
             }
 
-            Sleep(MapMenuDelay)
+            Sleep(500)
         }
 
         if (!foundsearchbar) {
@@ -7433,10 +7530,18 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             return false
         }
 
-        Sleep(MapTypingDelay)
+        Sleep(100)
         SendText(gamemap)
+        mapChoiceAttempts := 0
         loop {
-            Sleep(MapResultDelay)
+            mapChoiceAttempts++
+            if (mapChoiceAttempts > 5) {
+                RuntimeLogWarn("map_selection_retry_exhausted", "Map selection did not settle within the bounded retry budget",
+                    "map=" gamemap)
+                SafeReload()
+                return false
+            }
+            Sleep(300)
             if (InArray(SpecialMaps, gamemap)) {
                 SelectionICON := AdvancedImageSearch("Resources/Maps/" gamemap "_Selection.png", Round(w * 0.1), 0,
                 Round(w * 0.7), h, 0.5, 1.5)
@@ -7805,17 +7910,63 @@ activateTimescale() {
             0.55))
         if (res.status = "success" && res.score >= 0.67) {
             Click(res.x, res.y + 55)
-            LogToConsole("Failed to activate timescale! You are out of tickets.", true, false)
+            LogToConsole("Failed to activate timescale! You are out of tickets. Stopping safely.", true, false)
+            RuntimeLogWarn("timescale_no_tickets", "TimeScale could not be enabled because Get More was shown")
+            Send("{sc02B}")
+            Send("#")
+            TimescaleActive := false
+            StopStrategy()
+            return false
 
         } else {
-            res := AdvancedImageSearch("Resources/confirm.png", Round(w * 0.25), Round(h * 0.45), Round(w * 0.50),
-            Round(h * 0.55))
-            if (res.status = "success" && res.score >= 0.67) {
-                Click(res.x, res.y)
-            } else {
-                LogToConsole("failed to activate timescale. the macro can't see the confirm/get more button... (" res.score ")",
+            confirmClicked := false
+            confirmStart := A_TickCount
+            loop {
+                res := AdvancedImageSearch("Resources/confirm.png", Round(w * 0.25), Round(h * 0.45), Round(w * 0.50),
+                Round(h * 0.55))
+                if (res.status = "success" && res.score >= 0.67) {
+                    Click(res.x, res.y)
+                    confirmClicked := true
+                    break
+                }
+                if (A_TickCount - confirmStart >= 2000)
+                    break
+                Sleep(200)
+            }
+            if (!confirmClicked) {
+                LogToConsole("failed to activate timescale. the macro can't see the confirm/get more button... (" res.score "). Stopping safely.",
                     true)
-                SafeReload()
+                RuntimeLogWarn("timescale_confirmation_ambiguous", "TimeScale dialog was not confirmed")
+                Send("{sc02B}")
+                Send("#")
+                StopStrategy()
+                return false
+            }
+
+            closedSamples := 0
+            closeDeadline := A_TickCount + 2000
+            loop {
+                getMoreCheck := AdvancedImageSearch("Resources/GetMore.png", Round(w * 0.25), Round(h * 0.45),
+                    Round(w * 0.50), Round(h * 0.55))
+                confirmCheck := AdvancedImageSearch("Resources/confirm.png", Round(w * 0.25), Round(h * 0.45),
+                    Round(w * 0.50), Round(h * 0.55))
+                if ((getMoreCheck.status != "success" || getMoreCheck.score < 0.67)
+                    && (confirmCheck.status != "success" || confirmCheck.score < 0.67)) {
+                    closedSamples++
+                    if (closedSamples >= 2)
+                        break
+                } else {
+                    closedSamples := 0
+                }
+                if (A_TickCount >= closeDeadline)
+                    break
+                Sleep(150)
+            }
+            if (closedSamples < 2) {
+                RuntimeLogWarn("timescale_confirmation_ambiguous", "TimeScale confirmation did not settle")
+                Send("{sc02B}")
+                Send("#")
+                StopStrategy()
                 return false
             }
 
@@ -7950,6 +8101,7 @@ getSlots() {
 
 SpawnTower(X, Y, slotNumber, towerID) {
     global Towers, LastOpenedTowerID, CancelPlacementKey, canUseAbility, UseNumbersForHotbar
+    global RunningStrategy, needtocheckTowerUI, unfocusX, unfocusY
     LogToConsole("Placing tower " towerID " (slot " slotNumber ") at x:" X " y:" Y "...")
 
     X := sX(X, StrategyWidth)
@@ -7962,6 +8114,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
     }
 
     placeAttempts := 0
+    maxPlacementAttempts := 5
     attemptMultiplier := 1
     startTime := A_TickCount
     canUseAbility := false
@@ -7969,13 +8122,44 @@ SpawnTower(X, Y, slotNumber, towerID) {
     loop {
         placeAttempts++
 
+        if (IsSet(RunningStrategy) && !RunningStrategy) {
+            canUseAbility := true
+            return false
+        }
+
+        if (placeAttempts > maxPlacementAttempts) {
+            LogToConsole("Tower " towerID " placement exceeded the bounded retry budget.", true)
+            RuntimeLogWarn("placement_retry_exhausted", "Placement stopped after bounded retries",
+                "tower=" towerID "; attempts=" (placeAttempts - 1))
+            canUseAbility := true
+            return false
+        }
+
         if (A_TickCount - startTime > 300000) {
             LogToConsole("Tower placement timed out (5+ minutes). Reloading the macro...")
             SafeReload()
-            return
+            return false
         }
 
         ActivateRoblox()
+
+        ; A generic tower panel from the previous action is not evidence that
+        ; this placement succeeded. Close it and require a clean observation
+        ; boundary before sending the non-idempotent placement click.
+        Click(ScaleX(unfocusX), ScaleY(unfocusY))
+        Sleep(100)
+        if !WaitForTowerUIClosed(2500) {
+            Towers[towerID] := { x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0,
+                target: "First Enemy", pendingPlacement: true }
+            LogToConsole("Tower " towerID " placement is still uncertain; existing tower UI did not close. Continuing without another click.", true)
+            RuntimeLogWarn("placement_pending_precondition", "Prior tower panel stayed visible during placement precondition",
+                "tower=" towerID)
+            SendEvent("{" CancelPlacementKey "}")
+            canUseAbility := true
+            return true
+        }
+        LastOpenedTowerID := ""
+        needtocheckTowerUI := true
 
         if UseNumbersForHotbar {
             Send("{" slotNumber "}")
@@ -7993,7 +8177,27 @@ SpawnTower(X, Y, slotNumber, towerID) {
         Sleep(100)
         SendEvent("{" CancelPlacementKey "}")
 
-        placedSuccessfully := waitForTowerUI(&resV2)
+        ; Roblox can show the tower panel late under client/network load. Keep
+        ; the action non-retrying, but allow a longer observation window before
+        ; classifying the result as ambiguous.
+        placedSuccessfully := waitForTowerUI(&resV2, , 5000)
+
+        if (!placedSuccessfully) {
+            placementStatus := ResolvePlacementAmbiguity(towerID, &resV2)
+            if (placementStatus = "success") {
+                placedSuccessfully := true
+            } else if (placementStatus = "cancelled") {
+                canUseAbility := true
+                return false
+            } else if (placementStatus = "ambiguous") {
+                LogToConsole("Tower " towerID " placement remains uncertain; retrying after passive re-verification.", true)
+                RuntimeLogWarn("placement_ambiguous_retry", "Placement will retry after passive re-verification",
+                    "tower=" towerID "; attempt=" placeAttempts)
+                SendEvent("{" CancelPlacementKey "}")
+                Sleep(250)
+                continue
+            }
+        }
 
         if (placedSuccessfully) {
             Towers[towerID] := { x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0, target: "First Enemy" }
@@ -8001,37 +8205,24 @@ SpawnTower(X, Y, slotNumber, towerID) {
             LastOpenedTowerID := towerID
             break
         } else {
-            LogToConsole("Tower " towerID " placement failed, retrying...")
-            if (placeAttempts = 1) {
-                continue
+            LogToConsole("Tower " towerID " placement was not confirmed.")
+
+            if (placeAttempts >= maxPlacementAttempts) {
+                LogToConsole("Tower " towerID " was rejected after bounded retries.", true)
+                RuntimeLogWarn("placement_rejected", "Placement retry budget exhausted after explicit rejection",
+                    "tower=" towerID "; attempts=" placeAttempts)
+                SendEvent("{" CancelPlacementKey "}")
+                canUseAbility := true
+                return false
             }
-
-            getRobloxPos(, , &w, &h)
-            x1 := Round(w * 0.2)
-            y1 := Round(h * 0.18)
-            x2 := Round(w * 0.7)
-            y2 := Round(h * 0.3)
-            if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/cannot_place_here.png"
-            ) || ReadMessage(["cannot", "here", "hereg", "herd", "her", "here!", "cann", "cannd", "he", "h", "hed"], ,
-            ["need", "more", "to"], "\$|\d")) {
-                MouseClick()
-
-                placedSuccessfully := waitForTowerUI(&resV2)
-                if (placedSuccessfully) {
-                    Towers[towerID] := { x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0,
-                        target: "First Enemy" }
-                    LogToConsole("Tower " towerID " placed successfully")
-                    LastOpenedTowerID := towerID
-                    break
-                }
 
                 offsets := [[0, -5 * attemptMultiplier], [5 * attemptMultiplier, 0], [0, 5 * attemptMultiplier], [-5 *
                     attemptMultiplier, 0]]
                 placedSuccessfully := false
 
+                ; The rejected placement keeps the selected hotbar slot active.
+                ; Do not issue another selection click before each offset attempt.
                 ActivateRoblox()
-
-                Send("{" slotNumber "}")
                 Sleep(30)
 
                 LogToConsole("Cannot place here! Trying to place tower in different spots...")
@@ -8040,18 +8231,46 @@ SpawnTower(X, Y, slotNumber, towerID) {
                     if (A_TickCount - startTime > 300000) {
                         LogToConsole("Tower placement timed out during offset retry. Executing safereload()...")
                         safeReload()
-                        return
+                        return false
                     }
 
                     newX := X + offset[1]
                     newY := Y + offset[2]
+
+                    if !WaitForTowerUIClosed(2500) {
+                        Towers[towerID] := { x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0,
+                            target: "First Enemy", pendingPlacement: true }
+                        LogToConsole("Tower " towerID " offset placement is still uncertain; existing tower UI did not close. Continuing without another click.", true)
+                        RuntimeLogWarn("placement_pending_precondition", "Prior tower panel stayed visible before offset placement",
+                            "tower=" towerID "; offset=" index)
+                        SendEvent("{" CancelPlacementKey "}")
+                        canUseAbility := true
+                        return true
+                    }
 
                     MouseMove(newX, newY, A_DefaultMouseSpeed)
                     Sleep((PotatoMode = 1) ? 100 : 40)
                     MouseClick()
                     Sleep(100)
 
-                    placedSuccessfully := waitForTowerUI(&resV2)
+                    placedSuccessfully := waitForTowerUI(&resV2, , 5000)
+                    if (!placedSuccessfully) {
+                        placementStatus := ResolvePlacementAmbiguity(towerID, &resV2)
+                        if (placementStatus = "success") {
+                            placedSuccessfully := true
+                        } else if (placementStatus = "cancelled") {
+                            canUseAbility := true
+                            return false
+                        } else if (placementStatus = "ambiguous") {
+                            LogToConsole("Tower " towerID " offset placement remains uncertain; trying the next bounded placement attempt.", true)
+                            RuntimeLogWarn("placement_ambiguous_retry", "Offset placement will retry after passive re-verification",
+                                "tower=" towerID "; offset=" index)
+                            SendEvent("{" CancelPlacementKey "}")
+                            Sleep(250)
+                            break
+                        }
+                    }
+
                     if (placedSuccessfully) {
                         Towers[towerID] := { x: newX, y: newY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0,
                             target: "First Enemy" }
@@ -8059,6 +8278,10 @@ SpawnTower(X, Y, slotNumber, towerID) {
                         LastOpenedTowerID := towerID
                         break 2
                     }
+
+                    ; ResolvePlacementAmbiguity only returns "ambiguous" after
+                    ; passive checks. That path returned above; reaching this
+                    ; point means this offset was explicitly rejected.
                 }
 
                 if (!placedSuccessfully) {
@@ -8066,9 +8289,50 @@ SpawnTower(X, Y, slotNumber, towerID) {
                     attemptMultiplier := attemptMultiplier * 2
                 }
             }
-        }
     }
     canUseAbility := true
+    return true
+}
+
+IsPlacementExplicitlyRejected() {
+    if !getRobloxPos(, , &w, &h)
+        return false
+
+    x1 := Round(w * 0.2)
+    y1 := Round(h * 0.18)
+    x2 := Round(w * 0.7)
+    y2 := Round(h * 0.3)
+    try {
+        return ImageSearch(&fx, &fy, x1, y1, x2, y2,
+            "*Trans000000 *50 " A_WorkingDir "/Resources/cannot_place_here.png")
+            || ReadMessage(["cannot", "here", "hereg", "herd", "her", "here!", "cann", "cannd", "he", "h", "hed"], ,
+            ["need", "more", "to"], "\$|\d")
+    } catch Error {
+        return false
+    }
+}
+
+ResolvePlacementAmbiguity(towerID, &resV2) {
+    global RunningStrategy
+
+    passiveDeadline := A_TickCount + 2500
+    while (A_TickCount < passiveDeadline) {
+        if (IsSet(RunningStrategy) && !RunningStrategy)
+            return "cancelled"
+
+        if waitForTowerUI(&resV2, , 300)
+            return "success"
+        if IsPlacementExplicitlyRejected()
+            return "failure"
+        Sleep(150)
+    }
+
+    if IsPlacementExplicitlyRejected()
+        return "failure"
+
+    RuntimeLogWarn("placement_ambiguous", "Placement remained unresolved after passive re-verification",
+        "tower=" towerID)
+            return "ambiguous"
 }
 
 SellTower(towerID) {
@@ -8129,7 +8393,7 @@ SellTower(towerID) {
 
 UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLevel := 0) {
     global Towers, unfocusX, unfocusY, LastOpenedTowerID, needtocheckTowerUI, UpgradeDelay
-    global PotatoMode, Recording, RecordedSteps, Commander, canUseAbility
+    global PotatoMode, Recording, RecordedSteps, Commander, canUseAbility, RunningStrategy
 
     static resV2 := 0
     static resV1 := 0
@@ -8156,6 +8420,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
     LastOpenedTowerID := towerID
     upgradesDone := 0
     attempts := 0
+    upgradeActionAttempts := 0
 
     upgTime := A_TickCount
     ; Absolute deadline for this tower. Waiting for cash and being permanently
@@ -8167,6 +8432,11 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
     Sleep(20)
 
     loop {
+        if (IsSet(RunningStrategy) && !RunningStrategy) {
+            canUseAbility := true
+            return false
+        }
+
         openedSuccessfully := false
         StartTime := A_TickCount
 
@@ -8195,6 +8465,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                 if (attempts > 30) {
                     LogToConsole("Tower " towerID " menu not found after 30 attempts, reloading...", true)
                     SafeReload()
+                    return false
                 }
                 variation := Random(-4, 4)
                 Click(targetX, targetY + ScaleY(variation))
@@ -8258,12 +8529,9 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
         searchArea := XA "|" YA "|" X2 "|" Y2
 
-        try {
-            isGreen := PixelSearch(&gx, &gy, XA, YA, X2, Y2, 0x206235, 12)
-        } catch Error {
-            isGreen := false
-        }
+        isGreen := HasStableUpgradeAffordance(XA, YA, X2, Y2)
         if (isGreen && canBeUpgraded) {
+            beforeEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
             canUseAbility := false
             if (UseHForUpgrade) {
                 if IsPathSpecificUpgrade(towerID, nextLevel, path, effectivePathLevel) {
@@ -8279,9 +8547,53 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                 Click(UpgradeX, UpgradeY)
             }
 
-            Sleep(UpgradeDelay)
+            ; A zero-delay upgrade input can arrive before Roblox has processed the
+            ; previous UI state. Counting it immediately made unaffordable fast
+            ; upgrades look successful in the strategy runtime.
+            settleDelay := Max(250, IsNumber(UpgradeDelay) ? Integer(UpgradeDelay) : 250)
+            Sleep(settleDelay)
+            needtocheckTowerUI := true
 
+            afterEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
+            verifiedResV2 := ""
+            verifiedResV1 := ""
+            uiVerified := waitForTowerUI(&verifiedResV2, &verifiedResV1, 1000)
+            if (!uiVerified || beforeEvidence = "" || afterEvidence = "" || beforeEvidence = afterEvidence) {
+                ; A delayed click can be a transient miss. Take one more passive
+                ; observation before retrying the non-idempotent upgrade input.
+                Sleep(300)
+                lateEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
+                if (lateEvidence != "" && beforeEvidence != "" && lateEvidence != beforeEvidence) {
+                    afterEvidence := lateEvidence
+                } else if (upgradeActionAttempts < 2 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
+                    upgradeActionAttempts++
+                    RuntimeLogWarn("upgrade_retry", "Upgrade was not confirmed; retrying within bounded budget",
+                        "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
+                    canUseAbility := true
+                    needtocheckTowerUI := true
+                    Sleep(250)
+                    continue
+                } else {
+                    LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state.", true)
+                    RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce sufficient post-action evidence after bounded retries",
+                        "tower=" towerID "; next_level=" nextLevel)
+                    canUseAbility := true
+                    return false
+                }
+            }
+
+            if (afterEvidence = "" || beforeEvidence = afterEvidence) {
+                LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state.", true)
+                RuntimeLogWarn("upgrade_ambiguous", "Upgrade evidence remained unchanged after passive verification",
+                    "tower=" towerID "; next_level=" nextLevel)
+                canUseAbility := true
+                return false
+            }
+
+            upgradeActionAttempts := 0
             Towers[towerID].level += 1
+            if Towers[towerID].HasProp("pendingPlacement")
+                Towers[towerID].pendingPlacement := false
             upgradesDone++
             MacroPhase("playing_upgrade_progress", 900000)
             LogToConsole("Tower " towerID " upgraded to level " Towers[towerID].level " (" upgradesDone "/" totalUpgrades ")"
@@ -8311,6 +8623,8 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
             maxLevelChecked := A_TickCount
             if (AdvancedImageSearch("Resources/fully_upgraded.png", XA, YA, WA, HA).score >= 0.69) {
                 LogToConsole("Tower " towerID " is already fully upgraded, moving on.")
+                if Towers[towerID].HasProp("pendingPlacement")
+                    Towers[towerID].pendingPlacement := false
                 canUseAbility := true
                 return true
             }
@@ -8319,6 +8633,31 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
         ; Waiting for cash: yield instead of spinning on back-to-back searches.
         Sleep((PotatoMode = 1) ? 200 : 100)
     }
+}
+
+HasStableUpgradeAffordance(x1, y1, x2, y2) {
+    try {
+        if !PixelSearch(&gx, &gy, x1, y1, x2, y2, 0x206235, 12)
+            return false
+        Sleep(60)
+        return PixelSearch(&gx, &gy, x1, y1, x2, y2, 0x206235, 12)
+    } catch Error {
+        return false
+    }
+}
+
+CaptureUpgradeEvidence(x, y, w, h) {
+    if (w <= 0 || h <= 0)
+        return ""
+
+    evidence := ""
+    for _, point in [[0.12, 0.20], [0.50, 0.20], [0.88, 0.20], [0.12, 0.50], [0.50, 0.50],
+        [0.88, 0.50], [0.12, 0.80], [0.50, 0.80], [0.88, 0.80]] {
+        try evidence .= PixelGetColor(x + Round(w * point[1]), y + Round(h * point[2]), "RGB") "|"
+        catch Error
+            return ""
+    }
+    return evidence
 }
 
 isDisconnected() {
@@ -8354,14 +8693,25 @@ isDisconnected() {
     }
 
     if (disconnected)
-        TryReconnect()
+        return TryReconnect()
+
+    return true
 }
 
 TryReconnect() {
     global RunningStrategy
     attempts := 0
+    maxReconnectAttempts := 5
     loop {
+        if !RunningStrategy
+            return false
         attempts++
+        if (attempts > maxReconnectAttempts) {
+            RuntimeLogError("reconnect_retry_exhausted", "Reconnect stopped after the bounded retry budget",
+                "attempts=" maxReconnectAttempts)
+            StopStrategy()
+            return false
+        }
         LogToConsole("Reconnecting... Attempt " attempts ".", true, false)
         KillSubmacros()
         CloseRoblox()
@@ -8895,6 +9245,12 @@ ShowDebugConsole() {
     OverlayGraphics := Gdip_GraphicsFromImage(OverlayBitmap)
     Gdip_SetSmoothingMode(OverlayGraphics, 4)
 
+}
+
+DebugOverlayHitTest(wParam, lParam, msg, hwnd) {
+    global OverlayHWND
+    if (hwnd = OverlayHWND)
+        return -1
 }
 
 HideDebugConsole() {
@@ -9526,8 +9882,6 @@ StopRuntimeTimers() {
     try SetTimer(checkCondition, 0)
     try SetTimer(CheckPopups, 0)
     try SetTimer(CancelInviteIfAppeared, 0)
-    try SetTimer(CheckGoalProgress, 0)
-    try SetTimer(CheckDJTrackSchedule, 0)
 }
 
 ; Persistent application/UI timers survive ordinary F2, recording, and strategy
@@ -9546,8 +9900,8 @@ StopApplicationTimers() {
 ReleaseHeldInput() {
     global MoveDirection
 
+    try Click("Left Up")
     try Click("Right Up")
-    try Click("Up")
 
     ; Names cover normal runtime sends; scan codes cover raw recorded movement
     ; and camera input regardless of keyboard layout.
@@ -9764,8 +10118,9 @@ HandleExit(ExitReason, ExitCode) {
 
 CleanupGdip(exitReason, exitCode) {
     global pToken
-    ReleaseGuiBitmaps()
-    Gdip_Shutdown(pToken)
+    CleanupRenderedBitmaps()
+    if (IsSet(pToken) && pToken)
+        Gdip_Shutdown(pToken)
 }
 
 MainGui.OnEvent("Close", (*) => ExitApp())
@@ -10003,7 +10358,7 @@ CreateGradientButton(w, h, r, colorStart, colorEnd, shadowColor, strokeColor, bt
     ReleaseDC(0, hdc)
     Gdip_DeleteGraphics(G)
 
-    return TrackGuiBitmap(hbm)
+    return hbm
 }
 
 CreateFrame(w, h, r, bgColor, strokeOuter, strokeInner) {
@@ -10027,7 +10382,7 @@ CreateFrame(w, h, r, bgColor, strokeOuter, strokeInner) {
     Gdip_DeletePen(pPenOuter), Gdip_DeletePath(pPathOuter)
     Gdip_DeletePath(pPathMain), Gdip_DeleteBrush(pBrushBg)
     SelectObject(hdcMem, obm), DeleteDC(hdcMem), Gdip_DeleteGraphics(G)
-    return TrackGuiBitmap(hbm)
+    return hbm
 }
 
 CreateScrollThumb(w, h, r, colorStart, colorEnd, glowColor) {
@@ -10048,7 +10403,7 @@ CreateScrollThumb(w, h, r, colorStart, colorEnd, glowColor) {
 
     Gdip_DeletePath(pPathMain), Gdip_DeleteBrush(pBrushGrad)
     SelectObject(hdcMem, obm), DeleteDC(hdcMem), Gdip_DeleteGraphics(G)
-    return TrackGuiBitmap(hbm)
+    return hbm
 }
 
 CreateGlowButton(w, h, r, colorStart, colorEnd, glowColor) {
@@ -10089,26 +10444,7 @@ CreateGlowButton(w, h, r, colorStart, colorEnd, glowColor) {
     ReleaseDC(0, hdc)
     Gdip_DeleteGraphics(G)
 
-    return TrackGuiBitmap(hbm)
-}
-
-TrackGuiBitmap(handle) {
-    global OwnedGuiBitmaps
-    if handle
-        OwnedGuiBitmaps.Push(handle)
-    return handle
-}
-
-ReleaseGuiBitmaps() {
-    global OwnedGuiBitmaps
-    seen := Map()
-    for handle in OwnedGuiBitmaps {
-        if (handle && !seen.Has(handle)) {
-            seen[handle] := true
-            try DeleteObject(handle)
-        }
-    }
-    OwnedGuiBitmaps := []
+    return hbm
 }
 
 Gdip_CreateRoundRectanglePath(x, y, w, h, r) {
@@ -10277,6 +10613,17 @@ waitForTowerUI(&resV2 := "", &resV1 := "", timeout := 0) {
             return false
         }
 
+    }
+}
+
+WaitForTowerUIClosed(timeout := 500) {
+    startTime := A_TickCount
+    loop {
+        if waitForTowerUI(, , 60)
+            return false
+        if (A_TickCount - startTime >= timeout)
+            return true
+        Sleep(50)
     }
 }
 

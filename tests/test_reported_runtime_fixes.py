@@ -72,7 +72,7 @@ def validate_image_fallback(main: str, image_search: str) -> None:
 def validate_equip_and_resolution(main: str) -> None:
     equip = region(main, "EquipTowers(towers) {", "CheckRestart() {")
     scale = region(main, "GetClientTemplateScale(clientHeight) {", "Join(arr, delim :=")
-    execute = region(main, "ExecuteStep(step) {", "LowerGraphics() {")
+    execute = region(main, "\nExecuteStep(step) {\n", "LowerGraphics() {")
     spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "SellTower(towerID) {")
 
     require("return Float(clientHeight) / 1009.0" in scale, "client template scale must be fractional")
@@ -184,7 +184,7 @@ def validate_matchmaking_ready_map(main: str, validator: str) -> None:
     require("difficultyDeadline :=" not in join[loop_index:], "Play recovery must never reset the mode deadline")
     require("difficulty_play_recovery" in join and "modeScrollAttempts < 12" in join,
             "mode selection needs bounded Play/scroll recovery")
-    require("firstModeScrollAt := difficultyStart + 1500" in join and
+    require("firstModeScrollAt := difficultyStart + 6000" in join and
             "A_TickCount >= firstModeScrollAt" in join,
             "the first mode scroll needs a settling grace so Easy stays visible")
     require("TryClickDifficultyTarget(difficulty, w, h)" in join, "Easy and Frost must share reliable targeting")
@@ -264,8 +264,8 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
     # The opening brace is intentional: searching for SetDJTrack(track) alone
     # can select a call and silently validate the wrong body.
     dj = region(main, "SetDJTrack(track) {", "UpdateTowerIndicator(towerID) {")
-    play = region(main, "PlayStrategy() {", "ExecuteStep(step) {")
-    execute = region(main, "ExecuteStep(step) {", "LowerGraphics() {")
+    play = region(main, "\nPlayStrategy() {\n", "\nExecuteStep(step) {")
+    execute = region(main, "\nExecuteStep(step) {\n", "LowerGraphics() {")
     abilities_wrapper = region(main, "UseAbilities(*) {", "UseAbilitiesPass() {")
     abilities = region(main, "UseAbilitiesPass() {", "SetDJTrack(track) {")
     upgrade = region(main, "UpgradeTower(towerID, skipOpen :=", "isDisconnected() {")
@@ -320,6 +320,8 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
             "ability callbacks must guard stale tower IDs before indexing")
     require("upgradeDeadline" in upgrade and "fully_upgraded.png" in upgrade and "Sleep(" in upgrade,
             "maxed/unaffordable upgrade loops must remain bounded and yielding")
+    require("SafeReload()\n                    return false" in upgrade,
+            "upgrade-menu retries must stop after the bounded reload threshold")
     require("HasProp(\"hwnd\")" in sell and "Towers.Delete(towerID)" in sell,
             "SellTower must guard optional indicators and remove tower state")
     require("AdvancedImageSearch(imagePath, cardX, cardY, cardW, cardH)" in arcade,
@@ -379,6 +381,30 @@ def validate_watchdog_pid_lifecycle(main: str) -> None:
             "the real repeated cleanup/start lifecycle must remain covered")
 
 
+def tracked_or_packaged_files(root: Path, pattern: str) -> set[str]:
+    """Return Git-tracked paths when available, otherwise inspect a release ZIP tree.
+
+    A release archive intentionally has no .git directory.  In that case Git may
+    either fail or resolve an unrelated parent checkout, so only trust its output
+    when it contains the requested paths.
+    """
+    tracked_result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--", pattern],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    tracked = {line.replace("\\\\", "/") for line in tracked_result.stdout.splitlines() if line}
+    if tracked:
+        return tracked
+    search_root, name_pattern = pattern.rsplit("/", 1)
+    return {
+        path.relative_to(root).as_posix()
+        for path in (root / search_root).glob(name_pattern)
+        if path.is_file()
+    }
+
+
 def validate_packaging(root: Path, validator: str, workflow: str) -> None:
     safe_updater = read(root / "submacros/safe_update.ps1")
     updater_smoke = read(root / "tests/safe_updater_smoke.ps1")
@@ -403,13 +429,7 @@ def validate_packaging(root: Path, validator: str, workflow: str) -> None:
             "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
         ),
     }
-    tracked_result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "--", "Resources/Strats/*.strat"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    tracked = {line.replace("\\", "/") for line in tracked_result.stdout.splitlines() if line}
+    tracked = tracked_or_packaged_files(root, "Resources/Strats/*.strat")
     require(tracked == expected_remaining,
             f"tracked strategy set changed outside the three obsolete Frost removals: {sorted(tracked)}")
     for relative in obsolete:
@@ -417,15 +437,7 @@ def validate_packaging(root: Path, validator: str, workflow: str) -> None:
     for relative in expected_remaining:
         require((root / relative).is_file(), f"unrelated bundled strategy was removed: {relative}")
 
-    tracked_dll_result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "--", "lib/ImageSearch/*.dll"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    tracked_dlls = {
-        line.replace("\\", "/") for line in tracked_dll_result.stdout.splitlines() if line
-    }
+    tracked_dlls = tracked_or_packaged_files(root, "lib/ImageSearch/*.dll")
     for relative, expected_hash in required_dlls.items():
         dll_path = root / relative
         require(relative in tracked_dlls, f"required runtime DLL is not tracked: {relative}")
@@ -521,6 +533,56 @@ def validate_positive_backports(main_source: str) -> None:
     }
     for label, marker in anti_downgrade.items():
         require(marker in main_source, f"anti-downgrade contract missing: {label}")
+
+
+def validate_runtime_reliability(main_source: str, discord_source: str, remote_source: str) -> None:
+    simplicity = region(main_source, "SimplicityPath() {", "ToggleAutoskip() {")
+    require("if (attempts > 3)" in simplicity and "SafeReload()\n                    return false" in simplicity,
+            "map recovery must stop after its bounded reload threshold")
+
+    change_targets = region(main_source, "ChangeTargets(towerID, target) {", "CloneTower(towerId, x, y, wait := 0) {")
+    require("Towers.Has(towerID)" in change_targets,
+            "target changes must reject stale tower ids before indexing Towers")
+    require("LastOpenedTowerID := \"\"" in change_targets,
+            "target changes must clear the selected tower sentinel without creating Towers[0]")
+    require("finally {" in change_targets and "canUseAbility := true" in change_targets,
+            "target changes must restore ability use after timeout or exception")
+    require("SafeReload()\n                    return false" in change_targets,
+            "target-menu retries must stop after the bounded reload threshold")
+
+    recording = region(main_source, "RegisterRecordingHotkeys(oldKeys := \"\") {", "DetectTowerForUpgrading(*) {")
+    require("RaiseDeadKey" in recording,
+            "recording hotkey registration must declare RaiseDeadKey before using it")
+
+    settings = region(main_source, "SaveAllSettings(ctrl, *) {", "NormalizePartyMembers(value) {")
+    require("tempRaiseDeadKey" in settings and "tempRepoKey" in settings,
+            "auxiliary recording hotkeys must be normalized before registration")
+    require('"~^" RepoKey' in settings and '"~^" RaiseDeadKey' in settings,
+            "old auxiliary recording hotkeys must be disabled when settings change")
+
+    run_roblox = region(main_source, "RunRoblox(doReload := true) {", "ExitFullScreen() {")
+    require("run_roblox_geometry_wait" in run_roblox and "getRobloxPos(, , &w, &h)" in run_roblox,
+            "lobby Play detection must retry with fresh client geometry")
+
+    join_game = region(main_source, "JoinGame() {", "InvitePartyMembers(search_bar) {")
+    require("matchmaking_geometry_retry" in join_game,
+            "matchmaking must retry while Roblox client geometry is unavailable")
+
+    community_update = region(main_source, "if (needUpdate) {", "global FrameX := 30")
+    require("apiStatus := 0" in community_update and "apiStatus := whr.Status" in community_update and
+            "GitHub returned 403" in community_update,
+            "community strategy refresh must keep local strategies on GitHub rate limits")
+
+    webhook_visibility = region(main_source, "EnableWebhookLink2(*) {", "DiscordSettings(*) {")
+    require('CurrentTab = "Tab4"' in webhook_visibility and 'DiscordPage = "Webhook"' in webhook_visibility,
+            "secondary webhook input must stay hidden outside the Discord webhook page")
+
+    require("QueueStrategyStart()" in discord_source,
+            "Discord start commands must use the validated start queue")
+    require("QueueStrategyStart()" in remote_source,
+            "remote start commands must use the validated start queue")
+    require('Map("queued", JSON.true)' in remote_source,
+            "remote start must report queued rather than falsely claiming immediate startup")
 
 
 def validate_launch_failure_safety(main: str) -> None:
@@ -762,11 +824,115 @@ def validate_auto_settings_hardening(
                 "bundled AHK 2.0.12 Auto Settings behavioral fixture failed: " +
                 (fixture_result or result.stdout + result.stderr).strip())
 
+def validate_v134b_stability(main: str, remote: str) -> None:
+    """Static regression contracts retained by the 1.3.5 release."""
+    require('ver := "1.3.5"' in main, "Main.ahk must identify the 1.3.5 release")
+    require('global ClientVersion := "1.3.5"' in remote,
+            "official remote worker must identify the 1.3.5 release")
+
+    load = region(main, "LoadStrategyFile(file) {", "\nRunStrategy(")
+    for marker in (
+        "TimescaleActive := false",
+        'LastOpenedTowerID := ""',
+        "needtocheckTowerUI := true",
+        'CachedResV2 := ""',
+        'CachedResV1 := ""',
+        "isUpgradeAuthorized := false",
+    ):
+        require(marker in load, f"new strategy load must reset run state: {marker}")
+
+    run = region(main, "RunStrategy(stratFile := \"\", skipRestart := false) {", "\nPlayStrategy() {")
+    require("IsRestarting := false" in run, "each strategy lifecycle must start with a fresh restart flag")
+    require("if !PlayStrategy()" in run and "StopStrategy()" in run,
+            "step/action failure must stop the current lifecycle instead of silently continuing")
+    require("if (!skiprestart && !isDisconnected())" in run,
+            "disconnect recovery failure must stop before continuing into matchmaking")
+
+    play = region(main, "\nPlayStrategy() {\n", "\nExecuteStep(step) {")
+    require("if !ExecuteStep(step)" in play and "placement_step_failed" in play,
+            "placement/action failure must propagate out of strategy playback")
+
+    execute = region(main, "\nExecuteStep(step) {\n", "LowerGraphics() {")
+    require("return SpawnTower(" in execute,
+            "spawn execution must return its verification result")
+
+    equip = region(main, "EquipTowers(towers) {", "CheckRestart() {")
+    require("verifyDeadline" in equip and "autoequip_tower_confirmed" in equip,
+            "Auto Equip must confirm the post-click equipped state")
+
+    map_select = region(main, "SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {", "\nCheckTheMapF() {")
+    require("mapChoiceAttempts := 0" in map_select and "map_selection_retry_exhausted" in map_select,
+            "standard map selection must have a bounded retry budget")
+    require("map_selection_ambiguous" in map_select and "return SelectMap(readyX, readyY)" not in map_select,
+            "ambiguous map selection must not recursively re-enter selection")
+
+    timescale = region(main, "activateTimescale() {", "SpawnTower(X, Y, slotNumber, towerID) {")
+    require("timescale_no_tickets" in timescale and "timescale_confirmation_ambiguous" in timescale,
+            "TimeScale no-ticket and confirmation ambiguity must be diagnosable")
+    require("closedSamples >= 2" in timescale,
+            "TimeScale confirmation must settle before success is recorded")
+    require("StopStrategy()" in timescale,
+            "unsupported or ambiguous TimeScale must stop safely")
+
+    spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "SellTower(towerID) {")
+    require("maxPlacementAttempts := 5" in spawn and "WaitForTowerUIClosed" in spawn,
+            "placement must use a bounded retry budget and stale-panel precondition")
+    require("WaitForTowerUIClosed(2500)" in spawn and "placement_pending_precondition" in spawn,
+            "lagging prior tower panels must not fatally stop placement")
+    require("waitForTowerUI(&resV2, , 5000)" in spawn,
+            "placement must allow delayed Roblox UI observation before declaring ambiguity")
+    require("ResolvePlacementAmbiguity" in spawn and "placement_ambiguous_retry" in spawn and
+            "IsPlacementExplicitlyRejected()" in spawn,
+            "placement ambiguity must passively re-check before bounded retry")
+    require("return true" in spawn and "return false" in spawn,
+            "placement must continue on pending ambiguity but retain fatal returns for cancellation/exhaustion")
+    require("StopStrategy()" not in spawn,
+            "SpawnTower must never stop the whole strategy for placement ambiguity")
+    require("Placement did not complete; continuing with the next step" in main,
+            "a non-cancelled placement failure must not abort the entire strategy")
+    require("if (placeAttempts = 1)" not in spawn,
+            "placement must not unconditionally retry the first unconfirmed click")
+
+    upgrade = region(main, "UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLevel := 0) {",
+                     "HasStableUpgradeAffordance(x1, y1, x2, y2) {")
+    require("CaptureUpgradeEvidence" in upgrade and "beforeEvidence" in upgrade and "afterEvidence" in upgrade,
+            "upgrade success must compare before/after evidence")
+    require("upgrade_ambiguous" in upgrade and "beforeEvidence = afterEvidence" in upgrade and
+            "upgradeActionAttempts < 2" in upgrade and "upgrade_retry" in upgrade,
+            "ambiguous upgrades must passively re-check, retry within bounds, and not advance blindly")
+    require("settleDelay := Max(250" in upgrade and "IsSet(RunningStrategy) && !RunningStrategy" in upgrade,
+            "upgrade polling must preserve a minimum settle delay and cancellation")
+
+    stop = region(main, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
+    require("wasRunning := RunningStrategy" in stop and "RunningStrategy := false" in stop,
+            "stop must cancel synchronous runtime work before cleanup")
+    release = region(main, "ReleaseHeldInput() {", "\nSafeReload() {")
+    require('Click("Left Up")' in release and 'Click("Right Up")' in release,
+            "stop cleanup must release both mouse buttons")
+
+    reconnect = region(main, "TryReconnect() {", "CheckPopups(*) {")
+    require("maxReconnectAttempts := 5" in reconnect and "reconnect_retry_exhausted" in reconnect,
+            "reconnect recovery must remain bounded and diagnosable")
+
+    difficulty = region(main, "TryClickDifficultyTarget(target, w, h) {", "WaitForLobbyLoad() {")
+    require("if (target = \"Hardcore\")" in difficulty and "difficulty_hardcore_image_missing" in difficulty,
+            "Hardcore must not use ambiguous OCR that can click Unlock Hardcore")
+    require("ocrX := screenX + Round(screenW * 0.22)" in difficulty and
+            "ocrX := screenX\n" not in difficulty,
+            "difficulty OCR must stay inside the mode-card region instead of the macro log")
+    join = region(main, "JoinGame() {", "InvitePartyMembers(search_bar) {")
+    require("party_size_timeout" in join,
+            "party-size stalls must identify the mode-selection failure before recovery")
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     main_source = read(root / "Main.ahk")
     image_source = read(root / "lib/ImageSearch/ImageSearch.ahk")
     watchdog_source = read(root / "submacros/watchdog.ahk")
+    discord_source = read(root / "lib/DiscordCommands.ahk")
+    remote_source = read(root / "lib/OfficialRemote.ahk")
+    remote_worker_source = read(root / "submacros/official_remote.ahk")
     auto_settings_source = read(root / "lib/auto_settings.ahk")
     auto_settings_test = read(root / "tests/test_auto_settings.ahk")
     validator = read(root / "tests/validate_repo.py")
@@ -780,7 +946,9 @@ def main() -> int:
     validate_dj_watchdog_and_pr30(main_source, watchdog_source)
     validate_watchdog_pid_lifecycle(main_source)
     validate_positive_backports(main_source)
+    validate_runtime_reliability(main_source, discord_source, remote_source)
     validate_launch_failure_safety(main_source)
+    validate_v134b_stability(main_source, remote_worker_source)
     validate_auto_settings_hardening(root, main_source, auto_settings_source, auto_settings_test)
     validate_community_strategy_sync(main_source)
     validate_packaging(root, validator, workflow)

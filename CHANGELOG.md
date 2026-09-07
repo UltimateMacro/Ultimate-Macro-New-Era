@@ -1,30 +1,48 @@
+# Ultimate Macro v1.3.5
+
+**Release improvements:**
+
+- Bundles the portable Strategy Lab WebView editor as `StrategyLab.exe` with its
+  isolated `_app` runtime. It can safely open, inspect, and save copies of
+  `.strat` files without starting or stopping gameplay.
+- Preserves the existing F2 stop behavior and all resolution/geometry values.
+- Keeps Official Remote consent, DPAPI-protected credentials, token rotation,
+  and the server-side release-access checks intact.
+- Release validation now works both from a Git checkout and from an extracted
+  release archive, with Strategy Lab executables and WebView loaders hash-pinned.
+
+# Ultimate Macro v1.3.4b
+
+**Improvements:**
+
+- Improved placement reliability with bounded retries and safer action confirmation.
+- Improved upgrade handling so the macro waits for reasonable UI evidence before updating tower state.
+- Improved Juggernaut and path-tower upgrade reliability with safer settle timing.
+- Improved Timescale handling for Confirm, Get More, and zero-ticket situations.
+- Improved Auto Equip confirmation and second-run cleanup.
+- Improved map selection, rejoin recovery, F2 stopping, and held-input cleanup.
+- Improved difficulty selection by keeping OCR inside the mode cards and refusing ambiguous Hardcore unlock text.
+- Added focused diagnostics for ambiguous actions and bounded recovery paths.
+
+**Bug Fixes:**
+
+- Fixed towers being placed twice when the first placement succeeded but its UI was missed.
+- Fixed non-cancelled placement failures stopping the entire strategy; the next step now continues after bounded placement handling.
+- Fixed lagging existing tower panels being treated as fatal placement failures.
+- Fixed failed or unaffordable upgrades being counted as successful.
+- Restored bounded retry behavior for upgrades that are not confirmed on the first click.
+- Fixed map selection and recovery paths getting stuck in repeated loops.
+- Fixed stale tower, Timescale, and UI state carrying into the next run.
+- Fixed Auto Equip reporting success when the tower was not actually equipped.
+- Fixed stop cleanup leaving mouse or movement input held.
+- Fixed mode selection getting stuck after “Joining Easy...” with a bounded, diagnosable party-size wait.
+
+**Download Now!**  
+[Click me to download](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases/download/v1.3.4b/TDS_Macro_1.3.4b.zip)
+
+@Update Ping
+
 # Changelog
-
-## 1.4.0
-
-### Added
-
-- Resume-aware startup that reuses an existing TDS lobby or Ready screen instead of always restarting Roblox.
-- Pre-run checks for strategy requirements, OCR, display resolution, and Windows scaling.
-- Goals & Smart Strategy tool for measurable coin/gem targets, owned-tower compatibility, reward-per-minute ranking, automatic stopping, and local/Discord completion notices.
-- Custom DJ disc schedules by wave or wave range, such as `18-20:Red;21-30:Green`.
-- Adjustable map-menu, typing, and result-detection delays in Advanced Settings.
-- Live wave reporting in Official Remote status.
-- An in-macro Smart Goals assistant backed by the linked, authenticated ULT Bot service.
-- A dedicated visual Guide tab with setup and troubleshooting guidance.
-- A safe recorded-strategy editor launcher in Tools.
-
-### Fixed
-
-- Community strategy cards now ask which rotation slot to replace and load that selected slot immediately.
-- Generated GUI bitmap handles are tracked and released during shutdown, including hover images that previously had no owner.
-- Unknown in-game startup states fall back safely instead of blindly continuing inputs.
-- Official Remote privacy and consent controls no longer overlap at standard window sizes.
-- Smart Goals no longer requires manually entering every owned tower.
-
-### Security and privacy
-
-- Remote economy totals remain consent-based, aggregated, and protected with server-side sanity limits. They are community estimates, not anti-cheat evidence.
 
 ## Unreleased — reported runtime QA hotfix
 
