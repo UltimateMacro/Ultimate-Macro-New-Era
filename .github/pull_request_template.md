@@ -1,38 +1,58 @@
-## What changed
+## Summary
 
-<!-- Keep behavior changes focused and explain why each changed file is needed. -->
+<!-- What changed and why? Keep unrelated changes in separate PRs. -->
 
-## Risk / affected areas
+## Branch / scope
 
-- [ ] Strategy execution or recording
-- [ ] Image detection / Ready flow
-- [ ] Watchdog / recovery
-- [ ] Discord webhook / bot
+- Source branch:
+- Target branch:
+- Primary owner:
+- Related issue:
+
+## Affected areas
+
+- [ ] UI only
+- [ ] Strategy recording
+- [ ] Strategy parsing / Strategy Lab
+- [ ] Placement / upgrade / sell
+- [ ] TimeScale
+- [ ] Image detection / OCR
+- [ ] Matchmaking / recovery / watchdog
+- [ ] Discord webhook / Official Remote
 - [ ] Settings / persistence
-- [ ] Updater / packaging
+- [ ] Updater / packaging / release
 - [ ] Dependencies / binaries / resources
-- [ ] Documentation or CI only
+- [ ] Documentation / CI only
 
-## Testing performed
+## Automated checks
 
 - [ ] `python tests/test_source_contracts.py .`
+- [ ] `python tests/test_reported_runtime_fixes.py .`
 - [ ] `python tests/validate_repo.py .`
 - [ ] `python tests/lint_strategies.py .`
 - [ ] `pwsh ./tools/validate_powershell.ps1`
 - [ ] `pwsh ./tests/safe_updater_smoke.ps1` when updater code changed
 - [ ] `pwsh ./tools/validate_ahk.ps1`
-- [ ] Relevant manual checks from `TESTING.md`
+- [ ] Release package test when packaging changed
 
-Runtime environment/results:
+## Manual runtime validation
 
-<!-- Windows version, scaling, Roblox client size, backend, strategy/map, observed result. -->
+- Windows:
+- Display scaling:
+- Roblox client size:
+- Strategy / map:
+- Result:
+
+## Risk / rollback
+
+<!-- What can regress? How do we revert safely? -->
 
 ## Review checklist
 
+- [ ] Existing behavior is preserved unless the PR explicitly changes it.
+- [ ] New/changed behavior has regression coverage where practical.
+- [ ] Inputs are validated and retries are bounded.
 - [ ] No secrets, personal configuration, logs, screenshots, or generated state are committed.
-- [ ] New dependencies/binaries/resources have provenance, integrity, license, and necessity evidence.
-- [ ] Failure paths are bounded and preserve existing data.
-- [ ] Ownership and cleanup are explicit for changed GDI+/COM/native resources.
-- [ ] Risky behavior has a regression test and a documented rollback.
-
-<!-- Sanitize all logs and screenshots before attaching them. -->
+- [ ] New binaries/resources have provenance, integrity, license, and necessity evidence.
+- [ ] Resource/process/timer ownership and cleanup are explicit.
+- [ ] Documentation and changelog are updated when user-visible behavior changes.

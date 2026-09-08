@@ -11,7 +11,28 @@ body:
     id: version
     attributes:
       label: Ultimate Macro version
-      placeholder: v1.3.3 or commit SHA
+      placeholder: v1.3.5 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected area
+      options:
+        - Startup / UI
+        - Strategy recording
+        - Strategy Lab / strategy parsing
+        - Tower placement
+        - Tower upgrades
+        - Selling towers
+        - TimeScale
+        - Image detection / OCR
+        - Matchmaking / map selection
+        - Recovery / watchdog
+        - Auto Equip / loadout
+        - Discord webhook / Official Remote
+        - Updater / packaging
+        - Other
     validations:
       required: true
   - type: dropdown
@@ -19,7 +40,7 @@ body:
     attributes:
       label: Installation type
       options:
-        - GitHub release ZIP
+        - Official GitHub release ZIP
         - Git clone / development branch
         - Other
     validations:
@@ -35,30 +56,17 @@ body:
     id: client
     attributes:
       label: Roblox client size and window position
-      placeholder: 1920x1009, moved to second monitor
-  - type: dropdown
-    id: backend
-    attributes:
-      label: Image-search backend
-      options:
-        - GDI+ fallback
-        - OpenCV native
-        - Unknown
-  - type: textarea
-    id: happened
-    attributes:
-      label: What happened?
-      description: Include the stage of the run and the exact observed behavior.
-    validations:
-      required: true
+      placeholder: 1920x1009, primary monitor
   - type: textarea
     id: reproduce
     attributes:
       label: Steps to reproduce
-      placeholder: |
-        1. Start strategy ...
-        2. Wait for ...
-        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: Actual behavior
     validations:
       required: true
   - type: textarea
@@ -71,13 +79,15 @@ body:
     id: evidence
     attributes:
       label: Sanitized logs or screenshots
-      description: Remove credentials, private links, personal identifiers, and configuration first.
+      description: Remove credentials, private links, personal identifiers, and configuration before attaching evidence.
   - type: checkboxes
     id: checks
     attributes:
       label: Checklist
       options:
         - label: I searched for an existing report.
+          required: true
+        - label: I can reproduce this on the version listed above.
           required: true
         - label: I removed secrets and private data from all evidence.
           required: true

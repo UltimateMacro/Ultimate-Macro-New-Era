@@ -1,61 +1,83 @@
-# Ultimate Macro: The New Era
+# Ultimate Macro: New Era
 
-> **Download the ready-to-use package from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).**
+<p align="center">
+  <strong>Open-source strategy recording and automation for Roblox Tower Defense Simulator.</strong>
+</p>
 
-Ultimate Macro: The New Era is a free, open-source automation tool for Roblox Tower Defense Simulator. Originally created by Darksen, Ultimate Macro is now maintained by a new team focused on updates, fixes, and new features.
+<p align="center">
+  <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">Download</a>
+  ·
+  <a href="docs/README.md">Documentation</a>
+  ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+  ·
+  <a href="SECURITY.md">Security</a>
+</p>
 
-## Features
+Ultimate Macro: New Era continues Darksen's original Ultimate Macro with an active maintenance line focused on reliability, strategy tooling, recovery, and a cleaner user experience.
 
-- Record and replay complete TDS strategies
-- Tower placement, upgrades, selling, abilities, repositioning, and target changes
-- Strategy Rotation and community `.strat` support
-- Auto Equip towers and Auto Skip recorded waves
-- Adjustable upgrade delay
-- Adjustable map interaction delays and pre-run diagnostics
-- Wave-based custom DJ disc schedules
-- Goals and smart compatible-strategy selection for coin/gem grinds
-- Party and VIP server support
-- Cloning, Necromancer, Brawler repositioning, and split upgrade paths
-- Reconnection and automatic game re-entry
-- Resume-aware startup from an existing TDS lobby or Ready screen
-- Automatic daily and playtime rewards
-- Resolution-aware image detection and OCR
-- Optional Tower XP Tracker with automatic Triumph progression and configurable max-level stop targets
-- Universal resolution support with improved image detection and OCR
-- Potato Mode and Legacy Mode
-- 1.5x and 2x TimeScale support
-- Discord webhooks with stats, screenshots, and logs
-- Official Discord Remote Control through EngineerBot
-- Profile Manager for importing and exporting settings, hotkeys, and strategies
-- Optional Auto Configure Settings for Roblox
+> **Users should install from the official GitHub Releases page.** Repository checkouts contain development and QA tooling that is intentionally excluded from release ZIPs.
 
-## Requirements
+## Highlights
 
-- Windows 10 or 11
-- AutoHotkey v2.0
-- Recommended resolution: 1920×1080
-- Recommended Windows display scaling: 100%
-- Roblox FPS: 60
+- Record and replay complete TDS strategies.
+- Place, upgrade, sell, target, reposition, and use abilities.
+- Strategy rotation and community `.strat` support.
+- Strategy Lab tooling for editing and reviewing recorded strategies.
+- TimeScale support with verified activation and bounded recovery.
+- Auto Equip, Auto Skip, Party Mode, VIP server support, and reconnect recovery.
+- Resolution-aware image detection and OCR.
+- Discord webhook reporting and authenticated Official Remote controls.
+- Profiles, persistent logging, updater rollback, and protected user strategies.
+
+## Quick start
+
+1. Download `TDS_Macro.zip` from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
+2. Extract the ZIP completely.
+3. Run `Main.ahk`.
+4. Configure the macro and Roblox settings.
+5. Start the macro.
+
+See [Installation](docs/user/INSTALLATION.md) and [Troubleshooting](docs/user/TROUBLESHOOTING.md) for more detail.
+
+## Recommended environment
+
+- Windows 10 or Windows 11
+- 1920×1080 recommended
+- 100% Windows display scaling recommended
+- Roblox at 60 FPS
 - TDS UI Scale: Large
 - TDS Screen Shake: Disabled
 - TDS Prefer Vertical Upgrades: Enabled
 
-## Installation
+## Repository layout
 
-1. Download `TDS_Macro.zip` from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
-2. Extract the entire ZIP file.
-3. Install [AutoHotkey v2.0](https://www.autohotkey.com/v2/).
-4. Run `Main.ahk`.
-5. Configure a strategy and start the macro.
+```text
+.github/       GitHub workflows, issue forms, ownership and PR templates
+Resources/     Runtime images and bundled strategies
+lib/           Runtime libraries and integrations
+submacros/     Updater, watchdog and supporting runtime components
+tests/         Regression and repository contracts
+tools/         Developer validation and packaging tools
+docs/          User, development and QA documentation
+Main.ahk       Runtime entry point
+```
 
-## Development Team
-### Tower XP Tracker
+The project is being migrated toward smaller runtime modules incrementally. Large runtime refactors must preserve behavior and add regression coverage before code is moved.
 
-Open **Tools → Tower XP Tracker**, select the towers to track, and enter each tower's current Evolution level plus the XP already earned inside that level. The tracker reads supported reward cards after a confirmed Triumph and saves progression locally in `%APPDATA%\Ultimate_Macro\Options\TowerXP.ini`.
+## Development workflow
 
-Tracked towers **must use their default skins**. Uncertain or missing OCR results are left unchanged, and tracking can be disabled without changing normal macro behavior. Optional stop rules can end automation when any or all selected stop-target towers reach level 20.
+- `main` is the current stable/public-ready line.
+- `integration` is the shared staging line.
+- `dev/<handle>` is a long-lived personal workspace.
+- `feature/<handle>/<topic>`, `fix/<handle>/<topic>`, `refactor/<topic>`, and `qa/<handle>/<topic>` are short-lived task branches.
+- Release candidates and preserved release points use `release/<version>`.
 
-## 🛠️ Release, tester and development
+The 1.3.5 release line is preserved separately from later 1.4.0 development; main is never rewound to recreate an older version.
+
+See [Branching model](docs/development/BRANCHING.md), [Architecture](docs/development/ARCHITECTURE.md), and [Release process](docs/development/RELEASE_PROCESS.md).
+
+## Development team
 
 - pizzaroles24
 - ziadod
@@ -65,27 +87,26 @@ Tracked towers **must use their default skins**. Uncertain or missing OCR result
 - salkann
 - aiden
 
-**QA**
+### QA
 
 - nytli
 - tristanm1ce
 - frostzzz
 
+## Contributing
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md). Runtime changes should be focused, testable, and accompanied by the relevant automated and manual checks.
+
+Never publish Discord tokens, webhook URLs, Roblox private-server links, personal configuration, or unsanitized logs/screenshots.
+
 ## Credits
 
-Ultimate Macro was originally created by Darksen.
+Ultimate Macro was originally created by Darksen. The New Era exists because of that work and continues under the same open-source spirit.
 
-The New Era continues the project and would not exist without his work.
-
-- Original repository: [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
+- Original project: [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
 - Support Darksen: [DonationAlerts](https://www.donationalerts.com/r/darksen1)
 - Support New Era Developers: [DonationAlerts](https://www.donationalerts.com/r/neweradevelopers)
 
 ## License
 
 Licensed under the [GNU General Public License v3.0](LICENSE).
-
-You may use, modify, fork, and redistribute Ultimate Macro under the license terms while preserving applicable copyright, license, and attribution notices.
-
-# This is The New Era.
-
