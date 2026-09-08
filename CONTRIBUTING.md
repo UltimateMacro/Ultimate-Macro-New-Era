@@ -1,45 +1,61 @@
 # Contributing to Ultimate Macro: New Era
 
-Runtime automation is sensitive to small game and UI changes, so focused,
-testable changes are preferred over mixed refactors.
+Ultimate Macro automates a live game UI, so small changes can affect timing, recovery, image detection, and user state. Prefer focused changes with explicit evidence over large mixed patches.
 
-## Development flow
+## Branch workflow
 
-1. Branch from the current integration branch.
-2. Keep one behavioral goal per branch or pull request when practical.
-3. Run the automated checks in [TESTING.md](TESTING.md).
-4. Manually test the affected runtime behavior in a disposable configuration.
-5. Describe the test environment and result in the pull request.
-6. Require another team member to review high-risk runtime, updater, security,
-   network, packaging, or dependency changes.
+The private development mirror uses the following model:
 
-Avoid combining whitespace-only rewrites with behavioral changes. Preserve
-existing behavior with a regression contract before changing runtime logic.
+- `main`: stable/public-ready mirror.
+- `integration`: shared staging branch.
+- `dev/<handle>`: long-lived personal workspace.
+- `feature/<handle>/<topic>`: new behavior.
+- `fix/<handle>/<topic>`: bug fixes.
+- `refactor/<topic>`: behavior-preserving structural work.
+- `release/<version>`: frozen release candidate.
+- `archive/*` and `backup/*`: historical safety refs; never use as normal development bases.
+
+Before starting work, sync your personal branch from `integration`. Open a focused task branch for non-trivial work and merge it back through review.
+
+See [docs/development/BRANCHING.md](docs/development/BRANCHING.md).
+
+## Pull requests
+
+A pull request should explain what changed, why, affected runtime areas, tests run, manual validation, and risk/rollback notes.
+
+Avoid whitespace-only rewrites in the same PR as behavior changes. High-risk updater, security, remote-control, networking, packaging, dependency, or binary changes require a second reviewer.
 
 ## Runtime changes
 
-For image detection, document the template, search region, threshold, fallback,
-client size, monitor scaling, window position, and color/HDR configuration.
+For placement, upgrade, sell, TimeScale, recorder, or recovery changes, preserve the action lifecycle:
 
-For watchdog or networking code, keep retries bounded and make the owner and
-lifetime of GDI+ bitmaps, streams, HGLOBAL allocations, and COM requests clear.
+```text
+ACTION -> OBSERVE -> VERIFY -> SUCCESS
+                 \-> RETRY / RECOVER / FAIL
+```
 
-Strategy files are data consumed by an allow-listed parser. New commands must
-be added explicitly to the runtime and `tests/lint_strategies.py`; never add
-arbitrary code evaluation to strategy loading.
+Do not mark an action successful merely because an input was sent.
 
-## Dependencies, binaries, and resources
+For image detection, document the template, search region, threshold/fallback, client size, Windows scaling, window position, and relevant display conditions.
 
-Do not copy an executable, DLL, or resource from a fork merely because it is
-present there. New binaries require source/build provenance, version, SHA-256,
-license, and a reproducible acquisition decision in `DEPENDENCIES.md`. New
-images must have known provenance and a demonstrated runtime reference.
+For watchdog or networking code, retries must be bounded. Resource ownership and cleanup must be explicit for native handles, COM objects, processes, timers, and temporary files.
 
-## Secrets and test data
+Strategy files are data consumed by an allow-listed parser. Never introduce arbitrary expression or code execution through strategy loading.
 
-Never commit Discord tokens, webhook URLs, Roblox private-server links,
-AppData settings, logs, screenshots, or recorded personal state. Use disposable
-credentials for integration tests and sanitize all evidence before sharing.
+## Testing
 
-Test updater and packaging changes only against a disposable extracted install.
-A failed update must leave the prior installation recoverable.
+Run the automated preflight documented in [TESTING.md](TESTING.md), then run the relevant manual regression matrix.
+
+Behavior changes need regression coverage where practical, repository validation, strategy lint when applicable, AutoHotkey validation, and a targeted Windows/Roblox runtime check.
+
+## Dependencies and secrets
+
+New binaries require provenance, version, SHA-256, license, justification, and a reproducible acquisition/build decision in `DEPENDENCIES.md`.
+
+Never commit or attach Discord tokens, webhook URLs, Roblox private/VIP server links, AppData settings, personal screenshots, unsanitized logs, or recorded personal state.
+
+## Releases
+
+Do not hand-assemble release ZIPs. Use the repository release builder and validate the artifact before publication.
+
+See [docs/development/RELEASE_PROCESS.md](docs/development/RELEASE_PROCESS.md).

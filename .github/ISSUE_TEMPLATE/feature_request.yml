@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a focused improvement to Ultimate Macro
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep proposals focused on a user problem or maintainability need. Do not include credentials, private-server links, or other secrets.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or developer problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful solution.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - UI / usability
+        - Strategy recorder
+        - Strategy Lab
+        - Runtime automation
+        - Reliability / recovery
+        - Discord / remote
+        - Packaging / updater
+        - Developer tooling
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: risk
+    attributes:
+      label: Compatibility or risk notes

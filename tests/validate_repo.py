@@ -28,16 +28,29 @@ REQUIRED_RUNTIME_FILES = (
 
 REQUIRED_QA_FILES = (
     ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
     ".github/pull_request_template.md",
     ".github/ISSUE_TEMPLATE/bug_report.yml",
+    ".github/ISSUE_TEMPLATE/feature_request.yml",
+    ".github/ISSUE_TEMPLATE/tester_report.yml",
     ".github/ISSUE_TEMPLATE/config.yml",
     "PLAN.md",
+    "VERSION",
     "DEPENDENCIES.md",
     "SECURITY.md",
     "TESTING.md",
     "QA_CHECKLIST.md",
     "CONTRIBUTING.md",
+    "tools/build_release.py",
+    "tests/test_release_package.py",
+    "docs/README.md",
     "docs/BRANCH_PROTECTION.md",
+    "docs/development/ARCHITECTURE.md",
+    "docs/development/BRANCHING.md",
+    "docs/development/RELEASE_PROCESS.md",
+    "docs/qa/REGRESSION_CHECKLIST.md",
+    "docs/user/INSTALLATION.md",
+    "docs/user/TROUBLESHOOTING.md",
 )
 
 # These paths are assembled dynamically in the AHK source, so a literal-string
@@ -193,8 +206,8 @@ def validate_tracked_scope(tracked: list[str], errors: list[str]) -> None:
             fail(errors, f"generated/private file must not be tracked: {relative}")
         if normalized.startswith(("options/", "recordings/")):
             fail(errors, f"runtime state directory must not be tracked: {relative}")
-        if "strategy lab" in normalized or "strategy_lab" in normalized:
-            fail(errors, f"experimental Strategy Lab file is out of scope: {relative}")
+        # Strategy Lab is now an official product surface. Release cleanliness
+        # is enforced by the package allow-list instead of rejecting its name.
         if "remote 2.0" in normalized or "remote2.0" in normalized:
             fail(errors, f"Remote 2.0 file is out of scope: {relative}")
         if "screenshot" in name and Path(normalized).suffix in {".png", ".jpg", ".jpeg"}:
@@ -311,10 +324,50 @@ def validate_ci_workflow(root: Path, errors: list[str]) -> None:
         "./tools/validate_powershell.ps1",
         "./tests/safe_updater_smoke.ps1",
         "./tools/validate_ahk.ps1",
+        "python tools/build_release.py .",
+        "python tests/test_release_package.py .",
+        "'dev/**'",
+        "'feature/**'",
+        "'fix/**'",
+        "'refactor/**'",
+        "'release/**'",
+        "'qa/**'",
     )
     for marker in markers:
         if marker not in workflow:
             fail(errors, f"CI workflow contract is missing: {marker}")
+
+
+def validate_version_and_release_workflow(root: Path, errors: list[str]) -> None:
+    version = read_text(root / "VERSION").strip()
+    if not re.fullmatch(r"\d+(?:\.\d+){1,3}(?:[A-Za-z]|[-+][0-9A-Za-z.-]+)?", version):
+        fail(errors, f"invalid VERSION value: {version!r}")
+
+    main = read_text(root / "Main.ahk")
+    match = re.search(r'(?m)^\s*ver\s*:=\s*"([^"]+)"\s*$', main)
+    if not match:
+        fail(errors, 'Main.ahk is missing the canonical ver := "..." assignment')
+    elif match.group(1) != version:
+        fail(errors, f"VERSION ({version}) does not match Main.ahk ({match.group(1)})")
+
+    release = read_text(root / ".github" / "workflows" / "release.yml")
+    markers = (
+        "permissions:\n  contents: read",
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+        "python tools/build_release.py .",
+        "python tests/test_release_package.py .",
+        "SHA256SUMS.txt",
+        "TDS_Macro.zip",
+    )
+    for marker in markers:
+        if marker not in release:
+            fail(errors, f"release workflow contract is missing: {marker}")
+
+    lowered = release.casefold()
+    if "gh release create" in lowered or "releases: write" in lowered:
+        fail(errors, "repository-v2 release workflow must remain build-only")
 
 
 def validate(root: Path) -> tuple[list[str], list[str]]:
@@ -333,6 +386,7 @@ def validate(root: Path) -> tuple[list[str], list[str]]:
     validate_dependency_bootstrap(root, errors)
     validate_updater(root, errors)
     validate_ci_workflow(root, errors)
+    validate_version_and_release_workflow(root, errors)
 
     return errors, warnings
 

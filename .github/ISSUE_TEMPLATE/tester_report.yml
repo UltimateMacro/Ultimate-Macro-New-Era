@@ -1,0 +1,50 @@
+name: Tester report
+description: Submit structured QA results for a release candidate
+title: "[QA]: "
+labels: [qa]
+body:
+  - type: input
+    id: candidate
+    attributes:
+      label: Release candidate / commit
+      placeholder: v1.3.5 RC or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Windows 11 24H2, 100% scaling, 1920x1080
+    validations:
+      required: true
+  - type: checkboxes
+    id: areas
+    attributes:
+      label: Areas tested
+      options:
+        - label: Long recording save / reload
+        - label: TimeScale
+        - label: Tower placement
+        - label: Tower selling
+        - label: Strategy Lab
+        - label: Matchmaking / recovery
+        - label: Updater / clean install
+  - type: textarea
+    id: scenarios
+    attributes:
+      label: Scenarios and results
+      description: List each scenario as PASS, FAIL, or NOT TESTED.
+    validations:
+      required: true
+  - type: textarea
+    id: failures
+    attributes:
+      label: Failure details
+      description: Include reproducible steps and sanitized evidence for every failure.
+  - type: checkboxes
+    id: sanitize
+    attributes:
+      label: Privacy
+      options:
+        - label: I removed tokens, webhook URLs, private-server links, and personal configuration from all evidence.
+          required: true
