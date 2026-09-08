@@ -99,6 +99,16 @@ def validate_equip_and_resolution(main: str) -> None:
     require("BrawlerReposition(Trim(m[1]), sX(Integer(m[2]), StrategyWidth), sY(Integer(m[3]), StrategyHeight))" in execute,
             "Brawler destination must normalize from strategy dimensions")
 
+    classifier = region(main, "IsPlacementExplicitlyRejected() {", "ResolvePlacementAmbiguity(towerID, &resV2) {")
+    require("IsPlacementInsufficientFunds()" in classifier and 'return "funds"' in classifier,
+            "placement must distinguish insufficient funds from blocked geometry")
+    require("cannot_place_here_v2.png" in classifier,
+            "placement space detection must cover both known cannot-place templates")
+    require('placementStatus = "funds"' in spawn and 'placementStatus = "space"' in spawn,
+            "SpawnTower must route cash and geometry failures through different retry policies")
+    require("placement_unknown_exhausted" in spawn,
+            "unknown placement state must stop safely instead of moving a legacy strategy")
+
     clone = region(main, "CloneTower(towerId, x, y, wait := 0) {", "BrawlerReposition(towerId, x, y) {")
     brawler = region(main, "BrawlerReposition(towerId, x, y) {", "ActivateRaiseTheDead(wait := 0) {")
     for name, body in (("CloneTower", clone), ("BrawlerReposition", brawler)):
@@ -123,6 +133,12 @@ def validate_equip_and_resolution(main: str) -> None:
             "save-time geometry must not replace the recording coordinate plane")
     require("GetDpiForWindow" in start_recording and "100% recommended" in start_recording,
             "recording must warn when window DPI is non-recommended")
+    raw_recording = region(main, "RecordInputsHK(*) {", "CloneTowerHK(*) {")
+    autosave = region(main, "RecordingAutosaveSnapshot(includeMacroSteps := false) {", "RecordingAutosaveDiscard() {")
+    require("raw_input_recording_start_failed" in raw_recording and 'nextHook := InputHook("V")' in raw_recording,
+            "raw input recording must fail visibly and roll back cleanly if InputHook cannot start")
+    require("RecordMacroStep(step)" in autosave and "RecordingAutosaveRewrite(true)" in autosave,
+            "raw input steps must participate in crash-safe autosave snapshots")
 
 
 def validate_hotbar_mouse_selection(main: str) -> None:
@@ -192,6 +208,11 @@ def validate_matchmaking_ready_map(main: str, validator: str) -> None:
             "Frost/standard targeting needs template matching plus bounded OCR fallback")
     require("GetRobloxScreenClientRect" in difficulty and "match.Click()" in difficulty,
             "difficulty OCR must capture/click in SCREEN space")
+    require("cardX := 0" in difficulty and "cardW := w" in difficulty and "cardH := h" in difficulty,
+            "difficulty template matching must scan the whole client area; a cropped region clips the "
+            "left-column Easy/Hardcore cards so their template never fits")
+    require("screenW * 0.17" in difficulty and "screenW * 0.76" in difficulty,
+            "difficulty OCR must start left of the mode-card grid so the Easy label is not cut off")
     require('"Resources/Frost.png"' in validator, "Frost runtime image must remain required")
 
     require("mapDeadline := A_TickCount + 12000" in map_check and "mapSamples < 16" in map_check,
@@ -501,7 +522,10 @@ def validate_positive_backports(main_source: str) -> None:
         "party member watchdog phase": 'MacroPhase("party_member_wait", 190000)',
         "draggable strategy scrollbar": "TryBeginScrollDrag()",
         "webhook link auto-detection": "RefreshWebhookStatus(*)",
-        "debounced webhook validation": "SetTimer(RefreshWebhookStatus, -700)",
+        "debounced webhook validation": 'QueueSettingSave("webhooklink", RefreshWebhookStatus, 700)',
+        "flushable pending settings": "FlushPendingSettingSaves() {",
+        "OCR matches restricted to the game UI": "OcrMatchTargetsGameUI(match, target)",
+        "OCR matches restricted away from the log overlay": "PointIsOverMacroOverlay(px, py)",
         "gradient action buttons": "MakeActionButton(MainGui",
         "runtime timer stop": "StopRuntimeTimers()",
         "scan-code input release": '"sc011"',
@@ -515,6 +539,7 @@ def validate_positive_backports(main_source: str) -> None:
         "rotation forcing Auto Equip on": "SetCheckboxLocked(",
         "manual Enable Webhook switch": "vWebhookEnabled",
         "manual Use VIP Server switch": "UseVipServerCtrl",
+        "screen-capture exclusion that can stop external recorders": "SetWindowDisplayAffinity",
     }
     for label, marker in forbidden.items():
         require(marker not in main_source, f"regression retained: {label}")
@@ -829,8 +854,8 @@ def validate_auto_settings_hardening(
 
 def validate_v134b_stability(main: str, remote: str) -> None:
     """Static regression contracts retained by the 1.3.5 release."""
-    require('ver := "1.3.5"' in main, "Main.ahk must identify the 1.3.5 release")
-    require('global ClientVersion := "1.3.5"' in remote,
+    require('ver := "1.3.5a"' in main, "Main.ahk must identify the 1.3.5 release")
+    require('global ClientVersion := "1.3.5a"' in remote,
             "official remote worker must identify the 1.3.5 release")
 
     load = region(main, "LoadStrategyFile(file) {", "\nRunStrategy(")
@@ -886,11 +911,21 @@ def validate_v134b_stability(main: str, remote: str) -> None:
             "lagging prior tower panels must not fatally stop placement")
     require("waitForTowerUI(&resV2, , 5000)" in spawn,
             "placement must allow delayed Roblox UI observation before declaring ambiguity")
-    require("ResolvePlacementAmbiguity" in spawn and "placement_ambiguous_retry" in spawn and
-            "IsPlacementExplicitlyRejected()" in spawn,
-            "placement ambiguity must passively re-check before bounded retry")
+    require("samePositionAttempts < maxSameSpotRetries" in spawn and "placement_retry_same_position" in spawn,
+            "an unconfirmed placement with no rejection message must keep the recorded position; only an "
+            "explicit cannot-place-here may move the tower, otherwise running out of cash relocates it")
+    require("targetIndex--" in spawn and "placeAttempts--" in spawn,
+            "retrying the recorded spot must not consume the placement budget or advance to another spot")
+    require("if waitForTowerUI(, , 120) {" in spawn,
+            "the unfocus click must only fire when a tower panel is actually open, "
+            "otherwise every placement pays a needless top-left click and wait")
+    require("ResolvePlacementAmbiguity" in spawn and "placement_waiting_for_funds" in spawn and
+            "placement_unknown_exhausted" in spawn,
+            "placement ambiguity must distinguish funds, space rejection, and unknown UI state")
+    require('placementStatus = "space"' in spawn and 'placementStatus = "funds"' in spawn,
+            "only explicit space rejection may advance the placement target; cash must stay on the recorded pixel")
     require("return true" in spawn and "return false" in spawn,
-            "placement must continue on pending ambiguity but retain fatal returns for cancellation/exhaustion")
+            "placement must retain explicit success and safe-failure returns")
     require("StopStrategy()" not in spawn,
             "SpawnTower must never stop the whole strategy for placement ambiguity")
     require("Placement did not complete; continuing with the next step" in main,
@@ -911,6 +946,12 @@ def validate_v134b_stability(main: str, remote: str) -> None:
     stop = region(main, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
     require("wasRunning := RunningStrategy" in stop and "RunningStrategy := false" in stop,
             "stop must cancel synchronous runtime work before cleanup")
+    play = region(main, "PlayStrategy() {", "ExecuteStep(step) {")
+    require("if (IsSet(RunningStrategy) && !RunningStrategy)" in play,
+            "the strategy step loop must halt on stop instead of running on until the reload lands")
+    wait_ready_stop = region(main, "waitReady() {", "OpenTimescaleDialog(w, h) {")
+    require("if (IsSet(RunningStrategy) && !RunningStrategy)" in wait_ready_stop,
+            "waitReady closes Roblox on timeout, so a stopped run must leave it before that fires")
     release = region(main, "ReleaseHeldInput() {", "\nSafeReload() {")
     require('Click("Left Up")' in release and 'Click("Right Up")' in release,
             "stop cleanup must release both mouse buttons")
@@ -922,9 +963,9 @@ def validate_v134b_stability(main: str, remote: str) -> None:
     difficulty = region(main, "TryClickDifficultyTarget(target, w, h) {", "WaitForLobbyLoad() {")
     require("if (target = \"Hardcore\")" in difficulty and "difficulty_hardcore_image_missing" in difficulty,
             "Hardcore must not use ambiguous OCR that can click Unlock Hardcore")
-    require("ocrX := screenX + Round(screenW * 0.22)" in difficulty and
-            "ocrX := screenX\n" not in difficulty,
-            "difficulty OCR must stay inside the mode-card region instead of the macro log")
+    require("OcrMatchTargetsGameUI(match, target)" in difficulty,
+            "difficulty OCR must reject matches that land on the macro log overlay or outside the "
+            "game client, rather than cropping the search region and clipping Easy/Hardcore")
     join = region(main, "JoinGame() {", "InvitePartyMembers(search_bar) {")
     require("party_size_timeout" in join,
             "party-size stalls must identify the mode-selection failure before recovery")

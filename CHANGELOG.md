@@ -1,3 +1,14 @@
+# Ultimate Macro v1.3.5a
+
+- Fixed placement failure classification so insufficient cash keeps the exact recorded coordinates, while only an explicit "cannot place here" response is allowed to move to an offset
+- Fixed unresolved placement retries drifting towers away from older strategy coordinates; unknown failures now retry the same spot and fail safely instead of guessing a new position
+- Hardened raw input recording startup and crash autosave so a failed InputHook reports the actual error and in-progress clicks/keys are preserved before save/reload/exit
+- Removed the debug overlay capture-exclusion flag (`WDA_EXCLUDEFROMCAPTURE`) because it can interfere with external screen recorders/Game Bar; the overlay is still ignored by macro OCR through explicit hit filtering
+- Fixed a placement bug
+- Fixed an unfocus click bug
+- Fixed an issue where some modes in the list weren't being clicked
+- Fixed a slight Timescale issue
+
 # Ultimate Macro v1.3.5
 
 ## Fixed
