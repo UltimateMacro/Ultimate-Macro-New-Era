@@ -557,6 +557,25 @@ def validate_official_remote(root: Path, main: str) -> None:
     assert "fileBytes := Buffer(file.Length)" in worker
 
 
+def validate_qa_credits(root: Path, main: str) -> None:
+    readme = read(root / "README.md")
+    expected_readme = """**QA**
+
+- frostzzz
+- menz7
+- nytli
+- tristanm1ce"""
+    expected_app = """QA
+• frostzzz
+• menz7
+• nytli
+• tristanm1ce"""
+
+    assert expected_readme in readme, "README QA roster is incomplete or out of order"
+    assert expected_app in main, "in-app QA credits are incomplete or out of order"
+    assert "nytil" not in readme.lower(), "README still contains the old nytli typo"
+
+
 def validate(root: Path) -> None:
     main = read(root / "Main.ahk")
     watchdog = read(root / "submacros" / "watchdog.ahk")
@@ -570,6 +589,7 @@ def validate(root: Path) -> None:
 
     validate_source_dependency_bootstrap(main)
     validate_dependency_bootstrap_portability(root)
+    validate_qa_credits(root, main)
     validate_settings_contracts(main)
     validate_automatic_settings_persistence(main)
     validate_placement_position_tracking(main)
