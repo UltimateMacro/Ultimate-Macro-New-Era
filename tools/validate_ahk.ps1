@@ -1,8 +1,8 @@
-param(
+﻿param(
     [string[]]$ScriptPath = @(
         'Main.ahk',
         'submacros/watchdog.ahk',
-        'submacros/auto_coa.ahk',
+        'submacros/auto_ability.ahk',
         'submacros/auto_open_consumable.ahk',
         'submacros/auto_spin.ahk',
         'tests/test_auto_settings.ahk'

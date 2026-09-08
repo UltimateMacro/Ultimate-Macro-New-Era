@@ -7,7 +7,6 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-
 ALLOWED_CALLS = {
     "spawntower",
     "upgradetower",
@@ -23,11 +22,8 @@ ALLOWED_CALLS = {
     "selltower",
 }
 
-
 def strip_comment(line: str) -> str:
-    # Current strategy commands do not use semicolons inside string arguments.
     return line.split(";", 1)[0].strip()
-
 
 def balanced_parentheses(line: str) -> bool:
     depth = 0
@@ -52,7 +48,6 @@ def balanced_parentheses(line: str) -> bool:
             if depth < 0:
                 return False
     return depth == 0 and not in_string
-
 
 def lint_file(path: Path) -> tuple[list[str], list[str]]:
     errors: list[str] = []
@@ -109,7 +104,6 @@ def lint_file(path: Path) -> tuple[list[str], list[str]]:
 
     return errors, warnings
 
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".")
@@ -151,7 +145,6 @@ def main() -> int:
 
     print(f"strategy lint: PASS ({len(files)} files, {len(warnings)} warning(s))")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

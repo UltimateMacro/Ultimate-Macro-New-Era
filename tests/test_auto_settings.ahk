@@ -63,8 +63,6 @@ try {
         '"C:\RobloxPlayerBeta.exe" --launch-to-tray-extra'),
         "A partial tray flag was accepted")
 
-    ; This exercises PCRE replacement behavior. The previously generated \\s and
-    ; \\1 patterns fail these assertions by leaving old values and adding copies.
     transformed := TransformAutoSettingsXml(fixture)
     AssertTrue(InStr(transformed, '<token name="CameraMode">0</token>') > 0,
         "Existing CameraMode value was not replaced")
@@ -132,8 +130,6 @@ try {
     semanticState := AutoSettingsReadBackupState(AutoSettingsPaths(semanticPath))
     semanticXml := StrReplace(FileRead(semanticPath), "</roblox>",
         '<string name="RobloxNormalized">preserve-me</string></roblox>')
-    ; Reproduce Roblox's observed BOM removal while also preserving an unrelated
-    ; serialization change which Auto Settings does not own.
     WriteRawUtf8Fixture(semanticPath, semanticXml)
     AssertTrue(AutoSettingsFileSha256(semanticPath) != semanticState.backupHash
         && AutoSettingsFileSha256(semanticPath) != semanticState.appliedHash,
@@ -163,8 +159,6 @@ try {
     AssertTrue(AutoSettingsFileSha256(foreignPaths.backup) = foreignBackupHash,
         "Foreign managed state changed the verified backup")
 
-    ; Sanitized reproduction of the live QA artifact: Roblox preserved the
-    ; macro-applied document but PerformanceStatsVisible changed back to false.
     liveReproPath := testRoot "\live-performance-stats.xml"
     WriteFixture(liveReproPath, fixture)
     AssertTrue(ApplyMacroSettings(liveReproPath, neverRunning), "Live reproduction fixture apply failed")

@@ -1,11 +1,3 @@
-/********************************************
-* @Author SP
-* @Description Class to interact with Discord
-*********************************************/
-
-; Originally derived from Natro Macro.
-; New Era hardening keeps one request path for retries/rate limits while
-; preserving caller-owned bitmap lifetime.
 
 class Discord
 {
@@ -14,8 +6,6 @@ class Discord
     static EscapeJson(value)
     {
         value := String(value)
-        ; Existing macro callsites frequently use literal \n / \t sequences to
-        ; describe Discord formatting. Normalize those before JSON escaping.
         value := StrReplace(value, "\r\n", "`n")
         value := StrReplace(value, "\n", "`n")
         value := StrReplace(value, "\t", "`t")
@@ -56,8 +46,6 @@ class Discord
         return this.SendMessageAPI(postdata, contentType, channel)
     }
 
-    ; No full-desktop default. Callers may pass CaptureRobloxClientBitmap(), or
-    ; omit the bitmap for a text-only embed when Roblox is unavailable.
     static SendScreenshot(pBitmap := 0, description := "", color := 12434877, channel := "", replyID := 0)
     {
         escapedDescription := this.EscapeJson(description)
@@ -136,8 +124,6 @@ class Discord
     {
         static lastmsg := Map()
 
-        ; On the first poll after a macro restart, establish a baseline but do
-        ; not replay the last command from before the restart.
         if !lastmsg.Has(channel) {
             try
                 firstMessages := JSON.parse(this.GetMessageAPI("?limit=1", channel))
@@ -168,9 +154,6 @@ class Discord
         return this.Request("GET", this.baseURL "channels/" channel "/messages" params)
     }
 
-    ; Central Discord request path. Retries transient network failures, HTTP 429
-    ; using Discord's Retry-After/retry_after value, and 5xx server failures.
-    ; Authentication/permission/client errors are returned immediately.
     static Request(method, url, body?, contentType := "", maxAttempts := 3)
     {
         global BotToken

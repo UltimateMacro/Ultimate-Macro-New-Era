@@ -1,6 +1,4 @@
-; Official Ultimate Macro remote bridge. The worker process owns network polling;
-; Main.ahk only handles small authenticated command files in the user's AppData.
-
+﻿
 OfficialRemoteDir() {
     global AppDataOpt
     dir := AppDataOpt "\Remote"
@@ -27,15 +25,6 @@ OfficialRemoteStartWorker(*) {
     if WinExist("ULT Official Remote Worker ahk_class AutoHotkey")
         return
     Run('"' A_AhkPath '" "' worker '" worker', A_ScriptDir, "Hide")
-}
-
-OfficialRemoteOpenSetup(*) {
-    worker := OfficialRemoteWorkerPath()
-    if !FileExist(worker) {
-        ModernMsgBox("Remote Control", "The official Remote Control client is missing from this build.", "OK", "WARNING")
-        return
-    }
-    Run('"' A_AhkPath '" "' worker '" setup', A_ScriptDir)
 }
 
 OfficialRemoteRefreshControls() {
@@ -138,10 +127,10 @@ OfficialRemoteExecute(command) {
                 "runtime", RunningStrategy ? FormatRuntime(AutorunStartTime) : "Not running"
             )
         } else if (action = "start") {
-            if RunningStrategy
-                throw Error("The macro is already running.")
-            SetTimer(StartStrategy, -100)
-            result["result"] := Map("started", JSON.true)
+            problem := QueueStrategyStart()
+            if (problem != "")
+                throw Error(problem)
+            result["result"] := Map("queued", JSON.true)
         } else if (action = "stop") {
             if !RunningStrategy
                 throw Error("The macro is not running.")

@@ -1,6 +1,4 @@
-; Portable, safe profile import/export.
-; Profile files intentionally contain an allowlist of settings only.
-
+﻿
 global ProfileDialogGui := 0
 global ProfileDialogResult := 0
 
@@ -242,30 +240,82 @@ SafeProfileName(value) {
     return (value = "" ? "Imported Profile" : SubStr(value, 1, 80))
 }
 
+ProfileDialogAccent := "3A86FF"
+
+ProfileDialogCreate(title, width) {
+    global MainGui
+
+    g := Gui("-Caption +Border +Owner" MainGui.Hwnd, title)
+    g.BackColor := "121212"
+    g.MarginX := 0
+    g.MarginY := 0
+
+    g.Add("Progress", "x0 y0 w" width " h40 Disabled Background0A0A0A", 0)
+    g.SetFont("s10 w500 cFFFFFF", "Segoe UI")
+    caption := g.Add("Text", "x20 y9 w" (width - 76) " h22 0x200 BackgroundTrans", title)
+    caption.OnEvent("Click", (*) => PostMessage(0xA1, 2, , , g))
+
+    g.SetFont("s10 w400 cFFFFFF", "Marlett")
+    closeBtn := g.Add("Text", "x" (width - 50) " y9 w30 h22 Center 0x200 BackgroundTrans", "r")
+    closeBtn.OnEvent("Click", (*) => (UnregisterHoverHost(g), g.Destroy()))
+
+    g.Add("Progress", "x0 y40 w" width " h1 Disabled Background222222", 0)
+    g.SetFont("s10 w400 cFFFFFF", "Segoe UI")
+    RegisterHoverEffect(caption, "caption")
+    RegisterHoverEffect(closeBtn, "caption")
+    RegisterHoverHost(g)
+    g.OnEvent("Close", (*) => UnregisterHoverHost(g))
+    return g
+}
+
+ProfileDialogButton(g, x, y, w, h, label, handler, accent := false) {
+    g.SetFont("s9 w500 " (accent ? "c3A86FF" : "cFFFFFF"), "Segoe UI")
+    AddDarkListFrame(g, x, y, w, h, false)
+    btn := g.Add("Text", "x" x " y" y " w" w " h" h " Center 0x200 Background1B1B1B", label)
+    btn.OnEvent("Click", handler)
+    btn.AccentButton := accent
+    RegisterHoverEffect(btn, "dialog")
+    g.SetFont("s10 w400 cFFFFFF", "Segoe UI")
+    return btn
+}
+
 ProfileManager(*) {
-    global ProfilesDir, ProfileManagerGui, ProfileListCtrl, MainGui
+    global ProfilesDir, ProfileManagerGui, ProfileListCtrl
+
     if IsSet(ProfileManagerGui) && IsObject(ProfileManagerGui) {
+        try UnregisterHoverHost(ProfileManagerGui)
         try ProfileManagerGui.Destroy()
     }
 
-    ProfileManagerGui := Gui("+Owner" MainGui.Hwnd, "Ultimate Macro Profiles")
-    ProfileManagerGui.SetFont("s10", "Segoe UI")
-    ProfileManagerGui.Add("Text", "x20 y18 w450", "Saved profiles")
-    ProfileManagerGui.Add("Text", "x20 y42 w450 c777777", "Import a saved profile, export your current setup, or roll back the last import.")
-    ProfileListCtrl := ProfileManagerGui.Add("ListBox", "x20 y75 w450 h190")
-    ProfileManagerGui.Add("Text", "x20 y278 w450 h55 c777777", "Profiles don’t include personal or private information like webhooks, tokens, server links, run history, logs, or anything confidential. You can always review your `.ump` file before sharing it.")
-    exportBtn := ProfileManagerGui.Add("Button", "x20 y335 w140 h30", "Export current")
-    importBtn := ProfileManagerGui.Add("Button", "x175 y335 w140 h30", "Import selected")
-    rollbackBtn := ProfileManagerGui.Add("Button", "x330 y335 w140 h30", "Rollback last")
-    refreshBtn := ProfileManagerGui.Add("Button", "x20 y375 w140 h28", "Refresh")
-    closeBtn := ProfileManagerGui.Add("Button", "x330 y375 w140 h28", "Close")
-    exportBtn.OnEvent("Click", ExportProfile)
-    importBtn.OnEvent("Click", ProfileManagerImport)
-    rollbackBtn.OnEvent("Click", ProfileManagerRollback)
-    refreshBtn.OnEvent("Click", ProfileManagerRefresh)
-    closeBtn.OnEvent("Click", (*) => ProfileManagerGui.Destroy())
+    ProfileManagerGui := ProfileDialogCreate("Ultimate Macro Profiles", 490)
+
+    ProfileManagerGui.SetFont("s10 w500 c3A86FF", "Segoe UI")
+    ProfileManagerGui.Add("Text", "x20 y58 w450 h22 BackgroundTrans", "Saved profiles")
+
+    ProfileManagerGui.SetFont("s9 w400 c7E848E", "Segoe UI")
+    ProfileManagerGui.Add("Text", "x20 y82 w450 h20 BackgroundTrans",
+        "Import a saved profile, export your current setup, or roll back the last import.")
+
+    ProfileManagerGui.SetFont("s10 w400 cE2E4E7", "Segoe UI")
+    profileListFrame := AddDarkListFrame(ProfileManagerGui, 20, 110, 450, 180, false)
+    ProfileListCtrl := ProfileManagerGui.Add("ListBox", "x20 y110 w450 h180 -Border -E0x200 Background1B1B1B")
+    FitDarkListFrame(profileListFrame, ProfileListCtrl)
+    EnableDarkScrollbar(ProfileListCtrl)
+
+    ProfileManagerGui.SetFont("s8 w400 c7E848E", "Segoe UI")
+    ProfileManagerGui.Add("Text", "x20 y302 w450 h50 BackgroundTrans",
+        "Profiles never include personal or private information such as webhooks, tokens, server links, run history or logs. You can always review the .ump file before sharing it.")
+
+    ProfileDialogButton(ProfileManagerGui, 20, 362, 140, 32, "Export current", ExportProfile)
+    ProfileDialogButton(ProfileManagerGui, 175, 362, 140, 32, "Import selected", ProfileManagerImport, true)
+    ProfileDialogButton(ProfileManagerGui, 330, 362, 140, 32, "Rollback last", ProfileManagerRollback)
+    ProfileDialogButton(ProfileManagerGui, 20, 404, 140, 30, "Refresh", ProfileManagerRefresh)
+    ProfileDialogButton(ProfileManagerGui, 330, 404, 140, 30, "Close",
+        (*) => (UnregisterHoverHost(ProfileManagerGui), ProfileManagerGui.Destroy()))
+
     ProfileManagerRefresh()
-    ProfileManagerGui.Show("w490 h425")
+    ApplyDarkInputTheme(ProfileManagerGui)
+    ProfileManagerGui.Show("w490 h454")
 }
 
 ProfileManagerRefresh(*) {
@@ -288,6 +338,7 @@ ProfileManagerImport(*) {
     if (selected = "" || selected = "No saved profiles found")
         return
     if (ModernMsgBox("Import profile", "Import '" selected "'? Your current settings will be backed up first.", "YES|NO", "QUESTION") = "YES") {
+        UnregisterHoverHost(ProfileManagerGui)
         ProfileManagerGui.Destroy()
         ImportProfileFile(ProfilesDir "\" selected)
     }
@@ -309,34 +360,57 @@ ProfileManagerRollback(*) {
     }
     if (ModernMsgBox("Rollback profile", "Restore the previous settings backup? The macro will restart.", "YES|NO", "QUESTION") = "YES") {
         FileCopy(latest, SettingsFile, 1)
+        UnregisterHoverHost(ProfileManagerGui)
         ProfileManagerGui.Destroy()
         Reload()
     }
 }
 
 ShowProfileExportOptions() {
-    global ProfileDialogGui, ProfileDialogResult, MainGui
+    global ProfileDialogGui, ProfileDialogResult
+
     ProfileDialogResult := 0
-    ProfileDialogGui := Gui("+Owner" MainGui.Hwnd, "Export Ultimate Macro Profile")
-    ProfileDialogGui.SetFont("s10", "Segoe UI")
-    ProfileDialogGui.Add("Text", "x20 y18 w430", "Choose what this profile will contain")
-    ProfileDialogGui.Add("Text", "x20 y45 w110", "Profile name:")
-    nameCtrl := ProfileDialogGui.Add("Edit", "x130 y42 w320 vProfileName", "TDS Profile " FormatTime(, "yyyy-MM-dd"))
-    ProfileDialogGui.Add("Text", "x20 y80 w110", "Description:")
-    ProfileDialogGui.Add("Edit", "x130 y77 w320 h45 vProfileDescription", "Shared TDS Macro setup")
-    ProfileDialogGui.Add("Checkbox", "x20 y140 vExportOptions Checked", "Macro settings")
-    ProfileDialogGui.Add("Text", "x40 y162 w410 c777777", "Delays, timescale, performance, restart, and safe preferences")
-    ProfileDialogGui.Add("Checkbox", "x20 y188 vExportHotkeys Checked", "Hotkeys")
-    ProfileDialogGui.Add("Text", "x40 y210 w410 c777777", "TDS ability keys and recording hotkeys")
-    ProfileDialogGui.Add("Checkbox", "x20 y236 vExportStrategies Checked", "Selected strategies")
-    ProfileDialogGui.Add("Text", "x40 y258 w410 c777777", "Embeds strategy contents instead of personal file paths")
-    ProfileDialogGui.Add("Text", "x20 y292 w430 h65 c777777", "Profiles don’t include personal or private information like webhooks, tokens, server links, run history, logs, or anything confidential. You can always review your `.ump` file before sharing it.")
-    ok := ProfileDialogGui.Add("Button", "x250 y355 w95 h30", "Continue")
-    cancel := ProfileDialogGui.Add("Button", "x355 y355 w95 h30", "Cancel")
-    ok.OnEvent("Click", ProfileExportConfirm)
-    cancel.OnEvent("Click", ProfileDialogCancel)
+    ProfileDialogGui := ProfileDialogCreate("Export Ultimate Macro Profile", 470)
+
+    ProfileDialogGui.SetFont("s10 w500 c3A86FF", "Segoe UI")
+    ProfileDialogGui.Add("Text", "x20 y58 w430 h22 BackgroundTrans", "Choose what this profile will contain")
+
+    ProfileDialogGui.SetFont("s9 w400 cAAAAAA", "Segoe UI")
+    ProfileDialogGui.Add("Text", "x20 y90 w100 h22 0x200 BackgroundTrans", "Profile name:")
+    ProfileDialogGui.SetFont("s9 w400 c000000", "Segoe UI")
+    ProfileDialogGui.Add("Edit", "x130 y90 w320 h22 vProfileName", "TDS Profile " FormatTime(, "yyyy-MM-dd"))
+
+    ProfileDialogGui.SetFont("s9 w400 cAAAAAA", "Segoe UI")
+    ProfileDialogGui.Add("Text", "x20 y122 w100 h22 0x200 BackgroundTrans", "Description:")
+    ProfileDialogGui.SetFont("s9 w400 c000000", "Segoe UI")
+    ProfileDialogGui.Add("Edit", "x130 y122 w320 h45 vProfileDescription", "Shared TDS Macro setup")
+
+    ProfileDialogGui.SetFont("s9 w400 cFFFFFF", "Segoe UI")
+    ProfileDialogGui.Add("Checkbox", "x20 y184 w430 h22 vExportOptions Checked", "Macro settings")
+    ProfileDialogGui.SetFont("s8 w400 c7E848E", "Segoe UI")
+    ProfileDialogGui.Add("Text", "x40 y206 w410 h18 BackgroundTrans",
+        "Delays, timescale, performance, restart, and safe preferences")
+
+    ProfileDialogGui.SetFont("s9 w400 cFFFFFF", "Segoe UI")
+    ProfileDialogGui.Add("Checkbox", "x20 y232 w430 h22 vExportHotkeys Checked", "Hotkeys")
+    ProfileDialogGui.SetFont("s8 w400 c7E848E", "Segoe UI")
+    ProfileDialogGui.Add("Text", "x40 y254 w410 h18 BackgroundTrans", "TDS ability keys and recording hotkeys")
+
+    ProfileDialogGui.SetFont("s9 w400 cFFFFFF", "Segoe UI")
+    ProfileDialogGui.Add("Checkbox", "x20 y280 w430 h22 vExportStrategies Checked", "Selected strategies")
+    ProfileDialogGui.SetFont("s8 w400 c7E848E", "Segoe UI")
+    ProfileDialogGui.Add("Text", "x40 y302 w410 h18 BackgroundTrans",
+        "Embeds strategy contents instead of personal file paths")
+
+    ProfileDialogGui.Add("Text", "x20 y334 w430 h50 BackgroundTrans",
+        "Profiles never include personal or private information such as webhooks, tokens, server links, run history or logs. You can always review the .ump file before sharing it.")
+
+    ProfileDialogButton(ProfileDialogGui, 250, 396, 95, 32, "Continue", ProfileExportConfirm, true)
+    ProfileDialogButton(ProfileDialogGui, 355, 396, 95, 32, "Cancel", ProfileDialogCancel)
+
     ProfileDialogGui.OnEvent("Close", ProfileDialogCancel)
-    ProfileDialogGui.Show("w470 h405")
+    ApplyDarkInputTheme(ProfileDialogGui)
+    ProfileDialogGui.Show("w470 h448")
     WinWaitClose("ahk_id " ProfileDialogGui.Hwnd)
     return ProfileDialogResult
 }
@@ -361,12 +435,14 @@ ProfileExportConfirm(*) {
         ProfileDialogResult := 0
         return
     }
+    UnregisterHoverHost(ProfileDialogGui)
     ProfileDialogGui.Destroy()
 }
 
 ProfileDialogCancel(*) {
     global ProfileDialogGui, ProfileDialogResult
     ProfileDialogResult := 0
+    try UnregisterHoverHost(ProfileDialogGui)
     try ProfileDialogGui.Destroy()
 }
 

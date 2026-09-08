@@ -1,4 +1,4 @@
-ProcessCommands(*) {
+﻿ProcessCommands(*) {
     global command_buffer, UserID, RunningStrategy, ChannelID, BotPrefix, ver, AutorunStartTime, StateFile
 
     try {
@@ -89,8 +89,13 @@ ProcessCommands(*) {
         }
         
         else if (content = "screenshot") {
-            pBitmap := Gdip_BitmapFromScreen()
-            Discord.SendScreenshot(pBitmap, "Requested Screenshot")
+            pBitmap := CaptureRobloxClientBitmap()
+            if (!pBitmap) {
+                Discord.SendEmbed("Roblox is not running, so there is nothing to capture.")
+            } else {
+                Discord.SendScreenshot(pBitmap, "Requested Screenshot")
+                Gdip_DisposeImage(pBitmap)
+            }
         }
         
         else if (content = "status") {
@@ -147,7 +152,6 @@ ProcessCommands(*) {
         else if (content = "stop") {
             if (RunningStrategy) {
                 Discord.SendEmbed("Stopping the macro..", "56320")
-                id := Discord.GetMessageAPI()
                 StopStrategy()
             } else {
                 Discord.SendEmbed("Failed to stop: the macro is not running!", "16515072")
@@ -155,11 +159,11 @@ ProcessCommands(*) {
         }
 
         else if (content = "start") {
-            if (RunningStrategy) {
-                Discord.SendEmbed("Failed to start: the macro is already running!", "16515072")
+            problem := QueueStrategyStart()
+            if (problem != "") {
+                Discord.SendEmbed("Failed to start: " problem, "16515072")
             } else {
-                Discord.SendEmbed("Starting the macro..", "56320")
-                SetTimer(StartStrategy, -100)
+                Discord.SendEmbed("The macro start was queued after validating its strategy and party settings.", "56320")
             }
         }
     }
@@ -173,18 +177,23 @@ ProcessCommands(*) {
 
 ExportLogsToDiscord() {
     global LogLines
+    exportPath := ""
     try {
-        report := "**Recent diagnostic log**\n"
-        if (LogLines.Length = 0) {
-            report .= "No in-memory log lines are available."
-        } else {
-            startAt := Max(1, LogLines.Length - 18)
-            loop LogLines.Length - startAt + 1
-                report .= "\n" LogLines[startAt + A_Index - 1]
-        }
-        Discord.SendEmbed(SubStr(report, 1, 3900))
+        exportPath := RuntimeLogExportBundle()
+        if (exportPath = "")
+            throw Error("The diagnostic log bundle could not be created.")
+
+        payload := '{"content":"Ultimate Macro developer diagnostics"}'
+        Discord.CreateFormData(&postdata, &contentType, [
+            Map("name", "payload_json", "content-type", "application/json", "content", payload),
+            Map("name", "files[0]", "filename", "UltimateMacro-logs.txt", "content-type", "text/plain", "file", exportPath)
+        ])
+        Discord.SendMessageAPI(postdata, contentType)
     } catch Error as err {
         Discord.SendEmbed("Could not export diagnostics: " err.Message)
+    } finally {
+        if (exportPath != "" && FileExist(exportPath))
+            try FileDelete(exportPath)
     }
 }
 
@@ -271,7 +280,10 @@ SelectBotStrategy(argument) {
         Discord.SendEmbed("Selected **" selected.name "**. Restarting the macro with this strategy.")
         SafeReload()
     } else {
-        Discord.SendEmbed("Selected **" selected.name "**. Starting the macro with this strategy.")
-        SetTimer(StartStrategy, -100)
+        problem := QueueStrategyStart()
+        if (problem != "")
+            Discord.SendEmbed("Selected **" selected.name "**, but start was blocked: " problem, "16515072")
+        else
+            Discord.SendEmbed("Selected **" selected.name "**. The macro start was queued.", "56320")
     }
 }

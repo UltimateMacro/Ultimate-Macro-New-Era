@@ -217,3 +217,26 @@ Run this after the normal automated suite and before promoting the runtime candi
   orphan provenance, repeated generations and tray command-line recognition.
 - Runtime manual QA must still be repeated against the exact cleaned candidate
   before promotion.
+
+
+## Repository v2 release-package validation
+
+The repository-v2 branch model runs CI on `main`, `integration`, `dev/**`,
+`feature/**`, `fix/**`, `refactor/**`, `release/**`, and `qa/**` branches.
+
+After dependency synchronization and the normal validation suite, build and
+validate the exact user package:
+
+```powershell
+python tools/build_release.py .
+python tests/test_release_package.py .
+```
+
+The builder reads `VERSION`, requires it to match the runtime version assignment
+in `Main.ahk`, and writes `dist/TDS_Macro.zip`. The package test rejects
+developer-only paths/files and verifies the required updater/runtime payload.
+
+The build-only release workflow also produces `SHA256SUMS.txt` and uploads the
+candidate ZIP as a GitHub Actions artifact. It does **not** publish a GitHub
+Release automatically; publication remains an explicit release-owner action
+until that workflow is approved on the official repository.

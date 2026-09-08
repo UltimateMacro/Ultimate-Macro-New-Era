@@ -30,7 +30,6 @@ def validate_source_dependency_bootstrap(main: str) -> None:
     assert main.index("IsSet(OCR)") < first_boot_call
     assert main.index("IsSet(JSON)") < first_boot_call
 
-    # Never solve first-boot dependency handling by hiding genuine warnings.
     assert "#Warn VarUnset, Off" not in main
 
     json_include = main.index(r"#Include *i lib\JSON.ahk")
@@ -76,8 +75,8 @@ def validate_settings_contracts(main: str) -> None:
         r'global\s+UpgradeDelay\s*:=\s*IniRead\(SettingsFile,\s*"Options",\s*"UpgradeDelay",\s*200\)',
         main,
     ), "UpgradeDelay must load from persisted settings"
-    assert 'IniWrite(UpgradeDelay, SettingsFile, "Options", "UpgradeDelay")' in main, (
-        "UpgradeDelay must be persisted when settings are saved"
+    assert 'SaveOption("UpgradeDelay", UpgradeDelay)' in main, (
+        "UpgradeDelay must be persisted the moment its field changes"
     )
 
     assert re.search(
@@ -85,14 +84,87 @@ def validate_settings_contracts(main: str) -> None:
         main,
     ), "UpgradeTowerGBKey must retain its persisted default"
 
-    save_settings = region(main, "SaveAllSettings(ctrl, *)", "SaveAllSettingsMULTIPLAYER(ctrl, *)")
-    fallback = re.search(
-        r'if\s*\(tempUpgradeTowerGBKey\s*=\s*""\)\s*(?:\r?\n)\s*tempUpgradeTowerGBKey\s*:=\s*"Z"',
-        save_settings,
-    )
-    assert fallback, "blank UpgradeTowerGBKey must fall back to Z"
+    save_settings = region(main, "AutoSaveKeybinds(*) {", "FirstKeyChar(value, fallback) {")
+    assert (
+        "tempUpgradeTowerGBKey := FirstKeyChar(UpgradeTowerGBCtrl.Value, UpgradeTowerGBKey)"
+        in save_settings
+    ), "a momentarily blank UpgradeTowerGBKey field must keep the key already in use"
     assert "UpgradeTowerGBKey := tempUpgradeTowerGBKey" in save_settings
-    assert 'IniWrite(UpgradeTowerGBKey, SettingsFile, "Hotkeys", "UpgradeBottom")' in save_settings
+    assert 'SaveHotkeySetting("UpgradeBottom", UpgradeTowerGBKey)' in save_settings
+
+
+def validate_automatic_settings_persistence(main: str) -> None:
+    """Ultimate Macro has no save buttons: every setting writes through on change."""
+    for removed in (
+        "SaveAllSettings(ctrl, *)",
+        "SaveAllSettingsMULTIPLAYER(ctrl, *)",
+        "SaveWebhookSettings(ctrl, *)",
+        '"Save all settings"',
+        '"Save Discord Settings"',
+    ):
+        assert removed not in main, f"save-button era code still present: {removed}"
+
+    assert "SaveOption(key, value) {" in main, "settings must persist through a shared writer"
+    assert "ResetSettingsToDefault(*) {" in main, "the Settings page must offer Reset to Default"
+
+    assert "SetTimer(AutoSavePartySettings, -500)" in main
+    assert "SetTimer(AutoSaveBotSettings, -600)" in main
+    assert "SetTimer(AutoSaveKeybinds, -600)" in main
+
+
+def validate_placement_position_tracking(main: str) -> None:
+    """A rejected click target must never be tried again during one placement."""
+    spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "PlacementPositionKey(px, py) {")
+
+    assert "rejectedPositions := Map()" in spawn
+    assert "rejectedPositions.Has(PlacementPositionKey(candidate[1], candidate[2]))" in spawn, (
+        "placement must skip candidates that already failed"
+    )
+    assert spawn.count("rejectedPositions[PlacementPositionKey(currentX, currentY)] := true") == 2, (
+        "both the explicit-rejection and the unresolved path must retire the position"
+    )
+    assert "needsHotbarSelection := true" in spawn, (
+        "cancelling placement drops the held tower, so the slot must be selected again"
+    )
+    assert "BuildPlacementTargets(X, Y)" in spawn
+    assert "attemptMultiplier" not in spawn, (
+        "the old growing-offset retry re-clicked the original failed pixel every round"
+    )
+
+
+def validate_timescale_reliability(main: str) -> None:
+    """Once the ticket is spent the run must never be thrown away."""
+    timescale = region(main, "activateTimescale() {", "AlignCamera(move := true")
+    confirm_index = timescale.index("Click(hit.x, hit.y)")
+
+    assert "WaitForTimescaleDialog(w, h, 4000, &hit)" in timescale, (
+        "the dialog must be polled for rather than assumed after a fixed sleep"
+    )
+    assert "maxOpenAttempts" in timescale, "opening the dialog must be retried before giving up"
+    assert "StopStrategy()" not in timescale[confirm_index:], (
+        "the run must not be stopped after the TimeScale ticket has been consumed"
+    )
+    assert "timescale_confirmation_unverified" in timescale, (
+        "an unverifiable confirmation must warn and continue, not abort"
+    )
+
+
+def validate_resolution_scaling(main: str) -> None:
+    """Coordinate scaling must survive Roblox being closed or minimized."""
+    scale_x = region(main, "ScaleX(baseX, Width := 1920) {", "ScaleY(baseY, Height := 1009) {")
+    scale_y = region(main, "ScaleY(baseY, Height := 1009) {", "sX(baseX, Width := 1920) {")
+
+    for name, body in (("ScaleX", scale_x), ("ScaleY", scale_y)):
+        assert "> 0 ?" in body and ": baseX" in body or ": baseY" in body, (
+            f"{name} must return the unscaled base when the client size is unavailable"
+        )
+
+    tower_ui = region(main, "waitForTowerUI(&resV2 := \"\", &resV1 := \"\", timeout := 0) {",
+                      "WaitForTowerUIClosed(timeout := 500) {")
+    assert "H_v2 := h - Y1_v2" in tower_ui, (
+        "the tower panel search must reach the bottom of the client; clipping it at "
+        "h * 0.95 cut the Sell label out of the region at 1920x1009"
+    )
 
 
 def validate_strategy_geometry(main: str) -> None:
@@ -118,7 +190,7 @@ def validate_hotbar_mouse_selection(main: str) -> None:
     assert 'Send("{" slotNumber "}")' in spawn
 
 
-def validate_bitmap_ownership(main: str, watchdog: str, discord: str) -> None:
+def validate_bitmap_ownership(main: str, watchdog: str, discord: str, discord_commands: str) -> None:
     assert 'SendScreenshot(, "' not in watchdog, (
         "watchdog screenshot callers must allocate and own their bitmap explicitly"
     )
@@ -137,14 +209,15 @@ def validate_bitmap_ownership(main: str, watchdog: str, discord: str) -> None:
         "every watchdog CaptureRobloxClientBitmap path must dispose its owned bitmap"
     )
 
-    # Roblox being absent is intentionally text-only. Never capture the desktop
-    # merely to report that the Roblox client does not exist.
     assert 'SendScreenshot(0, "Roblox is not running!"' in watchdog
 
     bot_screenshot = region(
-        main,
-        'else if (content == "!screenshot")',
-        'else if (content == "!status")',
+        discord_commands,
+        'else if (content = "screenshot")',
+        'else if (content = "status")',
+    )
+    assert "Gdip_BitmapFromScreen()" not in bot_screenshot, (
+        "the bot must never capture the whole desktop"
     )
     assert "pBitmap := CaptureRobloxClientBitmap()" in bot_screenshot
     assert 'Discord.SendScreenshot(pBitmap, "Requested Screenshot")' in bot_screenshot
@@ -261,18 +334,12 @@ def validate_community_strategy_update(main: str) -> None:
     )
     assert "DarksenDev/tds-macro/contents/Strategies" not in community
 
-    # The v1.3.4 updater parses GitHub's structured response and counts only
-    # valid .strat entries. Do not couple this contract to an obsolete local
-    # strategyFiles array implementation.
     assert "JSON.parse(whr.ResponseText)" in community
     assert "RegExMatch(responseText" not in community
 
-    # Empty or partial remote results can never replace the currently installed
-    # community strategy set.
     assert "fileCount == 0" in community
     assert "successCount != fileCount" in community
 
-    # User files are not silently overwritten and the refresh is transactional.
     assert "would overwrite a local strategy" in community
     assert ".download_temp" in community
     assert ".community_backup" in community
@@ -288,21 +355,17 @@ def validate_webhook_batching(main: str) -> None:
 
 
 def validate_image_search_coordinates(image_search: str) -> None:
-    # The image-search contract has two coordinate spaces:
-    # capture in SCREEN coordinates, results in Roblox CLIENT coordinates.
     assert "GetRobloxScreenClientRect" in image_search
     assert 'pBitmapHaystack := Gdip_BitmapFromScreen(screenX' in image_search
 
     assert "x: centerX" in image_search
     assert "y: centerY" in image_search
 
-    # Never add the screen-space client origin back into returned coordinates.
     assert "xC + centerX" not in image_search
     assert "yC + centerY" not in image_search
     assert "screenX + centerX" not in image_search
     assert "screenY + centerY" not in image_search
 
-    # Runtime must expose which backend is active and retain a safe fallback.
     assert "GetImageSearchBackendInfo()" in image_search
     assert '"GDI+ fallback"' in image_search
     assert '"OpenCV native"' in image_search
@@ -323,7 +386,6 @@ def validate_discord_retries(discord: str) -> None:
 
 
 def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
-    # GlobalSize must receive the owning HGLOBAL, never the GlobalLock pointer.
     for name, source in (("Main", main), ("watchdog", watchdog), ("Discord", discord)):
         assert 'GlobalSize", "Ptr", hData' in source, (
             f"{name} must pass HGLOBAL to GlobalSize"
@@ -332,7 +394,6 @@ def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
             f"{name} must not pass the GlobalLock pointer to GlobalSize"
         )
 
-    # AutoHotkey v2 owns COM interface references through ObjRelease.
     assert "IUnknown_Release" not in watchdog
     assert "ObjRelease(pFileStream)" in watchdog
     assert "ObjRelease(pStream)" in watchdog
@@ -341,17 +402,12 @@ def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
 
     discord_form = region(discord, "static CreateFormData(", "\n}")
 
-    # Multipart streams must have explicit ownership and finally-based cleanup.
     assert "pStream := 0" in discord_form
     assert "ObjRelease(pStream)" in discord_form
 
-    # Discord has bitmap and file-backed multipart paths. Both temporary
-    # IStream references must be independently released.
     assert discord_form.count("pFileStream := 0") >= 2
     assert discord_form.count("ObjRelease(pFileStream)") >= 2
 
-    # Backing HGLOBAL must be locked only for the final copy and released
-    # regardless of whether RtlMoveMemory succeeds.
     assert 'GlobalLock", "Ptr", hData' in discord_form
     assert 'GlobalUnlock", "Ptr", hData' in discord_form
     assert 'GlobalFree", "Ptr", hData' in discord_form
@@ -364,20 +420,20 @@ def validate_multipart_handles(main: str, watchdog: str, discord: str) -> None:
     ), "Discord multipart HGLOBAL must be released in finally"
 
 def validate_transactional_updater(updater: str, safe_updater: str, wrapper: str) -> None:
-    assert "https://api.github.com/repos/DarksenDev/tds-macro/releases/latest" in updater
-    assert r"https://github\.com/DarksenDev/tds-macro/releases/download/" in updater
+    assert "https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era/releases/latest" in updater
+    assert r"https://github\.com/UltimateMacro/Ultimate-Macro-New-Era/releases/download/" in updater
     assert 'PreferredAsset := "TDS_Macro.zip"' in updater
     assert "JSON.parse" in updater
     assert 'RegExMatch(candidateDigest, "i)^sha256:[0-9a-f]{64}$")' in updater
     assert "CompareMacroVersions(latestVer, installedVer) <= 0" in updater
     assert "GetCurrentProcessId" in updater
     assert 'command .= " -SelfDelete"' in updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/latest" not in updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/download" not in updater
+    assert "DarksenDev/tds-macro/releases/latest" not in updater
+    assert "DarksenDev/tds-macro/releases/download" not in updater
 
     assert "[Parameter(Mandatory = $true)][string]$ExpectedSha256" in safe_updater
-    assert "/DarksenDev/tds-macro/releases/download/" in safe_updater
-    assert "UltimateMacro/Ultimate-Macro-New-Era/releases/download" not in safe_updater
+    assert "/UltimateMacro/Ultimate-Macro-New-Era/releases/download/" in safe_updater
+    assert "DarksenDev/tds-macro/releases/download" not in safe_updater
     assert "Refusing to update a filesystem root" in safe_updater
     assert "does not contain Main.ahk" in safe_updater
     assert "A .git entry was detected" in safe_updater
@@ -398,12 +454,12 @@ def validate_transactional_updater(updater: str, safe_updater: str, wrapper: str
 
 
 def validate_roblox_coordinates(roblox: str) -> None:
-    client_region = region(roblox, "getRobloxPos(", "; Returns the Roblox client rectangle in SCREEN coordinates.")
+    client_region = region(roblox, "getRobloxPos(", "GetRobloxScreenClientRect(")
     assert "GetClientRect" in client_region
     assert re.search(r"(?m)^\s*x\s*:=\s*0\s*$", client_region)
     assert re.search(r"(?m)^\s*y\s*:=\s*0\s*$", client_region)
 
-    screen_region = region(roblox, "GetRobloxScreenClientRect(", "; Returns hWnd on success")
+    screen_region = region(roblox, "GetRobloxScreenClientRect(", "GetRobloxHWND() {")
     assert "WinGetClientPos(&x, &y, &width, &height" in screen_region
 
 
@@ -415,7 +471,7 @@ def validate_official_remote(root: Path, main: str) -> None:
     assert "Official Remote" in main
     assert "Tab4_RemoteConsent" in main
     assert "OfficialRemoteShutdown()" in main
-    assert 'global ClientVersion := "1.3.4"' in worker
+    assert 'global ClientVersion := "1.3.5"' in worker
     assert "CryptProtectData" in worker
     assert "CryptUnprotectData" in worker
     assert "GetOrCreateInstallId" in worker
@@ -433,6 +489,7 @@ def validate(root: Path) -> None:
     main = read(root / "Main.ahk")
     watchdog = read(root / "submacros" / "watchdog.ahk")
     discord = read(root / "lib" / "Discord.ahk")
+    discord_commands = read(root / "lib" / "DiscordCommands.ahk")
     roblox = read(root / "lib" / "Roblox.ahk")
     image_search = read(root / "lib" / "ImageSearch" / "ImageSearch.ahk")
     updater = read(root / "submacros" / "updater.ahk")
@@ -442,9 +499,13 @@ def validate(root: Path) -> None:
     validate_source_dependency_bootstrap(main)
     validate_dependency_bootstrap_portability(root)
     validate_settings_contracts(main)
+    validate_automatic_settings_persistence(main)
+    validate_placement_position_tracking(main)
+    validate_timescale_reliability(main)
+    validate_resolution_scaling(main)
     validate_strategy_geometry(main)
     validate_hotbar_mouse_selection(main)
-    validate_bitmap_ownership(main, watchdog, discord)
+    validate_bitmap_ownership(main, watchdog, discord, discord_commands)
     validate_watchdog_result_fallbacks(watchdog)
     validate_watchdog_conditions_and_formatting(watchdog)
     validate_watchdog_retry_lifecycle(watchdog)
