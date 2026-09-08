@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Source contracts for the reported-runtime QA hotfix."""
 from __future__ import annotations
 
@@ -30,7 +29,7 @@ def region(source: str, start: str, end: str) -> str:
 
 
 def validate_image_fallback(main: str, image_search: str) -> None:
-    fallback = region(image_search, "; GDI+ fallback.", "\nBuildImageSearchScaleCandidates(")
+    fallback = region(image_search, "pToken := Gdip_Startup()", "\nBuildImageSearchScaleCandidates(")
     candidates = region(
         image_search,
         "BuildImageSearchScaleCandidates(baseScale, minScale, maxScale, scaleStep) {",
@@ -72,7 +71,7 @@ def validate_image_fallback(main: str, image_search: str) -> None:
 def validate_equip_and_resolution(main: str) -> None:
     equip = region(main, "EquipTowers(towers) {", "CheckRestart() {")
     scale = region(main, "GetClientTemplateScale(clientHeight) {", "Join(arr, delim :=")
-    execute = region(main, "ExecuteStep(step) {", "LowerGraphics() {")
+    execute = region(main, "\nExecuteStep(step) {\n", "LowerGraphics() {")
     spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "SellTower(towerID) {")
 
     require("return Float(clientHeight) / 1009.0" in scale, "client template scale must be fractional")
@@ -184,7 +183,7 @@ def validate_matchmaking_ready_map(main: str, validator: str) -> None:
     require("difficultyDeadline :=" not in join[loop_index:], "Play recovery must never reset the mode deadline")
     require("difficulty_play_recovery" in join and "modeScrollAttempts < 12" in join,
             "mode selection needs bounded Play/scroll recovery")
-    require("firstModeScrollAt := difficultyStart + 1500" in join and
+    require("firstModeScrollAt := difficultyStart + 6000" in join and
             "A_TickCount >= firstModeScrollAt" in join,
             "the first mode scroll needs a settling grace so Easy stays visible")
     require("TryClickDifficultyTarget(difficulty, w, h)" in join, "Easy and Frost must share reliable targeting")
@@ -261,11 +260,9 @@ def validate_paths(main: str) -> None:
 
 
 def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
-    # The opening brace is intentional: searching for SetDJTrack(track) alone
-    # can select a call and silently validate the wrong body.
     dj = region(main, "SetDJTrack(track) {", "UpdateTowerIndicator(towerID) {")
-    play = region(main, "PlayStrategy() {", "ExecuteStep(step) {")
-    execute = region(main, "ExecuteStep(step) {", "LowerGraphics() {")
+    play = region(main, "\nPlayStrategy() {\n", "\nExecuteStep(step) {")
+    execute = region(main, "\nExecuteStep(step) {\n", "LowerGraphics() {")
     abilities_wrapper = region(main, "UseAbilities(*) {", "UseAbilitiesPass() {")
     abilities = region(main, "UseAbilitiesPass() {", "SetDJTrack(track) {")
     upgrade = region(main, "UpgradeTower(towerID, skipOpen :=", "isDisconnected() {")
@@ -320,6 +317,8 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
             "ability callbacks must guard stale tower IDs before indexing")
     require("upgradeDeadline" in upgrade and "fully_upgraded.png" in upgrade and "Sleep(" in upgrade,
             "maxed/unaffordable upgrade loops must remain bounded and yielding")
+    require("SafeReload()\n                    return false" in upgrade,
+            "upgrade-menu retries must stop after the bounded reload threshold")
     require("HasProp(\"hwnd\")" in sell and "Towers.Delete(towerID)" in sell,
             "SellTower must guard optional indicators and remove tower state")
     require("AdvancedImageSearch(imagePath, cardX, cardY, cardW, cardH)" in arcade,
@@ -379,6 +378,30 @@ def validate_watchdog_pid_lifecycle(main: str) -> None:
             "the real repeated cleanup/start lifecycle must remain covered")
 
 
+def tracked_or_packaged_files(root: Path, pattern: str) -> set[str]:
+    """Return Git-tracked paths when available, otherwise inspect a release ZIP tree.
+
+    A release archive intentionally has no .git directory.  In that case Git may
+    either fail or resolve an unrelated parent checkout, so only trust its output
+    when it contains the requested paths.
+    """
+    tracked_result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--", pattern],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    tracked = {line.replace("\\\\", "/") for line in tracked_result.stdout.splitlines() if line}
+    if tracked:
+        return tracked
+    search_root, name_pattern = pattern.rsplit("/", 1)
+    return {
+        path.relative_to(root).as_posix()
+        for path in (root / search_root).glob(name_pattern)
+        if path.is_file()
+    }
+
+
 def validate_packaging(root: Path, validator: str, workflow: str) -> None:
     safe_updater = read(root / "submacros/safe_update.ps1")
     updater_smoke = read(root / "tests/safe_updater_smoke.ps1")
@@ -403,13 +426,7 @@ def validate_packaging(root: Path, validator: str, workflow: str) -> None:
             "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
         ),
     }
-    tracked_result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "--", "Resources/Strats/*.strat"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    tracked = {line.replace("\\", "/") for line in tracked_result.stdout.splitlines() if line}
+    tracked = tracked_or_packaged_files(root, "Resources/Strats/*.strat")
     require(tracked == expected_remaining,
             f"tracked strategy set changed outside the three obsolete Frost removals: {sorted(tracked)}")
     for relative in obsolete:
@@ -417,15 +434,7 @@ def validate_packaging(root: Path, validator: str, workflow: str) -> None:
     for relative in expected_remaining:
         require((root / relative).is_file(), f"unrelated bundled strategy was removed: {relative}")
 
-    tracked_dll_result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "--", "lib/ImageSearch/*.dll"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    tracked_dlls = {
-        line.replace("\\", "/") for line in tracked_dll_result.stdout.splitlines() if line
-    }
+    tracked_dlls = tracked_or_packaged_files(root, "lib/ImageSearch/*.dll")
     for relative, expected_hash in required_dlls.items():
         dll_path = root / relative
         require(relative in tracked_dlls, f"required runtime DLL is not tracked: {relative}")
@@ -491,8 +500,8 @@ def validate_positive_backports(main_source: str) -> None:
         "party host watchdog phase": 'MacroPhase("party_host_wait", 190000)',
         "party member watchdog phase": 'MacroPhase("party_member_wait", 190000)',
         "draggable strategy scrollbar": "TryBeginScrollDrag()",
-        "checkbox locking": "SetCheckboxLocked(AutoEquipCtrl, show, 1)",
-        "debounced webhook validation": 'SetTimer(CheckWebhookLink, -700)',
+        "webhook link auto-detection": "RefreshWebhookStatus(*)",
+        "debounced webhook validation": "SetTimer(RefreshWebhookStatus, -700)",
         "gradient action buttons": "MakeActionButton(MainGui",
         "runtime timer stop": "StopRuntimeTimers()",
         "scan-code input release": '"sc011"',
@@ -503,11 +512,13 @@ def validate_positive_backports(main_source: str) -> None:
     forbidden = {
         "synchronous webhook validation on every keystroke": 'WebhookLinkCtrl.OnEvent("Change", CheckWebhookLink)',
         "OS-disabled AutoEquip rotation control": "AutoEquipCtrl.Enabled := !show",
+        "rotation forcing Auto Equip on": "SetCheckboxLocked(",
+        "manual Enable Webhook switch": "vWebhookEnabled",
+        "manual Use VIP Server switch": "UseVipServerCtrl",
     }
     for label, marker in forbidden.items():
         require(marker not in main_source, f"regression retained: {label}")
 
-    # Anti-downgrade contracts: the Ziadod snapshot predates these production fixes.
     anti_downgrade = {
         "Darksen attribution": "; Ultimate Macro (macro for TDS) by Darksen",
         "safe updater include": "#Include submacros\\updater.ahk",
@@ -523,6 +534,56 @@ def validate_positive_backports(main_source: str) -> None:
         require(marker in main_source, f"anti-downgrade contract missing: {label}")
 
 
+def validate_runtime_reliability(main_source: str, discord_source: str, remote_source: str) -> None:
+    simplicity = region(main_source, "SimplicityPath() {", "ToggleAutoskip() {")
+    require("if (attempts > 3)" in simplicity and "SafeReload()\n                    return false" in simplicity,
+            "map recovery must stop after its bounded reload threshold")
+
+    change_targets = region(main_source, "ChangeTargets(towerID, target) {", "CloneTower(towerId, x, y, wait := 0) {")
+    require("Towers.Has(towerID)" in change_targets,
+            "target changes must reject stale tower ids before indexing Towers")
+    require("LastOpenedTowerID := \"\"" in change_targets,
+            "target changes must clear the selected tower sentinel without creating Towers[0]")
+    require("finally {" in change_targets and "canUseAbility := true" in change_targets,
+            "target changes must restore ability use after timeout or exception")
+    require("SafeReload()\n                    return false" in change_targets,
+            "target-menu retries must stop after the bounded reload threshold")
+
+    recording = region(main_source, "RegisterRecordingHotkeys(oldKeys := \"\") {", "DetectTowerForUpgrading(*) {")
+    require("RaiseDeadKey" in recording,
+            "recording hotkey registration must declare RaiseDeadKey before using it")
+
+    settings = region(main_source, "AutoSaveKeybinds(*) {", "FirstKeyChar(value, fallback) {")
+    require("tempRaiseDeadKey" in settings and "tempRepoKey" in settings,
+            "auxiliary recording hotkeys must be normalized before registration")
+    require('"~^" RepoKey' in settings and '"~^" RaiseDeadKey' in settings,
+            "old auxiliary recording hotkeys must be disabled when settings change")
+
+    run_roblox = region(main_source, "RunRoblox(doReload := true) {", "ExitFullScreen() {")
+    require("run_roblox_geometry_wait" in run_roblox and "getRobloxPos(, , &w, &h)" in run_roblox,
+            "lobby Play detection must retry with fresh client geometry")
+
+    join_game = region(main_source, "JoinGame() {", "InvitePartyMembers(search_bar) {")
+    require("matchmaking_geometry_retry" in join_game,
+            "matchmaking must retry while Roblox client geometry is unavailable")
+
+    community_update = region(main_source, "if (needUpdate) {", "global FrameX := 30")
+    require("apiStatus := 0" in community_update and "apiStatus := whr.Status" in community_update and
+            "GitHub returned 403" in community_update,
+            "community strategy refresh must keep local strategies on GitHub rate limits")
+
+    webhook_visibility = region(main_source, "EnableWebhookLink2(*) {", "ShowDiscordPage(page, *) {")
+    require('CurrentTab = "Tab4"' in webhook_visibility and 'DiscordPage = "Webhook"' in webhook_visibility,
+            "secondary webhook input must stay hidden outside the Discord webhook page")
+
+    require("QueueStrategyStart()" in discord_source,
+            "Discord start commands must use the validated start queue")
+    require("QueueStrategyStart()" in remote_source,
+            "remote start commands must use the validated start queue")
+    require('Map("queued", JSON.true)' in remote_source,
+            "remote start must report queued rather than falsely claiming immediate startup")
+
+
 def validate_launch_failure_safety(main: str) -> None:
     run_strategy = region(main, "RunStrategy(stratFile := \"\", skipRestart := false) {", "PlayStrategy() {")
     check_restart = region(main, "CheckRestart() {", "RunRoblox(doReload := true) {")
@@ -533,7 +594,7 @@ def validate_launch_failure_safety(main: str) -> None:
     check_map = region(main, "CheckTheMapF() {", "ApplyModifiers() {")
     wait_ready = region(main, "waitReady() {", "activateTimescale() {")
     timescale = region(main, "activateTimescale() {", "AlignCamera(")
-    align_camera = region(main, "AlignCamera(move :=", "getSlots() {")
+    align_camera = region(main, "AlignCamera(move :=", "SpawnTower(X, Y, slotNumber, towerID) {")
     reconnect = region(main, "TryReconnect() {", "CheckPopups(*) {")
     stop_strategy = region(main, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
 
@@ -589,14 +650,18 @@ def validate_auto_settings_hardening(
 ) -> None:
     tray_guard = region(
         auto_settings_source,
-        "AutoSettingsRobloxSessionActive(robloxProcess :=",
+        "AutoSettingsRobloxCommandLineIsTray(commandLine) {",
         "ApplyMacroSettings(",
     )
     require("--launch-to-tray" in tray_guard and 'ComObjGet("winmgmts:")' in tray_guard,
             "Auto Settings must distinguish Roblox's persistent tray launcher from a game session")
-    require("WMI/COM inspection failure must never make an active game look closed." in tray_guard and
-            "return true" in tray_guard,
+    require(re.search(r"catch Error\s*\r?\n\s*return true", tray_guard),
+            "a failed command-line read must report the session as active")
+    require(re.search(r"catch Error\s*\{\s*\r?\n\s*return true\s*\r?\n\s*\}", tray_guard),
             "Roblox process inspection must fail closed")
+    require(tray_guard.rstrip().endswith("return true\n    }\n}")
+            or "} catch Error {\n        return true\n    }" in tray_guard,
+            "the outer inspection guard must fail closed")
     require("Roblox tray command line was not recognized" in auto_settings_test and
             "A normal Roblox command line was misclassified as tray-only" in auto_settings_test,
             "AHK behavioral fixtures must cover Roblox tray command-line classification")
@@ -606,7 +671,7 @@ def validate_auto_settings_hardening(
     require(main_source.count('global AutoEquip := IniRead(SettingsFile, "Options", "AutoEquip", 0)') == 1,
             "AutoEquip should be initialized exactly once")
 
-    startup = region(main_source, "; Opening Ultimate Macro must never apply Roblox settings.", "global LogLines := []")
+    startup = region(main_source, "if !RecoverPendingAutoSettings(A_ScriptDir) {", "global LogLines := []")
     require("RecoverPendingAutoSettings(A_ScriptDir)" in startup,
             "startup must recover a verified pending original-settings backup")
     require("ApplyMacroSettings(" not in startup,
@@ -726,7 +791,7 @@ def validate_auto_settings_hardening(
     require("SetTimer(ScrollDragWatch, 0)" in scroll_watch and "ScrollDragging := false" in scroll_watch,
             "scroll cleanup must clear state and stop the 10 ms timer")
 
-    runtime_timers = region(main_source, "StopRuntimeTimers() {", "; Persistent application/UI timers")
+    runtime_timers = region(main_source, "StopRuntimeTimers() {", "StopApplicationTimers() {")
     application_timers = region(main_source, "StopApplicationTimers() {", "ReleaseHeldInput() {")
     stop_strategy = region(main_source, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
     require("ProcessCommands" not in runtime_timers,
@@ -762,13 +827,304 @@ def validate_auto_settings_hardening(
                 "bundled AHK 2.0.12 Auto Settings behavioral fixture failed: " +
                 (fixture_result or result.stdout + result.stderr).strip())
 
+def validate_v134b_stability(main: str, remote: str) -> None:
+    """Static regression contracts retained by the 1.3.5 release."""
+    require('ver := "1.3.5"' in main, "Main.ahk must identify the 1.3.5 release")
+    require('global ClientVersion := "1.3.5"' in remote,
+            "official remote worker must identify the 1.3.5 release")
+
+    load = region(main, "LoadStrategyFile(file) {", "\nRunStrategy(")
+    for marker in (
+        "TimescaleActive := false",
+        'LastOpenedTowerID := ""',
+        "needtocheckTowerUI := true",
+        'CachedResV2 := ""',
+        'CachedResV1 := ""',
+        "isUpgradeAuthorized := false",
+    ):
+        require(marker in load, f"new strategy load must reset run state: {marker}")
+
+    run = region(main, "RunStrategy(stratFile := \"\", skipRestart := false) {", "\nPlayStrategy() {")
+    require("IsRestarting := false" in run, "each strategy lifecycle must start with a fresh restart flag")
+    require("if !PlayStrategy()" in run and "StopStrategy()" in run,
+            "step/action failure must stop the current lifecycle instead of silently continuing")
+    require("if (!skiprestart && !isDisconnected())" in run,
+            "disconnect recovery failure must stop before continuing into matchmaking")
+
+    play = region(main, "\nPlayStrategy() {\n", "\nExecuteStep(step) {")
+    require("if !ExecuteStep(step)" in play and "placement_step_failed" in play,
+            "placement/action failure must propagate out of strategy playback")
+
+    execute = region(main, "\nExecuteStep(step) {\n", "LowerGraphics() {")
+    require("return SpawnTower(" in execute,
+            "spawn execution must return its verification result")
+
+    equip = region(main, "EquipTowers(towers) {", "CheckRestart() {")
+    require("verifyDeadline" in equip and "autoequip_tower_confirmed" in equip,
+            "Auto Equip must confirm the post-click equipped state")
+
+    map_select = region(main, "SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {", "\nCheckTheMapF() {")
+    require("mapChoiceAttempts := 0" in map_select and "map_selection_retry_exhausted" in map_select,
+            "standard map selection must have a bounded retry budget")
+    require("map_selection_ambiguous" in map_select and "return SelectMap(readyX, readyY)" not in map_select,
+            "ambiguous map selection must not recursively re-enter selection")
+
+    timescale = region(main, "activateTimescale() {", "AlignCamera(move := true")
+    require("timescale_no_tickets" in timescale and "timescale_dialog_unavailable" in timescale,
+            "TimeScale no-ticket and missing-dialog outcomes must be diagnosable")
+    require("closedSamples >= 2" in timescale,
+            "TimeScale confirmation must settle before it is reported as verified")
+    require("StopStrategy()" in timescale,
+            "TimeScale that cannot be activated at all must stop safely, before the match starts")
+    require("StopStrategy()" not in timescale[timescale.index("Click(hit.x, hit.y)"):],
+            "a spent TimeScale ticket must never be followed by throwing the run away")
+
+    spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "SellTower(towerID) {")
+    require("maxPlacementAttempts := 9" in spawn and "WaitForTowerUIClosed" in spawn,
+            "placement must use a bounded retry budget and stale-panel precondition")
+    require("WaitForTowerUIClosed(2500)" in spawn and "placement_pending_precondition" in spawn,
+            "lagging prior tower panels must not fatally stop placement")
+    require("waitForTowerUI(&resV2, , 5000)" in spawn,
+            "placement must allow delayed Roblox UI observation before declaring ambiguity")
+    require("ResolvePlacementAmbiguity" in spawn and "placement_ambiguous_retry" in spawn and
+            "IsPlacementExplicitlyRejected()" in spawn,
+            "placement ambiguity must passively re-check before bounded retry")
+    require("return true" in spawn and "return false" in spawn,
+            "placement must continue on pending ambiguity but retain fatal returns for cancellation/exhaustion")
+    require("StopStrategy()" not in spawn,
+            "SpawnTower must never stop the whole strategy for placement ambiguity")
+    require("Placement did not complete; continuing with the next step" in main,
+            "a non-cancelled placement failure must not abort the entire strategy")
+    require("if (placeAttempts = 1)" not in spawn,
+            "placement must not unconditionally retry the first unconfirmed click")
+
+    upgrade = region(main, "UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLevel := 0) {",
+                     "HasStableUpgradeAffordance(x1, y1, x2, y2) {")
+    require("CaptureUpgradeEvidence" in upgrade and "beforeEvidence" in upgrade and "afterEvidence" in upgrade,
+            "upgrade success must compare before/after evidence")
+    require("upgrade_ambiguous" in upgrade and "beforeEvidence = afterEvidence" in upgrade and
+            "upgradeActionAttempts < 2" in upgrade and "upgrade_retry" in upgrade,
+            "ambiguous upgrades must passively re-check, retry within bounds, and not advance blindly")
+    require("settleDelay := Max(250" in upgrade and "IsSet(RunningStrategy) && !RunningStrategy" in upgrade,
+            "upgrade polling must preserve a minimum settle delay and cancellation")
+
+    stop = region(main, "StopStrategy(*) {", "StartRecording(ctrl, *) {")
+    require("wasRunning := RunningStrategy" in stop and "RunningStrategy := false" in stop,
+            "stop must cancel synchronous runtime work before cleanup")
+    release = region(main, "ReleaseHeldInput() {", "\nSafeReload() {")
+    require('Click("Left Up")' in release and 'Click("Right Up")' in release,
+            "stop cleanup must release both mouse buttons")
+
+    reconnect = region(main, "TryReconnect() {", "CheckPopups(*) {")
+    require("maxReconnectAttempts := 5" in reconnect and "reconnect_retry_exhausted" in reconnect,
+            "reconnect recovery must remain bounded and diagnosable")
+
+    difficulty = region(main, "TryClickDifficultyTarget(target, w, h) {", "WaitForLobbyLoad() {")
+    require("if (target = \"Hardcore\")" in difficulty and "difficulty_hardcore_image_missing" in difficulty,
+            "Hardcore must not use ambiguous OCR that can click Unlock Hardcore")
+    require("ocrX := screenX + Round(screenW * 0.22)" in difficulty and
+            "ocrX := screenX\n" not in difficulty,
+            "difficulty OCR must stay inside the mode-card region instead of the macro log")
+    join = region(main, "JoinGame() {", "InvitePartyMembers(search_bar) {")
+    require("party_size_timeout" in join,
+            "party-size stalls must identify the mode-selection failure before recovery")
+
+
+def validate_recording_durability(main: str) -> None:
+    record_step = region(main, "RecordStep(step) {", "\nStartRecording(ctrl, *) {")
+    start = region(main, "StartRecording(ctrl, *) {", "StopRecord(ctrl, *) {")
+    stop = region(main, "StopRecord(ctrl, *) {", "SafeStrategyFileName(value) {")
+    sell_hotkey = region(main, "SellTowerHK(*) {", "AlignCameraHK(*) {")
+    delete_hotkey = region(main, "DeleteTowerRecordingHK(*) {", "SellTowerHK(*) {")
+    next_id = region(main, "GetNextTowerID(slot) {", "ModernMsgBox(Title, Text,")
+
+    require("RecordedSteps.Push(step)" in record_step and "RecordingAutosavePath()" in record_step,
+            "every recorded action must go through RecordStep and reach the crash-safe autosave")
+
+    hotkey_span = region(main, "PlaceTowerHK(*) {", "\nCataclysmPath() {")
+    require("RecordedSteps.Push(" not in hotkey_span,
+            "recording hotkeys must not push steps directly; they must call RecordStep")
+
+    require("RecordingAutosaveRecover()" in start and "RecordingAutosaveStart()" in start,
+            "starting a recording must preserve an interrupted one and open a fresh autosave")
+    require("RecordedTowerIds := Map()" in start,
+            "starting a recording must reset the per-recording tower id registry")
+
+    require("BuildStrategyFileText(RecordedSteps, strategyWidthToSave, strategyHeightToSave)" in stop,
+            "the recorded strategy must be written in a single buffered write, not one append per step")
+    require(stop.count("FileAppend(") == 1,
+            "a long recording must not be saved with one file append per step")
+    require("RecordingAutosaveDiscard()" in stop and "recordedCount" in stop,
+            "a saved recording must report its size and only then drop the autosave")
+    require("SafeStrategyFileName(box.Value)" in stop,
+            "the strategy file name must be validated before it is used as a path")
+
+    require("newSteps" not in sell_hotkey and "SpawnTower" not in sell_hotkey,
+            "selling during a recording must keep the tower's placement and upgrade steps")
+    require('RecordStep("SellTower(" closestID ")")' in sell_hotkey,
+            "selling during a recording must still record the sell")
+    require('HasProp(Towers[closestID], "hwnd")' in sell_hotkey,
+            "the sell hotkey must guard the optional indicator handle")
+
+    require("newSteps" in delete_hotkey and "RecordingAutosaveRewrite()" in delete_hotkey,
+            "deleting a recorded tower must rewrite the autosave to match")
+    require("RecordedTowerIds.Delete(closestID)" in delete_hotkey,
+            "a deleted tower id becomes available again")
+
+    require("RecordedTowerIds" in next_id,
+            "tower ids must never be reused after a sell, or later sells strip the wrong steps")
+
+    undo = region(main, "lastStep := RecordedSteps.Pop()", "if RegExMatch(lastStep,")
+    require("RecordingAutosaveRewrite()" in undo, "undo must keep the autosave in sync")
+
+
+def validate_sell_verification(main: str) -> None:
+    sell = region(main, "SellTower(towerID) {", "SellButtonFromPanel(panelResV2) {")
+    button = region(main, "SellButtonFromPanel(panelResV2) {", "SellTowerForget(towerID) {")
+    forget = region(main, "SellTowerForget(towerID) {", "UpgradeTower(towerID, skipOpen :=")
+
+    require("waitForTowerUI(&panelResV2)" in sell,
+            "the sell step must reuse the panel match that proved the tower UI is open")
+    require("sell_button_missing" in sell and "sell_unconfirmed" in sell and "sell_tower_missing" in sell,
+            "each way a sell can fail must be diagnosable instead of silent")
+    require("WaitForTowerUIClosed(" in sell,
+            "a sell is only successful once the tower panel actually closes")
+    require('LogToConsole("Tower " towerID " sold successfully")' in sell,
+            "the success message must remain")
+    success_index = sell.find('LogToConsole("Tower " towerID " sold successfully")')
+    click_index = sell.find("Click(sellButton.x, sellButton.y)")
+    require(0 <= click_index < success_index,
+            "success must follow an actual Sell click, never precede it")
+
+    require("Round(h / 2.5)" in button,
+            "the Sell fallback search must cover the same band the tower-UI probe uses")
+    require('HasProp("hwnd")' in forget and "Towers.Delete(towerID)" in forget,
+            "SellTower must guard optional indicators and remove tower state")
+
+
+def validate_discord_tab_behaviour(main: str) -> None:
+    refresh = region(main, "RefreshWebhookStatus(*) {", "ConfirmWebhookLink() {")
+    confirm = region(main, "ConfirmWebhookLink() {", "QueueWebhookCheck(*) {")
+    channel = region(main, "CheckWebhookLink2(*) {", "LoadStrategyFile(file) {")
+    status = region(main, "SetStatusLabel(ctrl, text, color", "SetKeybindStatus(text, isError")
+
+    require("WebhookCheckedLink" in refresh and "link = WebhookCheckedLink" in refresh,
+            "an unchanged webhook must reuse its last verdict instead of hitting Discord again")
+    require("WebhookCheckedState" in confirm,
+            "the confirmed verdict must be cached for later tab visits")
+
+    require("DisableSeparateTriumphChannel" not in main,
+            "clearing the separate channel webhook must not switch its setting off")
+    require("WebhookSepatateTriumphScreenshots" not in channel,
+            "the separate channel check must never write the toggle")
+    require("webhook_channel_cleared" in channel and "webhook_channel_unreachable" in channel,
+            "the separate channel check must report instead of silently changing state")
+
+    require("RepaintTransparentControl(ctrl)" in status,
+            "status text must erase what it replaces so messages cannot overlap")
+
+
+def validate_tools_and_theme(main: str, tool_window: str) -> None:
+    launch = region(main, "LaunchToolOverPreview(scriptName, previewCtrl) {", "WatchToolPreviews() {")
+    watch = region(main, "WatchToolPreviews() {", "RestoreToolPreviews() {")
+    point = region(main, "PreviewLaunchPoint(previewCtrl) {", "LaunchToolOverPreview(scriptName, previewCtrl) {")
+    theme = region(main, "ApplyDarkInputTheme(guiObj) {", "HasEditScrollBar(hwnd) {")
+
+    require("ClientToScreen" in point, "a tool must open where its preview sits on screen")
+    require("SetControlVisible(previewCtrl, false)" in launch,
+            "opening a tool must take its preview out of the page")
+    require("ProcessExist(entry.pid)" in watch and "SetControlVisible(entry.preview, true)" in watch,
+            "closing a tool must put its preview back")
+    require("ShowToolWindow(aGui, TOOL_W, 252)" not in main and "ShowToolWindow(g, width, height) {" in tool_window,
+            "tool windows must honour the position they are launched with")
+
+    require('"DarkMode_CFD"' in main, "text inputs must use the dimmed dark frame, not the light one")
+    require('case "Hotkey":' in theme and "RegisterDarkInputSurface" in theme,
+            "hotkey fields must be painted dark like every other input")
+    require("OnMessage(0x0134, DarkInputCtlColor)" in main,
+            "expanded dropdown lists must be painted dark")
+    require('MainGui.Add("ComboBox", "x100 y161 w240 Hidden vRecDifficulty"' in main,
+            "the Mode field must be a searchable combo box like Map")
+    require("ResolveRecordingChoice(v.RecDifficulty, RecDifficultyChoices)" in main,
+            "a typed mode must resolve to a supported mode before recording starts")
+
+
+
+def validate_dark_controls(main: str, tool_window: str, profiles: str) -> None:
+    theme = region(main, "ApplyDarkInputTheme(guiObj) {", "HasEditScrollBar(hwnd) {")
+    ctlcolor = region(main, "DarkInputCtlColor(wParam, lParam, msg, hwnd) {", "EnableDarkComboBox(ctrl) {")
+    hotkey_field = region(main, "MakeHotkeyField(guiObj, x, y, w, h, value) {", "BeginHotkeyCapture(hk) {")
+    capture = region(main, "BeginHotkeyCapture(hk) {", "RefreshHotkeyDisplays() {")
+    stepper = region(main, "MakeStepper(guiObj, x, y, handler) {", "StepMouseSpeed(delta) {")
+    radio = region(main, "MakeDarkRadio(guiObj, x, y, labelWidth, label, extraOptions, checked, groupMembers) {",
+                   "FormatHotkeyLabel(value) {")
+    select_radio = region(main, "SelectDarkRadio(radio) {", "FormatHotkeyLabel(value) {")
+
+    require('ControlClassName(lParam) = "ComboLBox"' in ctlcolor,
+            "every expanded dropdown list must be painted dark, not just the ones registered up front")
+
+    require('MakeHotkeyField(SettingsPanel' in main and 'SettingsPanel.Add("Hotkey"' not in main,
+            "recording hotkey fields must use the dark display control, not a raw white hotkey box")
+    require('ReadOnly -TabStop' in hotkey_field and "FormatHotkeyLabel(value)" in hotkey_field,
+            "the hotkey display must be a read-only field showing a formatted label")
+    require("ControlGetFocus" in capture or "ControlGetFocus" in region(main, "WatchHotkeyCapture() {",
+                                                                       "RefreshHotkeyDisplays() {"),
+            "hotkey capture must end when the field loses focus")
+
+    require('SettingsPanel.Add("UpDown"' not in main,
+            "the delay steppers must not use the light system up-down control")
+    require("AddDarkListFrame(guiObj, x, y, 15, 22, false)" in stepper and '"Marlett"' in stepper,
+            "the delay steppers must be dark framed arrows")
+    require("MakeStepper(SettingsPanel, 113, 589, StepMouseSpeed)" in main
+            and "MakeStepper(SettingsPanel, 325, 589, StepMouseDelay)" in main
+            and "MakeStepper(SettingsPanel, 523, 589, StepKeyDelay)" in main,
+            "each stepper must sit clear of its value instead of touching it")
+
+    require('guiObj.Add("Radio", "x" x " y" y " w16 h22' in radio and "radio.LabelCtrl := text" in radio,
+            "party radios must keep their label in a separate control so the dark glyph stays readable")
+    require("groupMembers.Push(radio)" in radio and 'radio.OnEvent("Click"' in radio,
+            "each dark radio must join its group and route its own click through the group handler")
+    require("for member in radio.GroupMembers" in select_radio and "member.Value := 0" in select_radio,
+            "selecting a dark radio must clear the other members of its group")
+    require('MakeDarkRadio(MainGui, 146, 242' in main and 'MakeDarkRadio(MainGui, 146, 272' in main,
+            "both party radio groups must use the dark glyph")
+
+    require('case "CheckBox":' in theme, "checkboxes must follow the dark theme")
+
+    require("ApplyToolWindowInputTheme(g)" in tool_window and '"DarkMode_CFD"' in tool_window,
+            "tool windows must theme their own inputs")
+    require("NotifyToolWindowClosing()" in tool_window and "PostMessageW" in tool_window,
+            "a tool must tell the macro it is closing instead of leaving it to poll")
+    require("OnMessage(0x8001, ToolWindowClosing)" in main and "RestoreToolPreview(scriptName)" in main,
+            "the macro must restore a tool preview the moment that tool closes")
+
+    require('RegisterHoverEffect(btn, "dialog")' in profiles and "AddDarkListFrame(g, x, y, w, h, false)" in profiles,
+            "profile dialog buttons must show a hover state and a dimmed frame")
+    require("RegisterHoverHost(g)" in profiles and "UnregisterHoverHost" in profiles,
+            "profile dialogs must register and release their hover host")
+
+    empty_state = region(main, 'emptyHitArea := ContentGui.Add("Text"', "Open My Strats folder")
+    require("+BackgroundTrans" in empty_state and "Background1B1B1B" not in empty_state,
+            "the empty My Strats add button must show only its glyph")
+    require('emptyHitArea.OnEvent("Click", OpenMyStratsFolder)' in empty_state,
+            "the whole empty My Strats area must open the folder")
+    require("for ctrl in [emptyTitle, emptyHint, addBtn, emptyCaption]" in main,
+            "the empty-state labels must open the folder too, not just the area behind them")
+
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     main_source = read(root / "Main.ahk")
     image_source = read(root / "lib/ImageSearch/ImageSearch.ahk")
     watchdog_source = read(root / "submacros/watchdog.ahk")
+    discord_source = read(root / "lib/DiscordCommands.ahk")
+    remote_source = read(root / "lib/OfficialRemote.ahk")
+    remote_worker_source = read(root / "submacros/official_remote.ahk")
     auto_settings_source = read(root / "lib/auto_settings.ahk")
     auto_settings_test = read(root / "tests/test_auto_settings.ahk")
+    tool_window_source = read(root / "lib/ToolWindow.ahk")
+    profiles_source = read(root / "lib/Profiles.ahk")
     validator = read(root / "tests/validate_repo.py")
     workflow = read(root / ".github/workflows/ci.yml")
 
@@ -780,10 +1136,17 @@ def main() -> int:
     validate_dj_watchdog_and_pr30(main_source, watchdog_source)
     validate_watchdog_pid_lifecycle(main_source)
     validate_positive_backports(main_source)
+    validate_runtime_reliability(main_source, discord_source, remote_source)
     validate_launch_failure_safety(main_source)
+    validate_v134b_stability(main_source, remote_worker_source)
     validate_auto_settings_hardening(root, main_source, auto_settings_source, auto_settings_test)
     validate_community_strategy_sync(main_source)
     validate_packaging(root, validator, workflow)
+    validate_recording_durability(main_source)
+    validate_sell_verification(main_source)
+    validate_discord_tab_behaviour(main_source)
+    validate_tools_and_theme(main_source, tool_window_source)
+    validate_dark_controls(main_source, tool_window_source, profiles_source)
 
     print("reported runtime hotfix contracts: PASS")
     return 0

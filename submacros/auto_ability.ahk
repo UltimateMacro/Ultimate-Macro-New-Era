@@ -2,6 +2,7 @@
 #SingleInstance Force
 
 #Include %A_LineFile%/../../lib/Roblox.ahk
+#Include %A_LineFile%/../../lib/ToolWindow.ahk
 #Include %A_LineFile%/../../lib/ImageSearch/ImageSearch.ahk
 
 global AppDataOpt := A_AppData "\Ultimate_Macro\Options"
@@ -21,29 +22,36 @@ global LastChainTime := 0
 global LastBeatTime := 0
 global IsRunning := false
 
-global aGui := Gui("+LastFound +Border +ToolWindow +AlwaysOnTop")
+global TOOL_W := 250
+global aGui := CreateToolWindow("Auto Abilities", TOOL_W)
 
-aGui.SetFont("s9")
-global cooldown := aGui.Add("Edit", "vchainInterval Number Limit2 x75 y10 w50 h20", "10")
-global cooldown_txt := aGui.Add("Text", "x10 y15 h20", "Chain every:")
-global s_txt := aGui.Add("Text", "x132 y15 h20", "seconds")
+aGui.SetFont("s9 w400 cAAAAAA", ToolWindowFont())
+global cooldown_txt := aGui.Add("Text", "x14 y50 w88 h22 0x200 BackgroundTrans", "Chain every:")
+aGui.SetFont("s9 w400 c000000", ToolWindowFont())
+global cooldown := aGui.Add("Edit", "vchainInterval Number Limit2 Center x108 y50 w50 h22", "10")
+aGui.SetFont("s9 w400 cAAAAAA", ToolWindowFont())
+global s_txt := aGui.Add("Text", "x166 y50 w70 h22 0x200 BackgroundTrans", "seconds")
 
-global beatCooldown := aGui.Add("Edit", "vbeatInterval Number Limit2 x75 y35 w50 h20", "26")
-global beatCooldown_txt := aGui.Add("Text", "x10 y40 h20", "Beat every:")
-global s2_txt := aGui.Add("Text", "x132 y40 h20", "seconds")
+aGui.SetFont("s9 w400 cAAAAAA", ToolWindowFont())
+global beatCooldown_txt := aGui.Add("Text", "x14 y80 w88 h22 0x200 BackgroundTrans", "Beat every:")
+aGui.SetFont("s9 w400 c000000", ToolWindowFont())
+global beatCooldown := aGui.Add("Edit", "vbeatInterval Number Limit2 Center x108 y80 w50 h22", "26")
+aGui.SetFont("s9 w400 cAAAAAA", ToolWindowFont())
+global s2_txt := aGui.Add("Text", "x166 y80 w70 h22 0x200 BackgroundTrans", "seconds")
 
-global chkChain := aGui.Add("Checkbox", "vuseChain x10 y65 w180 h20 Checked", "Auto Call of Arms")
-global chkBeat := aGui.Add("Checkbox", "vuseBeat x10 y85 w180 h20 Checked", "Auto Drop the Beat")
+aGui.Add("Progress", "x14 y112 w222 h1 Disabled Background222222", 0)
 
-aGui.SetFont("s11")
-global Start_Btn := aGui.Add("Button", "x10 y115 w85 h25", "Start (F3)")
-global Stop_Btn := aGui.Add("Button", "x105 y115 w85 h25", "Stop (F4)")
+aGui.SetFont("s9 w400 cFFFFFF", ToolWindowFont())
+global chkChain := aGui.Add("Checkbox", "vuseChain x14 y124 w222 h22 Checked", "  Auto Call of Arms")
+global chkBeat := aGui.Add("Checkbox", "vuseBeat x14 y150 w222 h22 Checked", "  Auto Drop the Beat")
 
-Start_Btn.OnEvent("Click", (*) => StartMacro())
-Stop_Btn.OnEvent("Click", (*) => StopMacro())
+global Start_Btn := AddToolWindowButton(aGui, 14, 186, 108, 30, "Start (F3)", (*) => StartMacro())
+global Stop_Btn := AddToolWindowButton(aGui, 128, 186, 108, 30, "Stop (F4)", (*) => StopMacro())
 
-aGui.Show("w200 h150")
-aGui.OnEvent("Close", (*) => ExitApp())
+AddToolWindowStatus(aGui, 14, 224, 222)
+
+ShowToolWindow(aGui, TOOL_W, 252)
+aGui.OnEvent("Close", CloseToolWindow)
 SetTimer(() => RemoveInitialFocus(), -50)
 
 RemoveInitialFocus() {
@@ -57,24 +65,24 @@ F3::StartMacro()
 F4::StopMacro()
 
 StartMacro() {
-    global IsRunning, aGui
+    global IsRunning
     if (IsRunning)
         return
     if !GetRobloxHWND() {
-        try aGui.Title := "Roblox not found"
+        SetToolWindowStatus("Roblox not found", true)
         return
     }
     IsRunning := true
-    aGui.Title := "auto_coa.ahk - Running"
+    SetToolWindowStatus("Running")
     SetTimer(UseAbilities, 100)
 }
 
 StopMacro() {
-    global IsRunning, aGui
+    global IsRunning
     if (!IsRunning)
         return
     IsRunning := false
-    aGui.Title := "auto_coa.ahk"
+    SetToolWindowStatus("Stopped")
     SetTimer(UseAbilities, 0)
 }
 
@@ -83,7 +91,7 @@ UseAbilities() {
 
     if !GetRobloxHWND() {
         StopMacro()
-        try aGui.Title := "Roblox not found"
+        SetToolWindowStatus("Roblox not found", true)
         return
     }
 

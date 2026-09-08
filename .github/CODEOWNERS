@@ -1,1 +1,9 @@
-* @OfficalUltimateMacro @UltimateMacro/owners
+# Default owner review
+* @OfficialUltimateMacro @UltimateMacro/owners
+
+# Sensitive project surfaces
+/.github/ @OfficialUltimateMacro @UltimateMacro/owners
+/submacros/updater.ahk @OfficialUltimateMacro @UltimateMacro/owners
+/submacros/safe_update.ps1 @OfficialUltimateMacro @UltimateMacro/owners
+/DEPENDENCIES.md @OfficialUltimateMacro @UltimateMacro/owners
+/SECURITY.md @OfficialUltimateMacro @UltimateMacro/owners

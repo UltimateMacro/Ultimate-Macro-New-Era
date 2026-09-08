@@ -1,0 +1,64 @@
+name: Build Release Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Synchronize pinned source dependencies
+        shell: pwsh
+        run: ./tools/sync_dependencies.ps1
+
+      - name: Run source validation
+        shell: pwsh
+        run: |
+          python -m py_compile tests/test_source_contracts.py tests/test_reported_runtime_fixes.py tests/validate_repo.py tests/lint_strategies.py tests/test_release_package.py tools/build_release.py
+          python tests/test_source_contracts.py .
+          python tests/test_reported_runtime_fixes.py .
+          python tests/validate_repo.py .
+          python tests/lint_strategies.py .
+          ./tools/validate_powershell.ps1
+          ./tests/safe_updater_smoke.ps1
+          ./tools/validate_ahk.ps1
+
+      - name: Build release ZIP
+        shell: pwsh
+        run: python tools/build_release.py .
+
+      - name: Validate release ZIP
+        shell: pwsh
+        run: python tests/test_release_package.py .
+
+      - name: Create SHA-256 manifest
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash ./dist/TDS_Macro.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  TDS_Macro.zip" | Set-Content -Encoding ascii ./dist/SHA256SUMS.txt
+          Get-Content ./dist/SHA256SUMS.txt
+
+      - name: Upload validated candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Ultimate-Macro-release-candidate
+          path: |
+            dist/TDS_Macro.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error

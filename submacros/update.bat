@@ -2,8 +2,6 @@
 setlocal
 chcp 65001 >nul
 
-rem Backwards-compatible wrapper. All updates go through safe_update.ps1.
-rem The former delete-first updater is intentionally gone.
 
 if "%~1"=="" exit /b 1
 if "%~2"=="" exit /b 1

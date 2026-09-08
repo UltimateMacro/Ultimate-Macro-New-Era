@@ -51,7 +51,7 @@ function Assert-DownloadUrl([string]$Value) {
         throw 'The release supplied an invalid download URL.'
     }
     $official = $uri.Scheme -eq 'https' -and $uri.Host -eq 'github.com' -and
-        $uri.AbsolutePath.StartsWith('/DarksenDev/tds-macro/releases/download/', [StringComparison]::OrdinalIgnoreCase)
+        $uri.AbsolutePath.StartsWith('/UltimateMacro/Ultimate-Macro-New-Era/releases/download/', [StringComparison]::OrdinalIgnoreCase)
     $loopbackTest = $uri.Scheme -eq 'http' -and $uri.IsLoopback
     if (-not ($official -or $loopbackTest)) {
         throw "Untrusted update URL rejected: $Value"
@@ -114,21 +114,56 @@ function Resolve-PayloadRoot([string]$Stage) {
 }
 
 function Assert-RuntimePayload([string]$Root) {
-    $required = @(
+        $required = @(
         'Main.ahk',
+        'icon.ico',
+        'StrategyLab.exe',
         'lib\Gdip_All.ahk',
         'lib\Gdip_ImageSearch.ahk',
         'lib\HyperSleep.ahk',
         'lib\ImageSearch\ImageSearch.ahk',
+        'lib\ImageSearch\image_search.dll',
+        'lib\ImageSearch\msvcp140.dll',
+        'lib\ImageSearch\opencv_world500.dll',
+        'lib\ImageSearch\vcruntime140.dll',
         'lib\OCR.ahk',
         'lib\JSON.ahk',
         'lib\Roblox.ahk',
         'lib\Discord.ahk',
+        'lib\DiscordCommands.ahk',
+        'lib\OfficialRemote.ahk',
+        'lib\Profiles.ahk',
+        'lib\RuntimeLog.ahk',
+        'lib\ToolWindow.ahk',
         'lib\auto_settings.ahk',
+        'submacros\AutoHotkey32.exe',
+        'submacros\AutoHotkey64.exe',
+        'submacros\auto_ability.ahk',
+        'submacros\auto_open_consumable.ahk',
+        'submacros\auto_spin.ahk',
+        'submacros\official_remote.ahk',
         'submacros\updater.ahk',
-        'submacros\update.bat',
         'submacros\safe_update.ps1',
         'submacros\watchdog.ahk',
+        '_app\StrategyEditorHost.ahk',
+        '_app\capture_roblox.ps1',
+        '_app\run_editor.ps1',
+        '_app\self_test.ps1',
+        '_app\sync_portraits.ps1',
+        '_app\calibration\sandbox_replay.ahk',
+        '_app\data\maps.ini',
+        '_app\data\towers.ini',
+        '_app\lib\StrategySafety.ahk',
+        '_app\ui\app.js',
+        '_app\ui\index.html',
+        '_app\ui\styles.css',
+        '_app\vendor\WebViewToo\32bit\WebView2Loader.dll',
+        '_app\vendor\WebViewToo\64bit\WebView2Loader.dll',
+        '_app\vendor\WebViewToo\ComVar.ahk',
+        '_app\vendor\WebViewToo\LICENSE.WebViewToo.txt',
+        '_app\vendor\WebViewToo\Promise.ahk',
+        '_app\vendor\WebViewToo\WebView2.ahk',
+        '_app\vendor\WebViewToo\WebViewToo.ahk',
         'Resources\ready_gs.png'
     )
 
@@ -141,7 +176,7 @@ function Assert-RuntimePayload([string]$Root) {
 
 function Assert-PayloadVersion([string]$Root, [string]$Expected) {
     $expectedNormalized = Normalize-VersionLabel $Expected
-    if ($expectedNormalized -notmatch '^\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$') {
+    if ($expectedNormalized -notmatch '^\d+(?:\.\d+){1,3}(?:[A-Za-z]|[-+][0-9A-Za-z.-]+)?$') {
         throw "Invalid expected release version: $Expected"
     }
 

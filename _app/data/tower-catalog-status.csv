@@ -1,0 +1,78 @@
+﻿name,category,availability,wikiPage,placementFootprint,verificationStatus,source,aliases,placementType
+Scout,Starter,current,Scout,1.5,verified-current,tds-wiki-current-2026-08-20,Scout,ground
+Sniper,Starter,current,Sniper,1.25,verified-current,tds-wiki-current-2026-08-20,Sniper,cliff
+Paintballer,Starter,current,Paintballer,1.25,verified-current,tds-wiki-current-2026-08-20,Paintballer,ground
+Demoman,Starter,current,Demoman,1.5,verified-current,tds-wiki-current-2026-08-20,Demoman,ground
+Slime Trooper,Starter,current,Slime Trooper,1.5,verified-current,tds-wiki-current-2026-08-20,Slime Trooper|SlimeTrooper,ground
+Soldier,Starter,current,Soldier,1.5,verified-current,tds-wiki-current-2026-08-20,Soldier,ground
+Freezer,Intermediate,current,Freezer,1.5,verified-current,tds-wiki-current-2026-08-20,Freezer,ground
+Assassin,Intermediate,current,Assassin,1.5,estimated,fallback-average,Assassin,ground
+Militant,Intermediate,current,Militant,1.5,reviewed,strategy-lab-prior-catalog,Militant,ground
+Shotgunner,Intermediate,current,Shotgunner,1.0,reviewed,strategy-lab-prior-catalog,Shotgunner,ground
+Hunter,Intermediate,current,Hunter,1.5,estimated,fallback-average,Hunter,ground
+Pyromancer,Intermediate,current,Pyromancer,1.5,estimated,fallback-average,Pyromancer,ground
+Ace Pilot,Intermediate,current,Ace Pilot,1.5,estimated,fallback-average,Ace Pilot|AcePilot,ground
+Medic,Intermediate,current,Medic,1.5,estimated,fallback-average,Medic,ground
+Farm,Intermediate,current,Farm,1.75,reviewed,strategy-lab-prior-catalog,Farm,ground
+Electroshocker,Intermediate,current,Electroshocker,1.5,estimated,fallback-average,Electroshocker,ground
+Rocketeer,Intermediate,current,Rocketeer,1.5,estimated,fallback-average,Rocketeer,ground
+Trapper,Intermediate,current,Trapper,1.5,estimated,fallback-average,Trapper,ground
+Military Base,Intermediate,current,Military Base,1.5,estimated,fallback-average,Military Base|MilitaryBase|Mil Base|MilBase,ground
+Crook Boss,Intermediate,current,Crook Boss,1.5,reviewed,strategy-lab-prior-catalog,Crook Boss|CrookBoss,ground
+Commander,Advanced,current,Commander,1.5,reviewed,strategy-lab-prior-catalog,Commander,ground
+Warden,Advanced,current,Warden,1.0,verified-current,tds-wiki-current-2026-08-20,Warden,ground
+Cowboy,Advanced,current,Cowboy,1.5,estimated,fallback-average,Cowboy,ground
+DJ Booth,Advanced,current,DJ Booth,2.5,verified-current,tds-wiki-current-2026-08-20,DJ Booth|DJBooth|DJ,ground
+Tesla,Advanced,current,Tesla,1.5,estimated,fallback-average,Tesla,ground
+Saboteur,Advanced,current,Saboteur,1.5,estimated,fallback-average,Saboteur,ground
+Minigunner,Advanced,current,Minigunner,1.5,reviewed,strategy-lab-prior-catalog,Minigunner,ground
+Ranger,Advanced,current,Ranger,1.5,estimated,fallback-average,Ranger,cliff
+Pursuit,Advanced,current,Pursuit,1.5,estimated,fallback-average,Pursuit,ground
+Gatling Gun,Advanced,current,Gatling Gun,1.5,estimated,fallback-average,Gatling Gun|GatlingGun,both
+Turret,Advanced,current,Turret,2.0,verified-current,tds-wiki-current-2026-08-20,Turret,ground
+Mortar,Advanced,current,Mortar,1.5,estimated,fallback-average,Mortar,cliff
+Mercenary Base,Advanced,current,Mercenary Base,1.5,estimated,fallback-average,Mercenary Base|MercenaryBase|Merc Base|MercBase,ground
+Brawler,Hardcore,current,Brawler,1.5,estimated,fallback-average,Brawler,ground
+Necromancer,Hardcore,current,Necromancer,1.5,estimated,fallback-average,Necromancer,ground
+Accelerator,Hardcore,current,Accelerator,1.75,verified-current,tds-wiki-current-2026-08-20,Accelerator,ground
+Engineer,Hardcore,current,Engineer,1.5,reviewed,strategy-lab-prior-catalog,Engineer,ground
+Hacker,Hardcore,current,Hacker,1.5,estimated,fallback-average,Hacker,ground
+Juggernaut,Evolved,current,Juggernaut,2.5,reviewed,strategy-lab-prior-catalog,Juggernaut,ground
+Operator,Evolved,current,Operator,1.5,reviewed,strategy-lab-prior-catalog,Operator,ground
+Golden Minigunner,Golden,current,Golden Minigunner,1.5,estimated,fallback-average,Golden Minigunner|GoldenMinigunner,ground
+Golden Crook Boss,Golden,current,Golden Crook Boss,1.5,reviewed,strategy-lab-prior-catalog,Golden Crook Boss|GoldenCrookBoss,ground
+Golden Pyromancer,Golden,current,Golden Pyromancer,1.5,estimated,fallback-average,Golden Pyromancer|GoldenPyromancer,ground
+Golden Scout,Golden,current,Golden Scout,1.5,estimated,fallback-average,Golden Scout|GoldenScout,ground
+Golden Cowboy,Golden,current,Golden Cowboy,1.5,estimated,fallback-average,Golden Cowboy|GoldenCowboy,ground
+Golden Soldier,Golden,current,Golden Soldier,1.5,estimated,fallback-average,Golden Soldier|GoldenSoldier,ground
+Golden Snowballer,Golden,current,Golden Snowballer,1.5,estimated,fallback-average,Golden Snowballer|GoldenSnowballer,ground
+Gladiator,Exclusive,current,Gladiator,1.5,estimated,fallback-average,Gladiator,ground
+Commando,Exclusive,current,Commando,1.5,estimated,fallback-average,Commando,ground
+Slasher,Exclusive,current,Slasher,1.5,estimated,fallback-average,Slasher,ground
+Frost Blaster,Exclusive,current,Frost Blaster,1.5,estimated,fallback-average,Frost Blaster|FrostBlaster,ground
+Archer,Exclusive,current,Archer,1.5,estimated,fallback-average,Archer,ground
+Swarmer,Exclusive,current,Swarmer,1.5,estimated,fallback-average,Swarmer,ground
+Toxic Gunner,Exclusive,current,Toxic Gunner,1.5,estimated,fallback-average,Toxic Gunner|ToxicGunner,ground
+Sledger,Exclusive,current,Sledger,1.5,estimated,fallback-average,Sledger,ground
+Executioner,Exclusive,current,Executioner,1.5,estimated,fallback-average,Executioner,ground
+Elf Camp,Exclusive,current,Elf Camp,1.5,estimated,fallback-average,Elf Camp|ElfCamp,ground
+Jester,Exclusive,current,Jester,1.5,estimated,fallback-average,Jester,ground
+Cryomancer,Exclusive,current,Cryomancer,1.5,estimated,fallback-average,Cryomancer,ground
+Hallow Punk,Exclusive,current,Hallow Punk,1.5,estimated,fallback-average,Hallow Punk|HallowPunk,ground
+Harvester,Exclusive,current,Harvester,1.5,estimated,fallback-average,Harvester,ground
+Snowballer,Exclusive,current,Snowballer,1.5,estimated,fallback-average,Snowballer,ground
+Elementalist,Exclusive,current,Elementalist,1.5,estimated,fallback-average,Elementalist,ground
+Firework Technician,Exclusive,current,Firework Technician,1.5,estimated,fallback-average,Firework Technician|FireworkTechnician,ground
+Biologist,Exclusive,current,Biologist,1.5,estimated,fallback-average,Biologist,ground
+Warlock,Exclusive,current,Warlock,1.5,estimated,fallback-average,Warlock,ground
+Spotlight Tech,Exclusive,current,Spotlight Tech,2.25,verified-current,tds-wiki-current-2026-08-20,Spotlight Tech|SpotlightTech,cliff
+War Machine,Exclusive,current,War Machine,1.5,estimated,fallback-average,War Machine|WarMachine,ground
+Mecha Base,Exclusive,current,Mecha Base,1.5,estimated,fallback-average,Mecha Base|MechaBase,ground
+Sentry,Unavailable,unavailable,Sentry,1.5,estimated,fallback-average,Sentry,ground
+Moderator,Unavailable,unavailable,Moderator,1.5,estimated,fallback-average,Moderator,ground
+Railgunner,Unavailable,unavailable,Railgunner,1.5,estimated,fallback-average,Railgunner,cliff
+Twitgunner,Unavailable,unavailable,Twitgunner,1.5,estimated,fallback-average,Twitgunner,ground
+Void Miner,Unavailable,unavailable,Void Miner,1.5,estimated,fallback-average,Void Miner|VoidMiner,ground
+Combatant,Unavailable,unavailable,Combatant,1.5,estimated,fallback-average,Combatant,ground
+Enforcer,Compatibility,compatibility,Shotgunner,1.0,reviewed,strategy-lab-prior-catalog,Enforcer,ground
+Boomerang,Compatibility,compatibility,Boomerang,1.5,reviewed,strategy-lab-prior-catalog,Boomerang,ground
