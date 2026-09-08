@@ -2187,6 +2187,7 @@ Developers
 
 QA
 • frostzzz
+• menz7
 • nytli
 • tristanm1ce
 )")
