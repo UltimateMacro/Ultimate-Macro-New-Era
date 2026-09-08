@@ -4,18 +4,21 @@ Ultimate Macro automates a live game UI, so small changes can affect timing, rec
 
 ## Branch workflow
 
-The private development mirror uses the following model:
+The official repository uses the following model:
 
-- `main`: stable/public-ready mirror.
+- `main`: current stable/public-ready line.
 - `integration`: shared staging branch.
 - `dev/<handle>`: long-lived personal workspace.
 - `feature/<handle>/<topic>`: new behavior.
 - `fix/<handle>/<topic>`: bug fixes.
 - `refactor/<topic>`: behavior-preserving structural work.
-- `release/<version>`: frozen release candidate.
+- `qa/<handle>/<topic>`: focused tester/QA work.
+- `release/<version>`: frozen release candidate or preserved release point.
 - `archive/*` and `backup/*`: historical safety refs; never use as normal development bases.
 
 Before starting work, sync your personal branch from `integration`. Open a focused task branch for non-trivial work and merge it back through review.
+
+Never rewind `main` to recreate an older release. Preserve old versions with a release branch pointing at the exact historical commit.
 
 See [docs/development/BRANCHING.md](docs/development/BRANCHING.md).
 

@@ -1,12 +1,12 @@
 # Branching model
 
-The private development mirror is organized around a stable line, a shared integration line, personal developer workspaces, and short-lived task branches.
+The official repository is organized around a stable line, a shared integration line, personal developer workspaces, short-lived task branches, and frozen release refs.
 
 ## Long-lived branches
 
 ### `main`
 
-Stable/public-ready mirror. Do not use it as a scratch branch.
+Current stable/public-ready line. Do not use it as a scratch branch and never rewind it to recreate an older release.
 
 ### `integration`
 
@@ -55,21 +55,31 @@ main
 integration
   ^
   | reviewed merge
-feature/fix/refactor branch
+feature/fix/refactor/qa branch
   ^
   | created from a synced workspace
 dev/<handle>
 ```
 
+## Preserved release lines
+
+Historical releases are additive refs, not reasons to rewrite `main`.
+
+- `release/1.3.5` points at the exact 1.3.5 release commit.
+- `release/1.4.0` points at the 1.4.0 release commit.
+
+New release branches are frozen after publication except for explicitly reviewed metadata-only corrections.
+
 ## Historical branches
 
-`archive/*` and `backup/*` exist as safety history. Do not base new work on them and do not delete them during normal cleanup. Remove historical refs only as a separate explicitly approved maintenance task.
+`archive/*` and `backup/*` are safety history. Do not base new work on them and do not delete them during normal cleanup. Remove historical refs only as a separate explicitly approved maintenance task.
 
 ## Rules
 
 - No force-push to `main` or `integration`.
 - No direct runtime development on `main`.
+- Never rewind `main` to an older release.
 - Keep one purpose per task branch.
-- Delete short-lived task branches after merge.
+- Delete short-lived task branches after merge when safe.
 - Sync personal branches frequently to prevent long-lived divergence.
-- Release branches are frozen except for blocker fixes and release metadata.
+- Release branches are frozen except for blocker fixes before publication or reviewed metadata-only corrections.

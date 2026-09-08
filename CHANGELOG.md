@@ -26,6 +26,12 @@
 
 - Remote economy totals remain consent-based, aggregated, and protected with server-side sanity limits. They are community estimates, not anti-cheat evidence.
 
+### Repository and release engineering
+
+- Added the repository-v2 branch model with `integration`, per-developer `dev/<handle>` workspaces, focused task branches, and frozen `release/<version>` refs.
+- Added deterministic release-package building and validation, including `VERSION` consistency checks and a build-only GitHub Actions release-candidate workflow.
+- Preserved the historical 1.3.5 and 1.4.0 release points without rewinding the current `main` branch.
+
 ## Unreleased — reported runtime QA hotfix
 
 ### Added

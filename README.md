@@ -67,11 +67,13 @@ The project is being migrated toward smaller runtime modules incrementally. Larg
 
 ## Development workflow
 
-- `main` is the stable/public-ready line.
-- `integration` is the shared staging line in the private development mirror.
+- `main` is the current stable/public-ready line.
+- `integration` is the shared staging line.
 - `dev/<handle>` is a long-lived personal workspace.
-- `feature/<handle>/<topic>`, `fix/<handle>/<topic>`, and `refactor/<topic>` are short-lived task branches.
-- Release candidates use `release/<version>`.
+- `feature/<handle>/<topic>`, `fix/<handle>/<topic>`, `refactor/<topic>`, and `qa/<handle>/<topic>` are short-lived task branches.
+- Release candidates and preserved release points use `release/<version>`.
+
+The 1.3.5 release line is preserved separately from later 1.4.0 development; main is never rewound to recreate an older version.
 
 See [Branching model](docs/development/BRANCHING.md), [Architecture](docs/development/ARCHITECTURE.md), and [Release process](docs/development/RELEASE_PROCESS.md).
 

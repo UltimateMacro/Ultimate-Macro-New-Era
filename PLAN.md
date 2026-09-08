@@ -1,48 +1,58 @@
-# Repository v2 rework plan
+# Repository v2 super-merge plan
 
-Target branch: `refactor/repository-v2`
+Target branch: `refactor/repository-v2-supermerge`
 
-Goal: make Ultimate Macro: New Era easier to maintain, review, test, package, and hand between developers without changing runtime behavior during the repository-organization phase.
+Baseline: official `main` at `ef19b521c83de04c60532239e97099ddfcfaa5b6`, runtime version `1.4.0`.
+
+Goal: bring the validated repository-v2 organization, branch model, documentation, CI, and release-package tooling into the official New Era repository without changing gameplay/runtime behavior.
+
+## Release history preservation
+
+The repository has already advanced beyond the 1.3.5 release point. The super-merge must not rewind `main`.
+
+After the organization PR is merged:
+
+- `release/1.3.5` preserves the exact 1.3.5 release commit `c2e168a6dfc41d0d13cf5968ace2b804f47ef00b`.
+- `release/1.4.0` preserves the 1.4.0 release commit `55b1c9e3d04d054093462a2b02d0522e5d75e636`.
+- `main` remains the current stable/public-ready line.
+- `integration` becomes the shared staging line.
+- `dev/<handle>` branches become long-lived personal workspaces.
+
+This keeps 1.3.5 available as an exact historical release line while preserving every later 1.4.0 change already present on main.
 
 ## Atomic commit plan
 
-1. **Document repository v2 migration plan**
-   - Replace the historical working-plan dump with this focused migration plan.
-   - Define invariants, rollback points, and the branch model.
+1. **Port repository v2 organization**
+   - Bring over the validated README, contribution flow, issue forms, PR template, CODEOWNERS, docs, version metadata, package builder, package validator, and CI/release workflows.
 
-2. **Refresh project documentation and contribution flow**
-   - Rework the README as the public project landing page.
-   - Add architecture, branching, release, and QA documentation under `docs/`.
-   - Improve issue and pull-request templates.
-   - Correct CODEOWNERS metadata.
+2. **Adapt repository v2 to the official repository**
+   - Remove private-mirror wording.
+   - Document the official branch model and preserved 1.3.5/1.4.0 release lines.
+   - Record the repository/tooling change in the changelog.
 
-3. **Add version and release-package contracts**
-   - Add a canonical `VERSION` file for build/release tooling.
-   - Add a deterministic allow-list release builder.
-   - Add release-package validation tests.
-   - Keep runtime version behavior unchanged for this phase; CI verifies that the source literal and `VERSION` agree.
+3. **Validate the super-merge candidate**
+   - Run source/runtime regression contracts.
+   - Run repository and strategy validation.
+   - Run PowerShell/updater/AutoHotkey validation.
+   - Build and validate `TDS_Macro.zip`.
+   - Require diff hygiene to pass.
 
-4. **Expand CI for the organized branch model**
-   - Run CI on main, developer, feature, fix, refactor, release, and integration branches.
-   - Validate the release package in CI.
-   - Add a build-only release workflow that produces `TDS_Macro.zip` and SHA-256 evidence without publishing automatically.
-
-5. **Create organized developer workspaces**
-   - Create a shared `integration` branch from the reviewed repository-v2 candidate.
-   - Create long-lived `dev/<handle>` branches for each current developer.
-   - Keep feature/fix work short-lived and merge through review.
-   - Preserve existing archive/backup branches until a separate cleanup is explicitly approved.
+4. **Promote and seed organized branches**
+   - Merge the reviewed candidate into `main`.
+   - Create `integration` and `dev/<handle>` from the merged main commit.
+   - Create immutable historical release pointers for 1.3.5 and 1.4.0.
+   - Do not delete history or force-push any branch.
 
 ## Repository invariants
 
-- `main` remains the stable/public-ready line.
-- This rework does not intentionally change gameplay/runtime behavior.
-- No force-pushes or destructive branch cleanup are part of this task.
+- No gameplay/runtime behavior change is intended by this organization merge.
+- `main` is never rewound to an older release.
 - Runtime binaries and dependencies remain pinned and validated.
-- Release artifacts must never contain Git metadata, tests, docs, caches, Markdown, Python tooling, batch wrappers, or other developer-only files.
-- PowerShell files required at runtime remain allowed in releases.
-- Existing updater integrity, rollback, and secret-redaction contracts must remain intact.
+- Release artifacts exclude developer-only files and metadata.
+- Runtime PowerShell helpers required by the application remain package-eligible.
+- Existing updater integrity, rollback, secret-redaction, and strategy-preservation contracts remain intact.
+- Darksen attribution and GPL-3.0 licensing remain unchanged.
 
 ## Rollback
 
-Every change is isolated on `refactor/repository-v2`. The current private `main` remains untouched. Rolling back the repository rework therefore only requires abandoning or deleting the candidate branch; no history rewrite is necessary.
+Before merge, abandon the candidate branch. After merge, revert the organization merge commit if needed. Historical release branches are additive safety references and do not rewrite existing history.
