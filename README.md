@@ -64,7 +64,8 @@ Ultimate Macro: The New Era is a free, open-source automation tool for Roblox To
 **QA**
 
 - frostzzz
-- nytil
+- menz7
+- nytli
 - tristanm1ce
 
 ## Credits

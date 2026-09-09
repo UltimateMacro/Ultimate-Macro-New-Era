@@ -107,28 +107,84 @@ def validate_automatic_settings_persistence(main: str) -> None:
     assert "SaveOption(key, value) {" in main, "settings must persist through a shared writer"
     assert "ResetSettingsToDefault(*) {" in main, "the Settings page must offer Reset to Default"
 
-    assert "SetTimer(AutoSavePartySettings, -500)" in main
-    assert "SetTimer(AutoSaveBotSettings, -600)" in main
-    assert "SetTimer(AutoSaveKeybinds, -600)" in main
+    assert 'Tab3_HostNm_EDIT.OnEvent("Change", (*) => AutoSavePartySettings())' in main, (
+        "party settings must write through on change instead of waiting for a debounce"
+    )
+    assert 'VipLinkCtrl.OnEvent("Change", (*) => RefreshVipServerStatus())' in main, (
+        "the VIP link must write through on change instead of waiting for a debounce"
+    )
+    assert 'UpgradeDelayCtrl.OnEvent("Change", (*) => AutoSaveUpgradeDelay())' in main, (
+        "the upgrade delay must write through on change instead of waiting for a debounce"
+    )
+
+    assert 'QueueSettingSave("botsettings", AutoSaveBotSettings, 600)' in main
+    assert 'QueueSettingSave("keybinds", AutoSaveKeybinds, 600)' in main
+
+    assert "FlushPendingSettingSaves() {" in main, (
+        "settings that stay debounced need a flush so a queued change is never dropped"
+    )
+    for owner, start, end in (
+        ("StartStrategy", "StartStrategy(*) {", "StopStrategy(*) {"),
+        ("SafeReload", "SafeReload() {", "ClearRestartLock() {"),
+        ("HandleExit", "HandleExit(ExitReason, ExitCode) {", "CleanupGdip("),
+    ):
+        assert "FlushPendingSettingSaves()" in region(main, start, end), (
+            f"{owner} must flush queued settings before it can discard them"
+        )
 
 
 def validate_placement_position_tracking(main: str) -> None:
-    """A rejected click target must never be tried again during one placement."""
+    """Only an explicit space rejection may retire a recorded coordinate."""
     spawn = region(main, "SpawnTower(X, Y, slotNumber, towerID) {", "PlacementPositionKey(px, py) {")
+    classifier = region(main, "IsPlacementExplicitlyRejected() {", "ResolvePlacementAmbiguity(towerID, &resV2) {")
+    resolver = region(main, "ResolvePlacementAmbiguity(towerID, &resV2) {", "SellTower(towerID) {")
 
     assert "rejectedPositions := Map()" in spawn
-    assert "rejectedPositions.Has(PlacementPositionKey(candidate[1], candidate[2]))" in spawn, (
-        "placement must skip candidates that already failed"
+    assert "rejectedPositions.Has(PlacementPositionKey(candidate[1], candidate[2]))" in spawn
+    assert spawn.count("rejectedPositions[PlacementPositionKey(currentX, currentY)] := true") == 1, (
+        "only confirmed space rejection may retire a position"
     )
-    assert spawn.count("rejectedPositions[PlacementPositionKey(currentX, currentY)] := true") == 2, (
-        "both the explicit-rejection and the unresolved path must retire the position"
+    assert 'placementStatus = "funds"' in spawn and 'targetIndex--' in spawn, (
+        "insufficient funds must keep the exact recorded position"
     )
-    assert "needsHotbarSelection := true" in spawn, (
-        "cancelling placement drops the held tower, so the slot must be selected again"
+    assert 'placementStatus = "unknown"' in spawn and 'placement_unknown_exhausted' in spawn, (
+        "unknown placement state must fail safely without drifting coordinates"
     )
+    assert 'placementStatus = "space"' in spawn, (
+        "space rejection must be an explicit classifier result"
+    )
+    assert "cannot_place_here_v2.png" in classifier
+    assert "IsPlacementInsufficientFunds()" in classifier and 'return "funds"' in classifier
+    assert "afford" in classifier, "cannot-afford messages must classify as funds, not blocked space"
+    assert 'ReadMessage(["cannot"' not in classifier, (
+        "a bare cannot token is too broad for space rejection and misclassifies cannot-afford messages"
+    )
+    assert 'return "space"' in classifier
+    assert 'return failureReason' in resolver
     assert "BuildPlacementTargets(X, Y)" in spawn
-    assert "attemptMultiplier" not in spawn, (
-        "the old growing-offset retry re-clicked the original failed pixel every round"
+    assert "attemptMultiplier" not in spawn
+
+
+def validate_recording_resilience(main: str) -> None:
+    autosave = region(main, "RecordingAutosaveSnapshot(includeMacroSteps := false) {", "RecordingAutosaveDiscard() {")
+    record_input = region(main, "RecordInputsHK(*) {", "CloneTowerHK(*) {")
+    stop_record = region(main, "StopRecord(ctrl, *) {", "SafeStrategyFileName(value) {")
+    exit_handler = region(main, "HandleExit(ExitReason, ExitCode) {", "CleanupGdip(")
+    safe_reload = region(main, "SafeReload() {", "ClearRestartLock() {")
+
+    assert "RecordMacroStep(step)" in autosave
+    assert "RecordingAutosaveRewrite(true)" in autosave
+    assert "SetTimer(FlushRecordingAutosaveSnapshot, -250)" in autosave
+    assert 'nextHook := InputHook("V")' in record_input and "try {" in record_input
+    assert "raw_input_recording_start_failed" in record_input, (
+        "InputHook startup failure must be visible instead of silently killing recording"
+    )
+    assert "FinalizeMacroInputRecording(true)" in record_input
+    assert "FinalizeMacroInputRecording(true)" in stop_record
+    assert "RecordingAutosaveRewrite(true)" in exit_handler
+    assert "RecordingAutosaveRewrite(true)" in safe_reload
+    assert "SetWindowDisplayAffinity" not in main and "WDA_EXCLUDEFROMCAPTURE" not in main, (
+        "the macro must not intentionally block external screen capture"
     )
 
 
@@ -146,6 +202,22 @@ def validate_timescale_reliability(main: str) -> None:
     )
     assert "timescale_confirmation_unverified" in timescale, (
         "an unverifiable confirmation must warn and continue, not abort"
+    )
+
+    ticketless = region(timescale, 'if (dialogKind = "getmore") {', "Click(hit.x, hit.y)")
+    assert "StopStrategy()" not in ticketless, (
+        "running out of timescale tickets must continue the run, not stop the macro"
+    )
+    assert "return true" in ticketless, (
+        "the ticketless path must report success so the run proceeds without timescale"
+    )
+
+    dialog = region(main, "WaitForTimescaleDialog(w, h, timeoutMs, &hit) {", "activateTimescale() {")
+    assert "confirmHit && (!getMoreHit || confirm.score >= getMore.score)" in dialog, (
+        "a visible confirm button must win over Get More instead of losing a probe-order race"
+    )
+    assert "settleUntil" in dialog and "getMoreHit && A_TickCount >= settleUntil" in dialog, (
+        "Get More must persist past a settle window before the run is declared ticketless"
     )
 
 
@@ -471,7 +543,7 @@ def validate_official_remote(root: Path, main: str) -> None:
     assert "Official Remote" in main
     assert "Tab4_RemoteConsent" in main
     assert "OfficialRemoteShutdown()" in main
-    assert 'global ClientVersion := "1.3.5"' in worker
+    assert 'global ClientVersion := "1.3.5a"' in worker
     assert "CryptProtectData" in worker
     assert "CryptUnprotectData" in worker
     assert "GetOrCreateInstallId" in worker
@@ -483,6 +555,25 @@ def validate_official_remote(root: Path, main: str) -> None:
     )
     assert "decodedBytes := Buffer(size)" in worker
     assert "fileBytes := Buffer(file.Length)" in worker
+
+
+def validate_qa_credits(root: Path, main: str) -> None:
+    readme = read(root / "README.md")
+    expected_readme = """**QA**
+
+- frostzzz
+- menz7
+- nytli
+- tristanm1ce"""
+    expected_app = """QA
+• frostzzz
+• menz7
+• nytli
+• tristanm1ce"""
+
+    assert expected_readme in readme, "README QA roster is incomplete or out of order"
+    assert expected_app in main, "in-app QA credits are incomplete or out of order"
+    assert "nytil" not in readme.lower(), "README still contains the old nytli typo"
 
 
 def validate(root: Path) -> None:
@@ -498,9 +589,11 @@ def validate(root: Path) -> None:
 
     validate_source_dependency_bootstrap(main)
     validate_dependency_bootstrap_portability(root)
+    validate_qa_credits(root, main)
     validate_settings_contracts(main)
     validate_automatic_settings_persistence(main)
     validate_placement_position_tracking(main)
+    validate_recording_resilience(main)
     validate_timescale_reliability(main)
     validate_resolution_scaling(main)
     validate_strategy_geometry(main)

@@ -1,4 +1,4 @@
-﻿; Ultimate Macro (macro for TDS) by Darksen
+; Ultimate Macro (macro for TDS) by Darksen
 ;   Free for anyone to use
 ;   Modifications are welcome, however stealing credit is not.
 ;   You can add your name, but my original credit must remain.
@@ -117,7 +117,7 @@ command_buffer := []
 global BotStrategyChoices := []
 global BotStrategyChoiceTime := 0
 
-ver := "1.3.5"
+ver := "1.3.5a"
 
 RuntimeLogInstall("Main", ver)
 
@@ -308,6 +308,7 @@ global modifiers := ""
 global LastOpenedTowerID := ""
 global IsRestarting := false
 global RestartLock := false
+global PendingSettingSaves := Map()
 global PartyInviteBusy := false
 
 global isUiPositionSaved := false
@@ -448,8 +449,8 @@ DetectTowerForUpgrading(*) {
         MouseGetPos(&mx, &my)
         elapsed := A_TickCount - MacroStartTime
         MacroStartTime := A_TickCount
-        MacroSteps.Push("Sleep(" elapsed ")")
-        MacroSteps.Push("Click(" mx ", " my ")")
+        RecordMacroStep("Sleep(" elapsed ")")
+        RecordMacroStep("Click(" mx ", " my ")")
         return
     }
 
@@ -698,6 +699,35 @@ SaveOption(key, value) {
     return SaveSetting(SettingsFile, "Options", key, value)
 }
 
+QueueSettingSave(name, saver, delayMs) {
+    global PendingSettingSaves
+    PendingSettingSaves[name] := saver
+    SetTimer(saver, -delayMs)
+}
+
+ClearPendingSettingSave(name) {
+    global PendingSettingSaves
+    try PendingSettingSaves.Delete(name)
+}
+
+FlushPendingSettingSaves() {
+    global PendingSettingSaves
+
+    if (!IsSet(PendingSettingSaves) || PendingSettingSaves.Count = 0)
+        return
+
+    pending := PendingSettingSaves
+    PendingSettingSaves := Map()
+
+    for name, saver in pending {
+        try SetTimer(saver, 0)
+        try saver()
+        catch Error as err
+            RuntimeLogWarn("setting_flush_failed", "A pending setting could not be flushed before the macro continued",
+                "setting=" name "; error=" err.Message)
+    }
+}
+
 SaveHotkeySetting(key, value) {
     global SettingsFile
     return SaveSetting(SettingsFile, "Hotkeys", key, value)
@@ -810,7 +840,12 @@ if (autoRun = 1 && autoStrat != "" && FileExist(autoStrat)) {
     LoadStrategyFile(autoStrat)
     RunningStrategy := true
     ActivateRoblox()
-    RunStrategy()
+    if !RunStrategy() {
+        if (RunningStrategy) {
+            RuntimeLogError("strategy_lifecycle_failed", "Strategy lifecycle ended before completing its transition")
+            StopStrategy()
+        }
+    }
 } else {
     updateResult := CheckForUpdate(ver)
     if (updateResult = 2) {
@@ -1701,8 +1736,8 @@ TAB3.Push(Tab3_Title, Tab3_Line1, Tab3_HostNm, Tab3_HostNm_EDIT, Tab3_PartyMemb,
     Tab3_Role_Host.LabelCtrl, Tab3_Role_Member.LabelCtrl,
     Tab3_LCondition_All.LabelCtrl, Tab3_LCondition_Any.LabelCtrl)
 
-Tab3_HostNm_EDIT.OnEvent("Change", (*) => SetTimer(AutoSavePartySettings, -500))
-Tab3_PartyMemb_Edit.OnEvent("Change", (*) => SetTimer(AutoSavePartySettings, -500))
+Tab3_HostNm_EDIT.OnEvent("Change", (*) => AutoSavePartySettings())
+Tab3_PartyMemb_Edit.OnEvent("Change", (*) => AutoSavePartySettings())
 
 MultiplayerEnabledTGL.OnEvent("Click", (*) => AutoSavePartySettings())
 
@@ -1735,7 +1770,7 @@ MainGui.SetFont("s9 w400 cFFFFFF")
 global SendCurrCtrl := MainGui.Add("Checkbox", "x30 y226 w200 h22 Hidden vSendCurrenciesEnabled Checked" SendCurrenciesEnabled,
     "Send Statistics")
 global DebugLogsCtrl := MainGui.Add("Checkbox", "x240 y226 w200 h22 Hidden vWebhookDebugLogs Checked" WebhookDebugLogs,
-    "Debug Logs")
+    "Send Logs to Discord")
 global WebhookScreenshotsCtrl := MainGui.Add("Checkbox", "x450 y226 w220 h22 Hidden vWebhookScreenshots Checked" WebhookScreenshots,
     "Automatic screenshots")
 global WebhookTriumphScreenshotsCtrl := MainGui.Add("Checkbox", "x30 y254 w410 h22 Hidden vWebhookTriumphScreenshots Checked" WebhookTriumphScreenshots,
@@ -1863,10 +1898,10 @@ WebhookSepatateTriumphScreenshotsCtrl.OnEvent("Click", (ctrlObj, *) => (
     EnableWebhookLink2()
 ))
 
-BotTokenCtrl.OnEvent("Change", (*) => SetTimer(AutoSaveBotSettings, -600))
-ChannelIDCtrl.OnEvent("Change", (*) => SetTimer(AutoSaveBotSettings, -600))
-WebhookUserIDCtrl2.OnEvent("Change", (*) => SetTimer(AutoSaveBotSettings, -600))
-BotPrefixCtrl.OnEvent("Change", (*) => SetTimer(AutoSaveBotSettings, -600))
+BotTokenCtrl.OnEvent("Change", (*) => QueueSettingSave("botsettings", AutoSaveBotSettings, 600))
+ChannelIDCtrl.OnEvent("Change", (*) => QueueSettingSave("botsettings", AutoSaveBotSettings, 600))
+WebhookUserIDCtrl2.OnEvent("Change", (*) => QueueSettingSave("botsettings", AutoSaveBotSettings, 600))
+BotPrefixCtrl.OnEvent("Change", (*) => QueueSettingSave("botsettings", AutoSaveBotSettings, 600))
 BotEnabledCtrl.OnEvent("Click", (*) => AutoSaveBotSettings())
 
 RefreshWebhookStatus()
@@ -1990,7 +2025,7 @@ global TimeScaleModeCtrl := SettingsPanel.Add("DropDownList", "x444 y201 w110", 
 TimeScaleModeCtrl.Text := TimeScaleMode
 SettingsPanel.SetFont("s9 w400 c7E848E", UIFont())
 global Tab5_HelpTimescale := SettingsPanel.Add("Text", "x560 y201 w18 h22 0x200 Center", "?")
-RegisterHelpTip(Tab5_HelpTimescale, "1.5x is more stable and suits most strategies.`n2x needs strategies built for it but is much faster.`n`nThe macro stops safely if you run out of timescale tickets.")
+RegisterHelpTip(Tab5_HelpTimescale, "1.5x is more stable and suits most strategies.`n2x needs strategies built for it but is much faster.`n`nIf you run out of timescale tickets the run continues at normal speed.")
 
 SettingsPanel.SetFont("s9 w400 cAAAAAA")
 global Tab5_LblUpgradeDelay := SettingsPanel.Add("Text", "x330 y230 w110 h22 0x200 BackgroundTrans", "Upgrade Delay:")
@@ -2049,7 +2084,7 @@ SettingsPanel.SetFont("s9 w400 cFFFFFF", UIFont())
 global AlwaysOnTopCtrl := SettingsPanel.Add("Checkbox", "x0 y529 w200 h22", "Always On Top")
 AlwaysOnTopCtrl.Value := (AlwaysOnTop = "1" || AlwaysOnTop = 1)
 
-global DebugConsoleCtrl := SettingsPanel.Add("Checkbox", "x214 y529 w200 h22", "Debug Logs")
+global DebugConsoleCtrl := SettingsPanel.Add("Checkbox", "x214 y529 w200 h22", "On-Screen Logs")
 DebugConsoleCtrl.Value := (DebugConsole = "1" || DebugConsole = 1)
 
 global PotatoModeCtrl := SettingsPanel.Add("Checkbox", "x0 y557 w104 h22", "Potato Mode")
@@ -2152,7 +2187,8 @@ Developers
 
 QA
 • frostzzz
-• nytil
+• menz7
+• nytli
 • tristanm1ce
 )")
 
@@ -2954,7 +2990,7 @@ SetKeybindStatus(text, isError := false) {
 }
 
 QueueKeybindSave(*) {
-    SetTimer(AutoSaveKeybinds, -600)
+    QueueSettingSave("keybinds", AutoSaveKeybinds, 600)
 }
 
 AutoSaveKeybinds(*) {
@@ -2962,6 +2998,8 @@ AutoSaveKeybinds(*) {
     global RaiseDeadKey, HologramKey, RepoKey
     global PlaceTowerKey, UpgradeTowerKey, AlignCameraKey, ChangeDJTrackKey, SellTowerKey
     global DeleteTowerRecordingKey, RecordInputsKey, HoloKey, ChangeTargetsKey
+
+    ClearPendingSettingSave("keybinds")
 
     tempChainKey := FirstKeyChar(ChainKeyCtrl.Value, ChainKey)
     tempBeatKey := FirstKeyChar(BeatKeyCtrl.Value, BeatKey)
@@ -3156,9 +3194,9 @@ WireSettingsAutoSave() {
     ))
 
     TimeScaleModeCtrl.OnEvent("Change", (c, *) => ApplyTimeScaleMode(c.Text))
-    UpgradeDelayCtrl.OnEvent("Change", (*) => SetTimer(AutoSaveUpgradeDelay, -600))
+    UpgradeDelayCtrl.OnEvent("Change", (*) => AutoSaveUpgradeDelay())
 
-    VipLinkCtrl.OnEvent("Change", (*) => SetTimer(RefreshVipServerStatus, -700))
+    VipLinkCtrl.OnEvent("Change", (*) => RefreshVipServerStatus())
     AlwaysOnTopCtrl.OnEvent("Click", (c, *) => (
         AlwaysOnTop := c.Value,
         SaveOption("AlwaysOnTop", AlwaysOnTop),
@@ -4001,6 +4039,7 @@ StartStrategy(*) {
     if (RunningStrategy or Recording) {
         return
     }
+    FlushPendingSettingSaves()
     g_IsFirstLaunch := Integer(IniRead(StateFile, "State", "IsFirstLaunch", 1))
 
     global RunningStrategy, CurrentRotationIndex, gamemap, difficulty, requiredTowers, modifiers
@@ -4232,19 +4271,49 @@ RecordingAutosaveStart() {
     }
 }
 
-RecordingAutosaveRewrite() {
-    global Recording, RecordedSteps
+RecordingAutosaveSnapshot(includeMacroSteps := false) {
+    global RecordedSteps, MacroRecording, MacroSteps
+
+    snapshot := []
+    for step in RecordedSteps
+        snapshot.Push(step)
+
+    if (includeMacroSteps && MacroRecording) {
+        for step in MacroSteps
+            snapshot.Push(step)
+    }
+    return snapshot
+}
+
+RecordingAutosaveRewrite(includeMacroSteps := false) {
+    global Recording
     if (!Recording)
         return
     path := RecordingAutosavePath()
     try {
         if FileExist(path)
             FileDelete(path)
-        FileAppend(BuildStrategyFileText(RecordedSteps), path, "UTF-8-RAW")
+        FileAppend(BuildStrategyFileText(RecordingAutosaveSnapshot(includeMacroSteps)), path, "UTF-8-RAW")
     } catch Error as err {
         RuntimeLogWarn("recording_autosave_rewrite_failed", "Recording autosave could not be rewritten",
             "error=" err.Message)
     }
+}
+
+FlushRecordingAutosaveSnapshot() {
+    RecordingAutosaveRewrite(true)
+}
+
+ScheduleRecordingAutosaveSnapshot() {
+    global Recording
+    if Recording
+        SetTimer(FlushRecordingAutosaveSnapshot, -250)
+}
+
+RecordMacroStep(step) {
+    global MacroSteps
+    MacroSteps.Push(step)
+    ScheduleRecordingAutosaveSnapshot()
 }
 
 RecordingAutosaveDiscard() {
@@ -4308,13 +4377,51 @@ RecordingAutosaveRecover() {
 }
 
 RecordStep(step) {
-    global RecordedSteps
+    global RecordedSteps, MacroRecording
     RecordedSteps.Push(step)
+
+    ; If raw-input recording is active, its in-memory steps are already part of
+    ; the crash-safe snapshot. Rewrite atomically so the autosave never mixes a
+    ; stale snapshot with newly appended structured actions.
+    if MacroRecording {
+        RecordingAutosaveRewrite(true)
+        return
+    }
+
     try
         FileAppend(step "`n", RecordingAutosavePath(), "UTF-8-RAW")
     catch Error as err
         RuntimeLogWarn("recording_autosave_append_failed", "A recorded action could not be mirrored to the autosave",
             "error=" err.Message)
+}
+
+FinalizeMacroInputRecording(promptToAdd := true) {
+    global MacroRecording, InputHookObj, MacroSteps, RecordedSteps, KeyDownTimes
+
+    if !MacroRecording
+        return 0
+
+    try SetTimer(FlushRecordingAutosaveSnapshot, 0)
+    MacroRecording := false
+    try {
+        if (InputHookObj != "")
+            InputHookObj.Stop()
+    }
+    InputHookObj := ""
+    KeyDownTimes := Map()
+
+    capturedCount := MacroSteps.Length
+    addToStrategy := promptToAdd && capturedCount > 0
+        && (ModernMsgBox("Add to Strategy?", "Add recorded actions to current strategy?", "YES|NO") = "YES")
+
+    if addToStrategy {
+        for step in MacroSteps
+            RecordedSteps.Push(step)
+    }
+
+    MacroSteps := []
+    RecordingAutosaveRewrite(false)
+    return addToStrategy ? capturedCount : 0
 }
 
 StartRecording(ctrl, *) {
@@ -4432,15 +4539,11 @@ StopRecord(ctrl, *) {
     global RecordingWidth, RecordingHeight
 
     if (MacroRecording) {
-        MacroRecording := false
-        if (InputHookObj != "")
-            InputHookObj.Stop()
-        LogToConsole("Macro recording auto-stopped")
-        if (ModernMsgBox("Add to Strategy?", "Add recorded actions to current strategy?", "YES|NO") = "YES") {
-            for i, step in MacroSteps
-                RecordStep(step)
-            LogToConsole("Added " MacroSteps.Length " macro steps to strategy")
-        }
+        capturedCount := MacroSteps.Length
+        addedCount := FinalizeMacroInputRecording(true)
+        LogToConsole("Macro recording auto-stopped. Steps: " capturedCount)
+        if (addedCount > 0)
+            LogToConsole("Added " addedCount " macro steps to strategy")
     }
 
     if (!Recording)
@@ -4840,27 +4943,41 @@ RecordInputsHK(*) {
         SendEvent("{Blind}" SEND_modifiers "{" pureKey "}")
         return
     }
+
     if (MacroRecording) {
-        MacroRecording := false
-        if (InputHookObj != "")
-            InputHookObj.Stop()
-        LogToConsole("Recording ALL clicks and keys STOPPED. Steps: " MacroSteps.Length)
-        if (ModernMsgBox("Add to Strategy?", "Add recorded actions to current strategy?", "YES|NO") = "YES") {
-            for i, step in MacroSteps
-                RecordStep(step)
-            LogToConsole("Added " MacroSteps.Length " steps to strategy")
-        }
-    } else {
-        LogToConsole("Recording ALL clicks and keys...!")
+        capturedCount := MacroSteps.Length
+        addedCount := FinalizeMacroInputRecording(true)
+        LogToConsole("Recording ALL clicks and keys STOPPED. Steps: " capturedCount)
+        if (addedCount > 0)
+            LogToConsole("Added " addedCount " steps to strategy")
+        return
+    }
+
+    LogToConsole("Recording ALL clicks and keys...!")
+    MacroSteps := []
+    KeyDownTimes := Map()
+    MacroStartTime := A_TickCount
+
+    try {
+        nextHook := InputHook("V")
+        nextHook.KeyOpt("{All}", "N")
+        nextHook.OnKeyDown := OnKeyDown
+        nextHook.OnKeyUp := OnKeyUp
+        nextHook.Start()
+
+        InputHookObj := nextHook
         MacroRecording := true
+        RecordingAutosaveRewrite(true)
+        RuntimeLogInfo("raw_input_recording_started", "Raw input recording hook started successfully")
+    } catch Error as err {
+        MacroRecording := false
+        InputHookObj := ""
         MacroSteps := []
         KeyDownTimes := Map()
-        MacroStartTime := A_TickCount
-        InputHookObj := InputHook("V")
-        InputHookObj.KeyOpt("{All}", "N")
-        InputHookObj.OnKeyDown := OnKeyDown
-        InputHookObj.OnKeyUp := OnKeyUp
-        InputHookObj.Start()
+        RecordingAutosaveRewrite(false)
+        RuntimeLogError("raw_input_recording_start_failed", "Raw input recording hook could not start", "error=" err.Message)
+        MsgBox("Ultimate Macro could not start raw input recording.`n`n" err.Message,
+            "Input recording failed", 0x10)
     }
 }
 
@@ -5573,7 +5690,7 @@ OnKeyDown(ih, vk, sc) {
     MacroStartTime := currentTime
 
     KeyDownTimes[keyId] := currentTime
-    MacroSteps.Push("Sleep(" elapsed ")")
+    RecordMacroStep("Sleep(" elapsed ")")
 }
 
 OnKeyUp(ih, vk, sc) {
@@ -5602,11 +5719,11 @@ OnKeyUp(ih, vk, sc) {
     if (keyName = "")
         keyName := "VK" Format("{:02X}", vk)
 
-    MacroSteps.Push('Send("' keyName '", hold:=' holdDuration ')')
+    RecordMacroStep('Send("' keyName '", hold:=' holdDuration ')')
 
     idle := elapsed - holdDuration
     if (idle > 0) {
-        MacroSteps.Push("Sleep(" idle ")")
+        RecordMacroStep("Sleep(" idle ")")
     }
 }
 
@@ -5664,8 +5781,8 @@ OnKeyUp(ih, vk, sc) {
         MouseGetPos(&mx, &my)
         elapsed := A_TickCount - MacroStartTime
         MacroStartTime := A_TickCount
-        MacroSteps.Push("Sleep(" elapsed ")")
-        MacroSteps.Push("Click(" mx ", " my ", Right)")
+        RecordMacroStep("Sleep(" elapsed ")")
+        RecordMacroStep("Click(" mx ", " my ", Right)")
         return
     }
 
@@ -5850,6 +5967,8 @@ TestBot(ctrl, *) {
 AutoSaveBotSettings(*) {
     global BotToken, BotEnabled, ChannelID, UserID, BotPrefix
     static lastPrefixWarning := ""
+
+    ClearPendingSettingSave("botsettings")
 
     BotToken := BotTokenCtrl.Value
     BotEnabled := BotEnabledCtrl.Value
@@ -6457,6 +6576,8 @@ RefreshWebhookStatus(*) {
     global WebhookLink, WebhookEnabled, WebhookLinkCtrl
     global WebhookCheckedLink, WebhookCheckedState
 
+    ClearPendingSettingSave("webhooklink")
+
     link := Trim(WebhookLinkCtrl.Value)
 
     if (WebhookCheckedState != "" && link = WebhookCheckedLink) {
@@ -6520,7 +6641,7 @@ ConfirmWebhookLink() {
 }
 
 QueueWebhookCheck(*) {
-    SetTimer(RefreshWebhookStatus, -700)
+    QueueSettingSave("webhooklink", RefreshWebhookStatus, 700)
 }
 EnableWebhookLink2(*) {
     global CurrentTab, DiscordPage, WebhookLinkCtrl2, Tab4_Lbl2, WebhookSepatateTriumphScreenshotsCtrl
@@ -6832,6 +6953,8 @@ PlayStrategy() {
 
     i := 1
     while (i <= RecordedSteps.Length) {
+        if (IsSet(RunningStrategy) && !RunningStrategy)
+            return false
         step := RecordedSteps[i]
         MacroPhase("playing_step", 900000)
 
@@ -7658,7 +7781,7 @@ TryOpenArcadeCategory(w, h) {
                 grayscale: 1
             })
             match := ocrResult.FindString("Arcade", { CaseSense: false, IgnoreLinebreaks: true })
-            if (match) {
+            if (match && OcrMatchTargetsGameUI(match, "Arcade")) {
                 RuntimeLogInfo("arcade_category_select", "Opening Arcade category by sidebar text")
                 match.Click()
                 Sleep(650)
@@ -7679,10 +7802,10 @@ TryOpenArcadeCategory(w, h) {
 }
 
 GetArcadeCardClientRegion(w, h, &cardX, &cardY, &cardW, &cardH) {
-    cardX := Round(w * 0.22)
-    cardY := Round(h * 0.06)
-    cardW := Round(w * 0.62)
-    cardH := Round(h * 0.70)
+    cardX := 0
+    cardY := 0
+    cardW := w
+    cardH := h
 }
 
 TryClickArcadeTarget(target, w, h) {
@@ -7711,17 +7834,17 @@ TryClickArcadeTarget(target, w, h) {
             }
         }
 
-        ocrX := screenX + Round(screenW * 0.22)
-        ocrY := screenY + Round(screenH * 0.06)
-        ocrW := Round(screenW * 0.62)
-        ocrH := Round(screenH * 0.70)
+        ocrX := screenX + Round(screenW * 0.17)
+        ocrY := screenY + Round(screenH * 0.05)
+        ocrW := Round(screenW * 0.76)
+        ocrH := Round(screenH * 0.80)
         ocrResult := OCR.FromRect(ocrX, ocrY, ocrW, ocrH, {
             lang: langCode,
             scale: 1.45,
             grayscale: 1
         })
         match := ocrResult.FindString(target, { CaseSense: false, IgnoreLinebreaks: true })
-        if (match) {
+        if (match && OcrMatchTargetsGameUI(match, target)) {
             RuntimeLogInfo("arcade_card_text_select", "Selecting Arcade/Trial card by bounded text OCR", "target=" target)
             match.Click()
             Sleep(250)
@@ -7735,10 +7858,10 @@ TryClickArcadeTarget(target, w, h) {
 }
 
 TryClickDifficultyTarget(target, w, h) {
-    cardX := Round(w * 0.22)
-    cardY := Round(h * 0.06)
-    cardW := Round(w * 0.62)
-    cardH := Round(h * 0.76)
+    cardX := 0
+    cardY := 0
+    cardW := w
+    cardH := h
 
     imagePath := "Resources/" target ".png"
     if FileExist(imagePath) {
@@ -7768,10 +7891,10 @@ TryClickDifficultyTarget(target, w, h) {
             }
         }
 
-        ocrX := screenX + Round(screenW * 0.22)
-        ocrY := screenY + Round(screenH * 0.06)
-        ocrW := Round(screenW * 0.62)
-        ocrH := Round(screenH * 0.76)
+        ocrX := screenX + Round(screenW * 0.17)
+        ocrY := screenY + Round(screenH * 0.05)
+        ocrW := Round(screenW * 0.76)
+        ocrH := Round(screenH * 0.80)
         ocrResult := OCR.FromRect(
             ocrX,
             ocrY,
@@ -7780,7 +7903,7 @@ TryClickDifficultyTarget(target, w, h) {
             { lang: langCode, scale: 1.45, grayscale: 1 }
         )
         match := ocrResult.FindString(target, { CaseSense: false, IgnoreLinebreaks: true })
-        if (match) {
+        if (match && OcrMatchTargetsGameUI(match, target)) {
             RuntimeLogInfo("difficulty_text_select", "Selecting difficulty by OCR", "target=" target)
             match.Click()
             return true
@@ -7802,6 +7925,8 @@ WaitForLobbyLoad() {
     if (ResolveArcadeTarget() = "") {
         Sleep(6000)
         loop {
+            if (IsSet(RunningStrategy) && !RunningStrategy)
+                return false
             if (A_TickCount - startTime > 60000) {
                 CloseRoblox()
                 SafeReload()
@@ -8943,6 +9068,8 @@ waitReady() {
     getRobloxPos(&x, &y, &w, &h)
     KillSubmacros()
     loop {
+        if (IsSet(RunningStrategy) && !RunningStrategy)
+            return false
         wt := 40000
         if (MultiplayerEnabled && PlayerRole = "Member") {
             wt := 90000
@@ -8998,23 +9125,32 @@ TimescaleDialogHit(res) {
 
 WaitForTimescaleDialog(w, h, timeoutMs, &hit) {
     deadline := A_TickCount + timeoutMs
+    settleUntil := A_TickCount + 900
     hit := ""
 
     loop {
         getMore := TimescaleDialogSearch("GetMore.png", w, h)
-        if TimescaleDialogHit(getMore) {
-            hit := getMore
-            return "getmore"
-        }
-
         confirm := TimescaleDialogSearch("confirm.png", w, h)
-        if TimescaleDialogHit(confirm) {
+        getMoreHit := TimescaleDialogHit(getMore)
+        confirmHit := TimescaleDialogHit(confirm)
+
+        if (confirmHit && (!getMoreHit || confirm.score >= getMore.score)) {
             hit := confirm
             return "confirm"
         }
 
-        if (A_TickCount >= deadline)
+        if (getMoreHit && A_TickCount >= settleUntil) {
+            hit := getMore
+            return "getmore"
+        }
+
+        if (A_TickCount >= deadline) {
+            if (getMoreHit) {
+                hit := getMore
+                return "getmore"
+            }
             return ""
+        }
         Sleep(150)
     }
 }
@@ -9069,12 +9205,12 @@ activateTimescale() {
 
     if (dialogKind = "getmore") {
         Click(hit.x, hit.y + ScaleY(55))
-        LogToConsole("Failed to activate timescale! You are out of tickets. Stopping safely.", true, false)
-        RuntimeLogWarn("timescale_no_tickets", "TimeScale could not be enabled because Get More was shown")
+        LogToConsole("You are out of timescale tickets. Continuing the run without timescale.", true, false)
+        RuntimeLogWarn("timescale_no_tickets", "TimeScale could not be enabled because Get More was shown; the run continues without it",
+            "score=" hit.score "; attempts=" openAttempt)
         CloseTimescaleNavigation()
         TimescaleActive := false
-        StopStrategy()
-        return false
+        return true
     }
 
     Click(hit.x, hit.y)
@@ -9172,6 +9308,8 @@ AlignCamera(move := true, skipZoom := false, log := true) {
 SpawnTower(X, Y, slotNumber, towerID) {
     global Towers, LastOpenedTowerID, CancelPlacementKey, canUseAbility, UseNumbersForHotbar
     global RunningStrategy, needtocheckTowerUI, unfocusX, unfocusY
+    if (IsSet(RunningStrategy) && !RunningStrategy)
+        return false
     LogToConsole("Placing tower " towerID " (slot " slotNumber ") at x:" X " y:" Y "...")
 
     X := sX(X, StrategyWidth)
@@ -9191,6 +9329,8 @@ SpawnTower(X, Y, slotNumber, towerID) {
     placementTargets := BuildPlacementTargets(X, Y)
     rejectedPositions := Map()
     targetIndex := 0
+    samePositionAttempts := 0
+    maxSameSpotRetries := 8
 
     needsHotbarSelection := true
 
@@ -9239,17 +9379,19 @@ SpawnTower(X, Y, slotNumber, towerID) {
         ActivateRoblox()
 
         if (needsHotbarSelection) {
-            Click(ScaleX(unfocusX), ScaleY(unfocusY))
-            Sleep(100)
-            if !WaitForTowerUIClosed(2500) {
-                Towers[towerID] := { x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0,
-                    target: "First Enemy", pendingPlacement: true }
-                LogToConsole("Tower " towerID " placement is still uncertain; existing tower UI did not close. Continuing without another click.", true)
-                RuntimeLogWarn("placement_pending_precondition", "Prior tower panel stayed visible during placement precondition",
-                    "tower=" towerID)
-                SendEvent("{" CancelPlacementKey "}")
-                canUseAbility := true
-                return true
+            if waitForTowerUI(, , 120) {
+                Click(ScaleX(unfocusX), ScaleY(unfocusY))
+                Sleep(100)
+                if !WaitForTowerUIClosed(2500) {
+                    Towers[towerID] := { x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0,
+                        target: "First Enemy", pendingPlacement: true }
+                    LogToConsole("Tower " towerID " placement is still uncertain; existing tower UI did not close. Continuing without another click.", true)
+                    RuntimeLogWarn("placement_pending_precondition", "Prior tower panel stayed visible during placement precondition",
+                        "tower=" towerID)
+                    SendEvent("{" CancelPlacementKey "}")
+                    canUseAbility := true
+                    return true
+                }
             }
             LastOpenedTowerID := ""
             needtocheckTowerUI := true
@@ -9285,15 +9427,49 @@ SpawnTower(X, Y, slotNumber, towerID) {
             } else if (placementStatus = "cancelled") {
                 canUseAbility := true
                 return false
-            } else if (placementStatus = "ambiguous") {
-                LogToConsole("Tower " towerID " placement remains uncertain; retrying at a different position.", true)
-                RuntimeLogWarn("placement_ambiguous_retry", "Placement will retry after passive re-verification",
-                    "tower=" towerID "; attempt=" placeAttempts)
-                rejectedPositions[PlacementPositionKey(currentX, currentY)] := true
+            } else if (placementStatus = "funds") {
+                ; Not enough cash is not a geometry failure. Keep the exact
+                ; recorded pixel until the tower becomes affordable.
+                samePositionAttempts := 0
+                LogToConsole("Tower " towerID " is waiting for enough cash; keeping the recorded position.")
+                RuntimeLogInfo("placement_waiting_for_funds",
+                    "Placement was blocked by insufficient funds, so coordinates were preserved",
+                    "tower=" towerID "; x=" currentX "; y=" currentY)
                 SendEvent("{" CancelPlacementKey "}")
                 needsHotbarSelection := true
-                Sleep(250)
+                targetIndex--
+                placeAttempts--
+                Sleep(1500)
                 continue
+            } else if (placementStatus = "unknown") {
+                ; Never invent a new coordinate unless TDS explicitly says the
+                ; recorded position is blocked. Unknown/slow UI stays on the
+                ; original pixel and eventually fails safely instead of drifting.
+                if (samePositionAttempts < maxSameSpotRetries) {
+                    samePositionAttempts++
+                    LogToConsole("Tower " towerID " placement is unconfirmed; keeping the recorded spot.")
+                    RuntimeLogInfo("placement_retry_same_position",
+                        "Placement was unconfirmed without a space rejection, so the recorded position is kept",
+                        "tower=" towerID "; x=" currentX "; y=" currentY "; attempt=" samePositionAttempts)
+                    SendEvent("{" CancelPlacementKey "}")
+                    needsHotbarSelection := true
+                    targetIndex--
+                    placeAttempts--
+                    Sleep(750)
+                    continue
+                }
+
+                LogToConsole("Tower " towerID " placement could not be confirmed; stopping rather than shifting the strategy.", true)
+                RuntimeLogWarn("placement_unknown_exhausted",
+                    "Placement remained unknown after bounded same-position retries; coordinates were not changed",
+                    "tower=" towerID "; x=" currentX "; y=" currentY "; attempts=" samePositionAttempts)
+                SendEvent("{" CancelPlacementKey "}")
+                canUseAbility := true
+                return false
+            } else if (placementStatus = "space") {
+                RuntimeLogInfo("placement_space_rejected",
+                    "TDS explicitly rejected the recorded position; trying the next bounded offset",
+                    "tower=" towerID "; x=" currentX "; y=" currentY)
             }
         }
 
@@ -9312,6 +9488,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
         rejectedPositions[PlacementPositionKey(currentX, currentY)] := true
         SendEvent("{" CancelPlacementKey "}")
         needsHotbarSelection := true
+        samePositionAttempts := 0
         Sleep(50)
     }
 
@@ -9345,13 +9522,48 @@ IsPlacementExplicitlyRejected() {
     x2 := Round(w * 0.7)
     y2 := Round(h * 0.3)
     try {
-        return ImageSearch(&fx, &fy, x1, y1, x2, y2,
+        blockedByImage := ImageSearch(&fx, &fy, x1, y1, x2, y2,
             "*Trans000000 *50 " A_WorkingDir "/Resources/cannot_place_here.png")
-            || ReadMessage(["cannot", "here", "hereg", "herd", "her", "here!", "cann", "cannd", "he", "h", "hed"], ,
-            ["need", "more", "to"], "\$|\d")
+        if (!blockedByImage && FileExist(A_WorkingDir "/Resources/cannot_place_here_v2.png")) {
+            blockedByImage := ImageSearch(&fx, &fy, x1, y1, x2, y2,
+                "*Trans000000 *50 " A_WorkingDir "/Resources/cannot_place_here_v2.png")
+        }
+        if blockedByImage
+            return true
+
+        ; Only a phrase that explicitly describes blocked geometry may move a
+        ; legacy strategy off its recorded pixel. A bare "cannot" is not enough:
+        ; messages such as "cannot afford" are money failures, not space failures.
+        return ReadMessage(,
+            "(?:cannot|can.?t|cant)\s+(?:place|put)(?:\s+(?:the|this|a|an|unit|tower))?\s+(?:here|there)"
+            . "|(?:this|that)\s+(?:spot|space|area)\s+(?:is\s+)?(?:blocked|invalid)"
+            . "|(?:no|not\s+enough)\s+(?:space|room)")
     } catch Error {
         return false
     }
+}
+
+IsPlacementInsufficientFunds() {
+    try {
+        ; TDS wording has changed over time. Match the semantic phrases instead
+        ; of one exact sentence so older/newer UI text stays compatible.
+        return ReadMessage(,
+            "(?:not\s+enough\s+(?:cash|money|funds)"
+            . "|(?:do\s+not|don't|dont)\s+have\s+enough\s+(?:cash|money|funds)"
+            . "|(?:cannot|can.?t|cant)\s+afford"
+            . "|need\s+(?:more\s+)?(?:cash|money|funds)"
+            . "|insufficient\s+(?:cash|funds|money))")
+    } catch Error {
+        return false
+    }
+}
+
+GetPlacementFailureReason() {
+    if IsPlacementExplicitlyRejected()
+        return "space"
+    if IsPlacementInsufficientFunds()
+        return "funds"
+    return "unknown"
 }
 
 ResolvePlacementAmbiguity(towerID, &resV2) {
@@ -9364,17 +9576,20 @@ ResolvePlacementAmbiguity(towerID, &resV2) {
 
         if waitForTowerUI(&resV2, , 300)
             return "success"
-        if IsPlacementExplicitlyRejected()
-            return "failure"
+
+        failureReason := GetPlacementFailureReason()
+        if (failureReason != "unknown")
+            return failureReason
         Sleep(150)
     }
 
-    if IsPlacementExplicitlyRejected()
-        return "failure"
+    failureReason := GetPlacementFailureReason()
+    if (failureReason != "unknown")
+        return failureReason
 
     RuntimeLogWarn("placement_ambiguous", "Placement remained unresolved after passive re-verification",
         "tower=" towerID)
-            return "ambiguous"
+    return "unknown"
 }
 
 SellTower(towerID) {
@@ -10291,6 +10506,7 @@ ShowDebugConsole() {
 
     WinSetTransColor("0x000000", "ahk_id " OverlayHWND)
 
+
     OverlayBitmap := Gdip_CreateBitmap(OverlayWidth, OverlayHeight)
     OverlayGraphics := Gdip_GraphicsFromImage(OverlayBitmap)
     Gdip_SetSmoothingMode(OverlayGraphics, 4)
@@ -10303,19 +10519,58 @@ DebugOverlayHitTest(wParam, lParam, msg, hwnd) {
         return -1
 }
 
+PointIsOverMacroOverlay(px, py) {
+    global OverlayHWND
+    if (!OverlayHWND || !WinExist("ahk_id " OverlayHWND))
+        return false
+    try {
+        WinGetPos(&ox, &oy, &ow, &oh, "ahk_id " OverlayHWND)
+        return (px >= ox && px <= ox + ow && py >= oy && py <= oy + oh)
+    } catch Error
+        return false
+}
+
+OcrMatchTargetsGameUI(match, label) {
+    if (!IsObject(match))
+        return false
+
+    px := match.x + (match.w // 2)
+    py := match.y + (match.h // 2)
+
+    if PointIsOverMacroOverlay(px, py) {
+        RuntimeLogWarn("ocr_match_rejected_overlay", "Ignored an OCR match that landed on the macro log overlay",
+            "target=" label "; x=" px "; y=" py)
+        return false
+    }
+
+    if GetRobloxScreenClientRect(&cx, &cy, &cw, &ch) {
+        if (px < cx || px > cx + cw || py < cy || py > cy + ch) {
+            RuntimeLogWarn("ocr_match_rejected_outside", "Ignored an OCR match that landed outside the Roblox client area",
+                "target=" label "; x=" px "; y=" py)
+            return false
+        }
+    }
+
+    return true
+}
+
 HideDebugConsole() {
     global OverlayHWND, OverlayBitmap, OverlayGraphics, OverlayPicHWND
 
-    if (OverlayBitmap) {
-        Gdip_DisposeImage(OverlayBitmap)
-        OverlayBitmap := 0
-    }
     if (OverlayGraphics) {
         Gdip_DeleteGraphics(OverlayGraphics)
         OverlayGraphics := 0
     }
+    if (OverlayBitmap) {
+        Gdip_DisposeImage(OverlayBitmap)
+        OverlayBitmap := 0
+    }
     if (OverlayHWND) {
-        WinClose("ahk_id " OverlayHWND)
+        try {
+            GuiFromHwnd(OverlayHWND).Destroy()
+        } catch {
+            try WinClose("ahk_id " OverlayHWND)
+        }
     }
     OverlayHWND := 0
     OverlayPicHWND := 0
@@ -10952,6 +11207,9 @@ SafeReload() {
     }
     RestartLock := true
 
+    FlushPendingSettingSaves()
+    try RecordingAutosaveRewrite(true)
+
     StopRuntimeTimers()
     StopApplicationTimers()
 
@@ -10959,7 +11217,7 @@ SafeReload() {
 
     KillSubmacros()
     if (OverlayHWND) {
-        WinClose("ahk_id " OverlayHWND)
+        HideDebugConsole()
     }
 
     DeleteAllIndicators()
@@ -11079,6 +11337,9 @@ KillSubmacros() {
 
 HandleExit(ExitReason, ExitCode) {
     global StateFile, SettingsFile, RunningStrategy, AutoConfigureSettings
+
+    try FlushPendingSettingSaves()
+    try RecordingAutosaveRewrite(true)
 
     try StopRuntimeTimers()
     try StopApplicationTimers()
@@ -11577,11 +11838,17 @@ waitForTowerUI(&resV2 := "", &resV1 := "", timeout := 0) {
 
 WaitForTowerUIClosed(timeout := 500) {
     startTime := A_TickCount
+    clearSamples := 0
     loop {
-        if waitForTowerUI(, , 60)
-            return false
+        if waitForTowerUI(, , 60) {
+            clearSamples := 0
+        } else {
+            clearSamples++
+            if (clearSamples >= 2)
+                return true
+        }
         if (A_TickCount - startTime >= timeout)
-            return true
+            return (clearSamples > 0)
         Sleep(50)
     }
 }
