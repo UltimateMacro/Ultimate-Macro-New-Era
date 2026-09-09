@@ -8,6 +8,7 @@ from pathlib import Path
 
 REQUIRED = {
     "Main.ahk",
+    "README.md",
     "LICENSE",
     "lib/Gdip_All.ahk",
     "lib/Gdip_ImageSearch.ahk",
@@ -101,7 +102,10 @@ def main() -> int:
                 parts = {part.casefold() for part in relative.parts}
                 if parts & FORBIDDEN_PARTS:
                     fail(errors, f"developer-only path leaked into release: {name}")
-                if relative.suffix.casefold() in FORBIDDEN_SUFFIXES:
+                if (
+                    relative.suffix.casefold() in FORBIDDEN_SUFFIXES
+                    and relative.as_posix().casefold() != "readme.md"
+                ):
                     fail(errors, f"developer-only file leaked into release: {name}")
                 if relative.name.casefold().startswith(".git"):
                     fail(errors, f"Git metadata leaked into release: {name}")
