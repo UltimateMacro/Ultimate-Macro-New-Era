@@ -1,5 +1,8 @@
-# Ultimate Macro v1.3.5a
+# Ultimate Macro v1.3.5
 
+## Fixed
+
+- Fixed DJ track switching intermittently clicking unrelated red/green/purple UI by restricting detection to the tower panel and adding one bounded confirmation click when Roblox swallows the first input
 - Fixed placement failure classification so insufficient cash keeps the exact recorded coordinates, while only an explicit "cannot place here" response is allowed to move to an offset
 - Fixed unresolved placement retries drifting towers away from older strategy coordinates; unknown failures now retry the same spot and fail safely instead of guessing a new position
 - Hardened raw input recording startup and crash autosave so a failed InputHook reports the actual error and in-progress clicks/keys are preserved before save/reload/exit
@@ -8,10 +11,6 @@
 - Fixed an unfocus click bug
 - Fixed an issue where some modes in the list weren't being clicked
 - Fixed a slight Timescale issue
-
-# Ultimate Macro v1.3.5
-
-## Fixed
 
 - Fixed a major bug where AHK message boxes inside bridge callbacks could completely freeze the macro UI in the editor. Errors now use in-app notifications, and confirmations use proper in-app dialogs
 - Fixed table column offsets in the editor that caused X/Y values, movement, undo, and redo to affect the wrong cells
