@@ -860,8 +860,8 @@ def validate_auto_settings_hardening(
 
 def validate_v134b_stability(main: str, remote: str) -> None:
     """Static regression contracts retained by the 1.3.5 release."""
-    require('ver := "1.3.5a"' in main, "Main.ahk must identify the 1.3.5 release")
-    require('global ClientVersion := "1.3.5a"' in remote,
+    require('ver := "1.3.5"' in main, "Main.ahk must identify the 1.3.5 release")
+    require('global ClientVersion := "1.3.5"' in remote,
             "official remote worker must identify the 1.3.5 release")
 
     load = region(main, "LoadStrategyFile(file) {", "\nRunStrategy(")
