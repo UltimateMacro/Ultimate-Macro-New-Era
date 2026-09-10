@@ -114,6 +114,10 @@ def leading_comment_header(text: str, prefix: str) -> str:
     return "".join(lines[:end]) if saw_comment else ""
 
 
+def normalized_newlines(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def comment_only_count(text: str, prefix: str) -> int:
     count = 0
     for line in text.splitlines():
@@ -235,7 +239,9 @@ def main() -> int:
             if "Main.ahk" in normalized:
                 packaged_main = archive.read("Main.ahk").decode("utf-8-sig", errors="replace")
                 expected_header = leading_comment_header(main_source, ";")
-                if expected_header and not packaged_main.startswith(expected_header):
+                if expected_header and not normalized_newlines(packaged_main).startswith(
+                    normalized_newlines(expected_header)
+                ):
                     fail(errors, "Main.ahk attribution/header comments must remain intact")
 
             for relative, prefix in COMMENT_REDUCTION_TARGETS:
