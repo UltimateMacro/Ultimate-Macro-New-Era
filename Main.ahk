@@ -165,6 +165,7 @@ global ToolPreviewWatch := Map()
 global HoverHostHwnds := Map()
 global HotkeyFields := []
 global ActiveHotkeyCapture := 0
+global PendingKeybindStatusSection := ""
 
 global WebhookCheckedLink := ""
 global WebhookCheckedState := ""
@@ -1979,6 +1980,9 @@ global Tab5_Lbl99 := SettingsPanel.Add("Text", "x0 y147 w86 h20 0x200 Background
 SettingsPanel.SetFont("s9 w400 c000000")
 global CancelPlacementKeyCtrl := SettingsPanel.Add("Edit", "x90 y147 w40 h20 Center Limit1", CancelPlacementKey)
 
+SettingsPanel.SetFont("s8 w400 c7E848E", UIFont())
+global Tab5_TDSKeybindStatus := SettingsPanel.Add("Text", "x0 y175 w300 h18 Background121212", "")
+
 SettingsPanel.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab5_Section2 := SettingsPanel.Add("Text", "x330 y8 w290 h22 BackgroundTrans", "Macro Settings")
 global Tab5_Line2 := SettingsPanel.Add("Progress", "x330 y31 w296 h1 Background333333", 0)
@@ -2065,7 +2069,7 @@ global RaiseDeadTEXT := SettingsPanel.Add("Text", "x428 y359 w104 h22 0x200 Back
 global ChangeTargetsCTRL := MakeHotkeyField(SettingsPanel, 534, 359, 92, 22, ChangeTargetsKey)
 
 SettingsPanel.SetFont("s8 w400 c7E848E", UIFont())
-global Tab5_KeybindStatus := SettingsPanel.Add("Text", "x0 y389 w626 h18 Background121212", "")
+global Tab5_RecordingHotkeyStatus := SettingsPanel.Add("Text", "x0 y389 w626 h18 Background121212", "")
 
 SettingsPanel.SetFont("s10 w400 c3A86FF", UIFont())
 global Tab5_Section4 := SettingsPanel.Add("Text", "x0 y416 w290 h22 BackgroundTrans", "Other Settings")
@@ -2652,7 +2656,8 @@ ShowTabContent(tab) {
         KeyDelayTxt.Value := KeyDelay
         RefreshHotkeyDisplays()
 
-        SetKeybindStatus("")
+        SetTDSKeybindStatus("")
+        SetRecordingHotkeyStatus("")
         ShowSettingsPage()
     } else if (tab = "Tab6") {
         for ctrl in [Tools_Section, Tools_Section_Line, Tools_Info, Tools_Profiles_Section, Tools_Profiles_Line,
@@ -2982,14 +2987,42 @@ SetStatusLabel(ctrl, text, color := "") {
     RepaintTransparentControl(ctrl)
 }
 
-SetKeybindStatus(text, isError := false) {
-    global Tab5_KeybindStatus
-    if (!IsSet(Tab5_KeybindStatus) || !Tab5_KeybindStatus)
+SetTDSKeybindStatus(text, isError := false) {
+    global Tab5_TDSKeybindStatus
+    if (!IsSet(Tab5_TDSKeybindStatus) || !Tab5_TDSKeybindStatus)
         return
-    SetStatusLabel(Tab5_KeybindStatus, text, isError ? "FF6B6B" : "7E848E")
+    SetStatusLabel(Tab5_TDSKeybindStatus, text, isError ? "FF6B6B" : "7E848E")
 }
 
-QueueKeybindSave(*) {
+SetRecordingHotkeyStatus(text, isError := false) {
+    global Tab5_RecordingHotkeyStatus
+    if (!IsSet(Tab5_RecordingHotkeyStatus) || !Tab5_RecordingHotkeyStatus)
+        return
+    SetStatusLabel(Tab5_RecordingHotkeyStatus, text, isError ? "FF6B6B" : "7E848E")
+}
+
+SetKeybindStatusForSection(section, text, isError := false) {
+    if (section = "recording") {
+        SetRecordingHotkeyStatus(text, isError)
+    } else if (section = "tds") {
+        SetTDSKeybindStatus(text, isError)
+    } else {
+        SetTDSKeybindStatus(text, isError)
+        SetRecordingHotkeyStatus(text, isError)
+    }
+}
+
+QueueTDSKeybindSave(*) {
+    global PendingKeybindStatusSection
+    PendingKeybindStatusSection := "tds"
+    SetTDSKeybindStatus("Saving TDS keybinds...")
+    QueueSettingSave("keybinds", AutoSaveKeybinds, 600)
+}
+
+QueueRecordingHotkeySave(*) {
+    global PendingKeybindStatusSection
+    PendingKeybindStatusSection := "recording"
+    SetRecordingHotkeyStatus("Saving recording hotkeys...")
     QueueSettingSave("keybinds", AutoSaveKeybinds, 600)
 }
 
@@ -2998,7 +3031,10 @@ AutoSaveKeybinds(*) {
     global RaiseDeadKey, HologramKey, RepoKey
     global PlaceTowerKey, UpgradeTowerKey, AlignCameraKey, ChangeDJTrackKey, SellTowerKey
     global DeleteTowerRecordingKey, RecordInputsKey, HoloKey, ChangeTargetsKey
+    global PendingKeybindStatusSection
 
+    statusSection := PendingKeybindStatusSection
+    PendingKeybindStatusSection := ""
     ClearPendingSettingSave("keybinds")
 
     tempChainKey := FirstKeyChar(ChainKeyCtrl.Value, ChainKey)
@@ -3044,11 +3080,11 @@ AutoSaveKeybinds(*) {
     usedKeys := Map()
     for item in KeysToCheck {
         if (item.val = "") {
-            SetKeybindStatus("Not saved: " item.name " has no key assigned.", true)
+            SetKeybindStatusForSection(statusSection, "Not saved: " item.name " has no key assigned.", true)
             return
         }
         if usedKeys.Has(item.val) {
-            SetKeybindStatus("Not saved: " usedKeys[item.val] " and " item.name " use the same key.", true)
+            SetKeybindStatusForSection(statusSection, "Not saved: " usedKeys[item.val] " and " item.name " use the same key.", true)
             return
         }
         usedKeys[item.val] := item.name
@@ -3100,7 +3136,13 @@ AutoSaveKeybinds(*) {
     SaveRecordingHotkeySetting("ChangeTargetsKey", ChangeTargetsKey)
     SaveRecordingHotkeySetting("HoloKey", HoloKey)
 
-    SetKeybindStatus("Keybinds saved.")
+    if (statusSection = "recording")
+        savedStatus := "Recording hotkeys saved."
+    else if (statusSection = "tds")
+        savedStatus := "TDS keybinds saved."
+    else
+        savedStatus := "Keybinds saved."
+    SetKeybindStatusForSection(statusSection, savedStatus)
 }
 
 FirstKeyChar(value, fallback) {
@@ -3162,11 +3204,11 @@ WireSettingsAutoSave() {
 
     for ctrl in [ChainKeyCtrl, BeatKeyCtrl, CaravanKeyCtrl, RaiseDeadKeyCtrl, HologramKeyCtrl, RepoKeyCtrl,
         CancelPlacementKeyCtrl, UpgradeTowerGCtrl, UpgradeTowerGBCtrl]
-        ctrl.OnEvent("Change", QueueKeybindSave)
+        ctrl.OnEvent("Change", QueueTDSKeybindSave)
 
     for ctrl in [PlaceTowerKeyCtrl, UpgradeTowerKeyCtrl, AlignCameraKeyCtrl, ChangeDJTrackKeyCtrl,
         SellTowerKeyCtrl, DeleteTowerRecordingKeyCtrl, RecordInputsKeyCtrl, HoloKeyCtrl, ChangeTargetsCTRL]
-        ctrl.OnEvent("Change", QueueKeybindSave)
+        ctrl.OnEvent("Change", QueueRecordingHotkeySave)
 
     UseUpgradeHCtrl.OnEvent("Click", (c, *) => (
         UseHForUpgrade := c.Value,

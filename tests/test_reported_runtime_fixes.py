@@ -1071,6 +1071,45 @@ def validate_discord_tab_behaviour(main: str) -> None:
             "status text must erase what it replaces so messages cannot overlap")
 
 
+
+def validate_keybind_status_routing(main: str) -> None:
+    settings = region(main, 'global Tab5_Section1 :=', 'global Tab5_Section4 :=')
+    status = region(
+        main,
+        'SetTDSKeybindStatus(text, isError := false) {',
+        '\nFirstKeyChar(value, fallback) {',
+    )
+    wiring = region(main, 'WireSettingsAutoSave() {', '\nResetSettingsToDefault(*) {')
+
+    require(
+        "Tab5_TDSKeybindStatus" in settings
+        and "Tab5_RecordingHotkeyStatus" in settings,
+        "TDS and recording hotkeys must have independent status labels",
+    )
+    require(
+        "SetTDSKeybindStatus" in status
+        and "SetRecordingHotkeyStatus" in status,
+        "each keybind section must own its status output",
+    )
+    require(
+        'PendingKeybindStatusSection := "tds"' in status
+        and 'PendingKeybindStatusSection := "recording"' in status,
+        "the shared save must remember which section triggered it",
+    )
+    require(
+        status.count("SetKeybindStatusForSection(statusSection") >= 3,
+        "save and validation results must route back to the triggering section",
+    )
+    require(
+        'ctrl.OnEvent("Change", QueueTDSKeybindSave)' in wiring
+        and 'ctrl.OnEvent("Change", QueueRecordingHotkeySave)' in wiring,
+        "TDS and recording controls must use their own routing callbacks",
+    )
+    require(
+        'ctrl.OnEvent("Change", QueueKeybindSave)' not in wiring,
+        "recording hotkeys must not flash the TDS keybind status",
+    )
+
 def validate_tools_and_theme(main: str, tool_window: str) -> None:
     launch = region(main, "LaunchToolOverPreview(scriptName, previewCtrl) {", "WatchToolPreviews() {")
     watch = region(main, "WatchToolPreviews() {", "RestoreToolPreviews() {")
@@ -1192,6 +1231,7 @@ def main() -> int:
     validate_recording_durability(main_source)
     validate_sell_verification(main_source)
     validate_discord_tab_behaviour(main_source)
+    validate_keybind_status_routing(main_source)
     validate_tools_and_theme(main_source, tool_window_source)
     validate_dark_controls(main_source, tool_window_source, profiles_source)
 

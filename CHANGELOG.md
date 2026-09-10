@@ -2,6 +2,7 @@
 
 ## Fixed
 
+- Fixed Settings hotkey status messages so TDS Keybinds and Recording Hotkeys update only their own status text
 - Fixed DJ track switching intermittently clicking unrelated red/green/purple UI by restricting detection to the tower panel and adding one bounded confirmation click when Roblox swallows the first input
 - Fixed placement failure classification so insufficient cash keeps the exact recorded coordinates, while only an explicit "cannot place here" response is allowed to move to an offset
 - Fixed unresolved placement retries drifting towers away from older strategy coordinates; unknown failures now retry the same spot and fail safely instead of guessing a new position
