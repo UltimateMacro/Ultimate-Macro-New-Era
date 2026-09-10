@@ -3,6 +3,7 @@ name: Build v1.3.5 Final Candidate
 on:
   push:
     branches:
+      - release/1.3.5-final-candidate
       - fix/pizzaroles24/v1.3.5-dj-final
   workflow_dispatch:
 
