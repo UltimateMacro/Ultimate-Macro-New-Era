@@ -302,6 +302,12 @@ def validate_dj_watchdog_and_pr30(main: str, watchdog: str) -> None:
             "DJ UI retry timing must honor PotatoMode")
     require("waitForTowerUI" in dj and "AdvancedImageSearch(trackImage" in dj,
             "DJ must reopen/detect the tower UI and retry track matching")
+    require("FindDJTrackButton(trackImage, w, h)" in dj and "djSearchW := Round(w * 0.52)" in dj,
+            "DJ track matching must stay inside the tower-panel region")
+    require("AdvancedImageSearch(trackImage, 0, 0, w, h" not in dj,
+            "DJ track matching must never search the entire Roblox client")
+    require("dj_track_confirmation_retry" in dj and "Click(confirmTrack.x, confirmTrack.y)" in dj,
+            "DJ switching must add one bounded confirmation click for swallowed Roblox input")
     require("please_wait.png" in dj and "ReadMessage([\"please\", \"wait\"])" in dj,
             "DJ cooldown must be detected before reporting success")
     track_click_index = dj.find("Click(DJTrack.x, DJTrack.y)")
@@ -854,8 +860,8 @@ def validate_auto_settings_hardening(
 
 def validate_v134b_stability(main: str, remote: str) -> None:
     """Static regression contracts retained by the 1.3.5 release."""
-    require('ver := "1.3.5a"' in main, "Main.ahk must identify the 1.3.5 release")
-    require('global ClientVersion := "1.3.5a"' in remote,
+    require('ver := "1.3.5"' in main, "Main.ahk must identify the 1.3.5 release")
+    require('global ClientVersion := "1.3.5"' in remote,
             "official remote worker must identify the 1.3.5 release")
 
     load = region(main, "LoadStrategyFile(file) {", "\nRunStrategy(")

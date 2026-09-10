@@ -117,7 +117,7 @@ command_buffer := []
 global BotStrategyChoices := []
 global BotStrategyChoiceTime := 0
 
-ver := "1.3.5a"
+ver := "1.3.5"
 
 RuntimeLogInstall("Main", ver)
 
@@ -2174,13 +2174,13 @@ Original Creator
 • Darksen
 
 Lead Developer
-• itzshovel
+• pizzaroles24
 
 Developers
 • aiden
 • banana.dev
+• itzshovel
 • kronoxxv
-• pizzaroles24
 • salkann
 • yoshi
 • ziadod
@@ -10228,6 +10228,7 @@ SetDJTrack(track) {
     try {
         MouseGetPos(&originalMouseX, &originalMouseY)
         mouseCaptured := true
+        ActivateRoblox()
 
         if (LastOpenedTowerID != "DJ") {
             Click(Towers["DJ"].x, Towers["DJ"].y)
@@ -10246,6 +10247,7 @@ SetDJTrack(track) {
                 return false
             }
 
+            ActivateRoblox()
             getRobloxPos(, , &w, &h)
             towerUiTimeout := (PotatoMode = 1) ? 1800 : 1200
             retryDelay := (PotatoMode = 1) ? 450 : 300
@@ -10258,18 +10260,14 @@ SetDJTrack(track) {
                 continue
             }
 
-            DJTrack := AdvancedImageSearch(trackImage, 0, 0, w, h, 0.5, 1.5, 0.05)
+            DJTrack := FindDJTrackButton(trackImage, w, h)
             if (DJTrack.status = "success" && DJTrack.score > 0.6) {
+                MouseMove(DJTrack.x, DJTrack.y, A_DefaultMouseSpeed)
+                Sleep(80)
                 Click(DJTrack.x, DJTrack.y)
-                Sleep(400)
+                Sleep(350)
 
-                getRobloxPos(, , &w, &h)
-                x1 := Round(w * 0.2)
-                y1 := Round(h * 0.18)
-                x2 := Round(w * 0.7)
-                y2 := Round(h * 0.3)
-                if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/please_wait.png") ||
-                ReadMessage(["please", "wait"])) {
+                if DJTrackCooldownActive(w, h) {
                     LogToConsole("DJ track is on cooldown. Waiting and retrying...")
                     remainingMs := deadline - A_TickCount
                     if (remainingMs <= 250)
@@ -10279,8 +10277,34 @@ SetDJTrack(track) {
                     continue
                 }
 
+                getRobloxPos(, , &w, &h)
+                confirmTrack := FindDJTrackButton(trackImage, w, h)
+                if (
+                    confirmTrack.status = "success"
+                    && confirmTrack.score > 0.6
+                    && Abs(confirmTrack.x - DJTrack.x) <= ScaleX(45)
+                    && Abs(confirmTrack.y - DJTrack.y) <= ScaleY(35)
+                ) {
+                    RuntimeLogInfo("dj_track_confirmation_retry",
+                        "DJ track control remained stable after the first click; sending one confirmation click",
+                        "track=" trackName "; attempt=" attempts)
+                    ActivateRoblox()
+                    MouseMove(confirmTrack.x, confirmTrack.y, A_DefaultMouseSpeed)
+                    Sleep(80)
+                    Click(confirmTrack.x, confirmTrack.y)
+                    Sleep(300)
+
+                    if DJTrackCooldownActive(w, h) {
+                        LogToConsole("Successfully changed DJ track to " track)
+                        RuntimeLogInfo("dj_track_changed",
+                            "DJ track selection confirmed by cooldown on the bounded verification click",
+                            "track=" trackName "; attempts=" attempts)
+                        return true
+                    }
+                }
+
                 LogToConsole("Successfully changed DJ track to " track)
-                RuntimeLogInfo("dj_track_changed", "DJ track click completed without cooldown",
+                RuntimeLogInfo("dj_track_changed", "DJ track selection completed after bounded UI verification",
                     "track=" trackName "; attempts=" attempts)
                 return true
             }
@@ -10288,6 +10312,7 @@ SetDJTrack(track) {
             if (Mod(attempts, 3) = 0) {
                 Click(ScaleX(unfocusX), ScaleY(unfocusY))
                 Sleep(150)
+                ActivateRoblox()
                 Click(Towers["DJ"].x, Towers["DJ"].y)
                 LastOpenedTowerID := "DJ"
             }
@@ -10300,6 +10325,25 @@ SetDJTrack(track) {
         if mouseCaptured
             MouseMove(originalMouseX, originalMouseY)
     }
+}
+
+FindDJTrackButton(trackImage, w, h) {
+    djSearchX := 0
+    djSearchY := Round(h * 0.12)
+    djSearchW := Round(w * 0.52)
+    djSearchH := Max(1, Round(h * 0.80))
+    return AdvancedImageSearch(trackImage, djSearchX, djSearchY, djSearchW, djSearchH, 0.5, 1.5, 0.05)
+}
+
+DJTrackCooldownActive(w, h) {
+    x1 := Round(w * 0.2)
+    y1 := Round(h * 0.18)
+    x2 := Round(w * 0.7)
+    y2 := Round(h * 0.3)
+    return (
+        ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/please_wait.png")
+        || ReadMessage(["please", "wait"])
+    )
 }
 
 UpdateTowerIndicator(towerID) {

@@ -1,9 +1,9 @@
-name: Build v1.3.5a Final Candidate
+name: Build v1.3.5 Final Candidate
 
 on:
   push:
     branches:
-      - fix/pizzaroles24/v1.3.5a-placement-recording
+      - fix/pizzaroles24/v1.3.5-dj-final
   workflow_dispatch:
 
 permissions:
@@ -59,10 +59,14 @@ jobs:
               $_ -match '(^|/)\.git($|/)' -or
               $_ -match '(^|/)\.github($|/)' -or
               $_ -match '(^|/)(tests|tools|docs)($|/)' -or
-              $_ -match '\.(md|bat|py|pyc|yml|yaml)$'
+              (($_ -match '\.md$') -and $_ -ne 'README.md') -or
+              $_ -match '\.(bat|py|pyc|yml|yaml)$'
             })
             if ($bad.Count -gt 0) {
               throw "Developer/repository files leaked into TDS_Macro.zip: $($bad -join ', ')"
+            }
+            if ($names -notcontains 'README.md') {
+              throw 'README.md is missing from TDS_Macro.zip.'
             }
             Write-Host "Release metadata audit: PASS ($($names.Count) entries)"
           }
@@ -76,7 +80,7 @@ jobs:
           $hash = (Get-FileHash ./dist/TDS_Macro.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  TDS_Macro.zip" | Set-Content -Encoding ascii ./dist/SHA256SUMS.txt
           @"
-          Ultimate Macro v1.3.5a final test candidate
+          Ultimate Macro v1.3.5 final test candidate
           Commit: $env:GITHUB_SHA
           TDS_Macro.zip SHA-256: $hash
           GitHub Release publication: NOT PERFORMED
@@ -86,7 +90,7 @@ jobs:
       - name: Upload tester candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Ultimate-Macro-v1.3.5a-final-candidate
+          name: Ultimate-Macro-v1.3.5-final-candidate
           path: |
             dist/TDS_Macro.zip
             dist/SHA256SUMS.txt

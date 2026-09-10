@@ -543,7 +543,7 @@ def validate_official_remote(root: Path, main: str) -> None:
     assert "Official Remote" in main
     assert "Tab4_RemoteConsent" in main
     assert "OfficialRemoteShutdown()" in main
-    assert 'global ClientVersion := "1.3.5a"' in worker
+    assert 'global ClientVersion := "1.3.5"' in worker
     assert "CryptProtectData" in worker
     assert "CryptUnprotectData" in worker
     assert "GetOrCreateInstallId" in worker
@@ -555,6 +555,17 @@ def validate_official_remote(root: Path, main: str) -> None:
     )
     assert "decodedBytes := Buffer(size)" in worker
     assert "fileBytes := Buffer(file.Length)" in worker
+
+
+def validate_public_version(root: Path, main: str) -> None:
+    version = read(root / "VERSION").strip()
+    worker = read(root / "submacros" / "official_remote.ahk")
+    changelog = read(root / "CHANGELOG.md")
+
+    assert version == "1.3.5", "public 1.3.5 candidate must not expose internal a/b suffixes"
+    assert 'ver := "1.3.5"' in main
+    assert 'global ClientVersion := "1.3.5"' in worker
+    assert "v1.3.5a" not in changelog and "v1.3.5b" not in changelog
 
 
 def validate_qa_credits(root: Path, main: str) -> None:
@@ -574,6 +585,11 @@ def validate_qa_credits(root: Path, main: str) -> None:
     assert expected_readme in readme, "README QA roster is incomplete or out of order"
     assert expected_app in main, "in-app QA credits are incomplete or out of order"
     assert "nytil" not in readme.lower(), "README still contains the old nytli typo"
+    assert "**Lead Developer**\n\n- pizzaroles24" in readme, "README must credit pizzaroles24 as Lead Developer"
+    assert "**Lead Developer**\n\n- itzshovel" not in readme, "itzshovel must no longer be listed as Lead Developer"
+    assert "Lead Developer\n• pizzaroles24" in main, "in-app credits must list pizzaroles24 as Lead Developer"
+    assert "Lead Developer\n• itzshovel" not in main, "in-app credits must not list itzshovel as Lead Developer"
+    assert "• itzshovel" in main, "itzshovel must remain credited as a Developer"
 
 
 def validate(root: Path) -> None:
@@ -589,6 +605,7 @@ def validate(root: Path) -> None:
 
     validate_source_dependency_bootstrap(main)
     validate_dependency_bootstrap_portability(root)
+    validate_public_version(root, main)
     validate_qa_credits(root, main)
     validate_settings_contracts(main)
     validate_automatic_settings_persistence(main)

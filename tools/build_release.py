@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT_FILES = (
     "Main.ahk",
+    "README.md",
     "icon.ico",
     "LICENSE",
 )
