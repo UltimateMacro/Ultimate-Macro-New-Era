@@ -1,0 +1,116 @@
+name: Promote Pizzaroles Lead Credit
+
+on:
+  push:
+    branches:
+      - fix/pizzaroles24/v1.3.5-dj-final
+    paths:
+      - .github/workflows/promote-pizzaroles-lead.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.event.head_commit.message == 'Add one-time lead credit updater'
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Update lead/developer credits
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          main_path = Path("Main.ahk")
+          readme_path = Path("README.md")
+          test_path = Path("tests/test_source_contracts.py")
+
+          main = main_path.read_text(encoding="utf-8-sig")
+          old_app = """Lead Developer
+          • itzshovel
+
+          Developers
+          • aiden
+          • banana.dev
+          • kronoxxv
+          • pizzaroles24
+          • salkann
+          • yoshi
+          • ziadod"""
+          new_app = """Lead Developer
+          • pizzaroles24
+
+          Developers
+          • aiden
+          • banana.dev
+          • itzshovel
+          • kronoxxv
+          • salkann
+          • yoshi
+          • ziadod"""
+          if old_app not in main:
+              raise SystemExit("Expected in-app credit block was not found")
+          main = main.replace(old_app, new_app, 1)
+          main_path.write_text(main, encoding="utf-8", newline="\n")
+
+          readme = readme_path.read_text(encoding="utf-8-sig")
+          old_readme = """**Lead Developer**
+
+          - itzshovel
+
+          **Developers**
+
+          - aiden
+          - banana.dev
+          - kronoxxv
+          - pizzaroles24
+          - salkann
+          - yoshi
+          - ziadod"""
+          new_readme = """**Lead Developer**
+
+          - pizzaroles24
+
+          **Developers**
+
+          - aiden
+          - banana.dev
+          - itzshovel
+          - kronoxxv
+          - salkann
+          - yoshi
+          - ziadod"""
+          if old_readme not in readme:
+              raise SystemExit("Expected README credit block was not found")
+          readme = readme.replace(old_readme, new_readme, 1)
+          readme_path.write_text(readme, encoding="utf-8", newline="\n")
+
+          tests = test_path.read_text(encoding="utf-8-sig")
+          anchor = '    assert "nytil" not in readme.lower(), "README still contains the old nytli typo"\n'
+          extra = '''    assert "**Lead Developer**\\n\\n- pizzaroles24" in readme, "README must credit pizzaroles24 as Lead Developer"\n    assert "**Lead Developer**\\n\\n- itzshovel" not in readme, "itzshovel must no longer be listed as Lead Developer"\n    assert "Lead Developer\\n• pizzaroles24" in main, "in-app credits must list pizzaroles24 as Lead Developer"\n    assert "Lead Developer\\n• itzshovel" not in main, "in-app credits must not list itzshovel as Lead Developer"\n    assert "• itzshovel" in main, "itzshovel must remain credited as a Developer"\n'''
+          if extra.strip() not in tests:
+              if anchor not in tests:
+                  raise SystemExit("QA credit contract anchor was not found")
+              tests = tests.replace(anchor, anchor + extra, 1)
+          test_path.write_text(tests, encoding="utf-8", newline="\n")
+          '@ | Set-Content -LiteralPath .promote_lead.py -Encoding utf8
+
+          python .promote_lead.py
+          Remove-Item .promote_lead.py -Force
+          git diff --check
+
+      - name: Commit role update
+        shell: pwsh
+        run: |
+          git config user.name "Ultimate Macro Release Prep"
+          git config user.email "tdsultimatemacro@gmail.com"
+          git add Main.ahk README.md tests/test_source_contracts.py
+          git commit -m "Update development lead credits"
+          git push origin HEAD:fix/pizzaroles24/v1.3.5-dj-final
