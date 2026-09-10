@@ -585,6 +585,11 @@ def validate_qa_credits(root: Path, main: str) -> None:
     assert expected_readme in readme, "README QA roster is incomplete or out of order"
     assert expected_app in main, "in-app QA credits are incomplete or out of order"
     assert "nytil" not in readme.lower(), "README still contains the old nytli typo"
+    assert "**Lead Developer**\n\n- pizzaroles24" in readme, "README must credit pizzaroles24 as Lead Developer"
+    assert "**Lead Developer**\n\n- itzshovel" not in readme, "itzshovel must no longer be listed as Lead Developer"
+    assert "Lead Developer\n• pizzaroles24" in main, "in-app credits must list pizzaroles24 as Lead Developer"
+    assert "Lead Developer\n• itzshovel" not in main, "in-app credits must not list itzshovel as Lead Developer"
+    assert "• itzshovel" in main, "itzshovel must remain credited as a Developer"
 
 
 def validate(root: Path) -> None:

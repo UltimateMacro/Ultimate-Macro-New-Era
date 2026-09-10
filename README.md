@@ -49,14 +49,14 @@ Ultimate Macro: The New Era is a free, open-source automation tool for Roblox To
 
 **Lead Developer**
 
-- itzshovel
+- pizzaroles24
 
 **Developers**
 
 - aiden
 - banana.dev
+- itzshovel
 - kronoxxv
-- pizzaroles24
 - salkann
 - yoshi
 - ziadod
