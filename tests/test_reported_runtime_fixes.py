@@ -1053,7 +1053,7 @@ def validate_discord_tab_behaviour(main: str) -> None:
     refresh = region(main, "RefreshWebhookStatus(*) {", "ConfirmWebhookLink() {")
     confirm = region(main, "ConfirmWebhookLink() {", "QueueWebhookCheck(*) {")
     channel = region(main, "CheckWebhookLink2(*) {", "LoadStrategyFile(file) {")
-    status = region(main, "SetStatusLabel(ctrl, text, color", "SetKeybindStatus(text, isError")
+    status = region(main, "SetStatusLabel(ctrl, text, color", "SetTDSKeybindStatus(text, isError")
 
     require("WebhookCheckedLink" in refresh and "link = WebhookCheckedLink" in refresh,
             "an unchanged webhook must reuse its last verdict instead of hitting Discord again")
