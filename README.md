@@ -6,12 +6,6 @@
 
 <p align="center">
   <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">Download</a>
-  ·
-  <a href="docs/README.md">Documentation</a>
-  ·
-  <a href="CONTRIBUTING.md">Contributing</a>
-  ·
-  <a href="SECURITY.md">Security</a>
 </p>
 
 Ultimate Macro: New Era continues Darksen's original Ultimate Macro with an active maintenance line focused on reliability, strategy tooling, recovery, and a cleaner user experience.
@@ -38,7 +32,7 @@ Ultimate Macro: New Era continues Darksen's original Ultimate Macro with an acti
 4. Configure the macro and Roblox settings.
 5. Start the macro.
 
-See [Installation](docs/user/INSTALLATION.md) and [Troubleshooting](docs/user/TROUBLESHOOTING.md) for more detail.
+See the [Guide](https://ultmacro.xyz/guide/) for the full guide and more details.
 
 ## Recommended environment
 
@@ -50,54 +44,23 @@ See [Installation](docs/user/INSTALLATION.md) and [Troubleshooting](docs/user/TR
 - TDS Screen Shake: Disabled
 - TDS Prefer Vertical Upgrades: Enabled
 
-## Repository layout
-
-```text
-.github/       GitHub workflows, issue forms, ownership and PR templates
-Resources/     Runtime images and bundled strategies
-lib/           Runtime libraries and integrations
-submacros/     Updater, watchdog and supporting runtime components
-tests/         Regression and repository contracts
-tools/         Developer validation and packaging tools
-docs/          User, development and QA documentation
-Main.ahk       Runtime entry point
-```
-
-The project is being migrated toward smaller runtime modules incrementally. Large runtime refactors must preserve behavior and add regression coverage before code is moved.
-
-## Development workflow
-
-- `main` is the current stable/public-ready line.
-- `integration` is the shared staging line.
-- `dev/<handle>` is a long-lived personal workspace.
-- `feature/<handle>/<topic>`, `fix/<handle>/<topic>`, `refactor/<topic>`, and `qa/<handle>/<topic>` are short-lived task branches.
-- Release candidates and preserved release points use `release/<version>`.
-
-The 1.3.5 release line is preserved separately from later 1.4.0 development; main is never rewound to recreate an older version.
-
-See [Branching model](docs/development/BRANCHING.md), [Architecture](docs/development/ARCHITECTURE.md), and [Release process](docs/development/RELEASE_PROCESS.md).
-
 ## Development team
 
-- pizzaroles24
-- ziadod
-- kronoxxv
+- aiden
 - banana.dev
 - itzshovel
+- kronoxxv
+- pizzaroles24
 - salkann
-- aiden
+- yoshi
+- ziadod
 
 ### QA
 
+- frostzzz
+- menz.7
 - nytli
 - tristanm1ce
-- frostzzz
-
-## Contributing
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md). Runtime changes should be focused, testable, and accompanied by the relevant automated and manual checks.
-
-Never publish Discord tokens, webhook URLs, Roblox private-server links, personal configuration, or unsanitized logs/screenshots.
 
 ## Credits
 
