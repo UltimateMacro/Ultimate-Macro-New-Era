@@ -25,7 +25,7 @@ CheckForUpdate(currentVer) {
             return 0
 
         latestTag := release["tag_name"]
-       if !RegExMatch(latestTag, "i)^v?\d+(?:\.\d+){1,3}(?:[A-Za-z]|[-+][0-9A-Za-z.-]+)?$")
+        if !RegExMatch(latestTag, "i)^v?\d+(?:\.\d+){1,3}(?:[A-Za-z]|[-+][0-9A-Za-z.-]+)?$")
             return 0
 
         latestVer := NormalizeMacroVersion(latestTag)
@@ -44,8 +44,8 @@ CheckForUpdate(currentVer) {
 
                 candidateURL := asset["browser_download_url"]
                 candidateDigest := asset["digest"]
-               if !RegExMatch(candidateURL,
-    "i)^https://github\.com/UltimateMacro/Ultimate-Macro-New-Era/releases/download/")
+                if !RegExMatch(candidateURL,
+                    "i)^https://github\.com/UltimateMacro/Ultimate-Macro-New-Era/releases/download/")
                     continue
                 if !RegExMatch(candidateDigest, "i)^sha256:[0-9a-f]{64}$")
                     continue
@@ -56,8 +56,6 @@ CheckForUpdate(currentVer) {
             }
         }
 
-        ; A release without the expected named asset and a valid GitHub digest
-        ; is not eligible for automatic installation.
         if (downloadURL = "" || digest = "")
             return 0
 
@@ -72,7 +70,8 @@ CheckForUpdate(currentVer) {
             updateMsg .= "`n--------------------------------`n`n"
         }
 
-        updateMsg .= "The update is downloaded to a staging directory, checksum-verified, and validated before replacement. Existing strategies are preserved and a rollback backup is retained.`n`n"
+        updateMsg .=
+            "The update is downloaded to a staging directory, checksum-verified, and validated before replacement. Existing strategies are preserved and a rollback backup is retained.`n`n"
         updateMsg .= "Do you want to update now?"
 
         if (MsgBox(updateMsg, "Update Available", "YesNo Iconi") != "Yes")
@@ -100,7 +99,6 @@ CheckForUpdate(currentVer) {
         Run(command, , "Hide")
         ExitApp()
     } catch Error {
-        ; Update checks must never prevent normal macro startup.
         return 0
     }
 

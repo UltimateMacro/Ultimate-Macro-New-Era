@@ -1,12 +1,3 @@
-/********************************************
-* @Author SP
-* @Description Class to interact with Discord
-*********************************************/
-
-; Originally derived from Natro Macro.
-; New Era hardening keeps one request path for retries/rate limits while
-; preserving caller-owned bitmap lifetime.
-
 class Discord
 {
     static baseURL := "https://discord.com/api/v10/"
@@ -14,8 +5,6 @@ class Discord
     static EscapeJson(value)
     {
         value := String(value)
-        ; Existing macro callsites frequently use literal \n / \t sequences to
-        ; describe Discord formatting. Normalize those before JSON escaping.
         value := StrReplace(value, "\r\n", "`n")
         value := StrReplace(value, "\n", "`n")
         value := StrReplace(value, "\t", "`t")
@@ -27,7 +16,7 @@ class Discord
         return value
     }
 
-    static SendEmbed(message, color:=3223350, content:="", pBitmap:=0, channel:="", replyID:=0)
+    static SendEmbed(message, color := 3223350, content := "", pBitmap := 0, channel := "", replyID := 0)
     {
         message := this.EscapeJson(message)
         content := this.EscapeJson(content)
@@ -35,29 +24,27 @@ class Discord
 
         payload_json :=
         (
-        '
-        {
-            "content": "' content '",
-            "embeds": [{
-                "description": "' message '",
-                "color": ' colorValue '
-                ' (pBitmap ? (',"image": {"url": "attachment://ss.png"}') : '') '
-            }]
-            ' (replyID ? (',"allowed_mentions": {"parse": []}, "message_reference": {"message_id": "' replyID '", "fail_if_not_exists": false}') : '') '
-        }
-        '
+            '
+            {
+                "content": "' content '",
+                "embeds": [{
+                    "description": "' message '",
+                    "color": ' colorValue '
+                    ' (pBitmap ? (',"image": {"url": "attachment://ss.png"}') : '') '
+                }]
+                ' (replyID ? (',"allowed_mentions": {"parse": []}, "message_reference": {"message_id": "' replyID '", "fail_if_not_exists": false}') : '') '
+            }
+            '
         )
 
         if pBitmap
-            this.CreateFormData(&postdata, &contentType, [Map("name","payload_json","content-type","application/json","content",payload_json), Map("name","files[0]","filename","ss.png","content-type","image/png","pBitmap",pBitmap)])
+            this.CreateFormData(&postdata, &contentType, [Map("name", "payload_json", "content-type", "application/json", "content", payload_json), Map("name", "files[0]", "filename", "ss.png", "content-type", "image/png", "pBitmap", pBitmap)])
         else
             postdata := payload_json, contentType := "application/json"
 
         return this.SendMessageAPI(postdata, contentType, channel)
     }
 
-    ; No full-desktop default. Callers may pass CaptureRobloxClientBitmap(), or
-    ; omit the bitmap for a text-only embed when Roblox is unavailable.
     static SendScreenshot(pBitmap := 0, description := "", color := 12434877, channel := "", replyID := 0)
     {
         escapedDescription := this.EscapeJson(description)
@@ -78,16 +65,16 @@ class Discord
         return this.SendMessageAPI(postdata, contentType, channel)
     }
 
-    static SendImage(pBitmap, imgname:="image.png", replyID:=0)
+    static SendImage(pBitmap, imgname := "image.png", replyID := 0)
     {
         params := []
-        (replyID > 0) && params.Push(Map("name","payload_json","content-type","application/json","content",'{"allowed_mentions": {"parse": []}, "message_reference": {"message_id": "' replyID '", "fail_if_not_exists": false}}'))
-        params.Push(Map("name","files[0]","filename",imgname,"content-type","image/png","pBitmap",pBitmap))
+        (replyID > 0) && params.Push(Map("name", "payload_json", "content-type", "application/json", "content", '{"allowed_mentions": {"parse": []}, "message_reference": {"message_id": "' replyID '", "fail_if_not_exists": false}}'))
+        params.Push(Map("name", "files[0]", "filename", imgname, "content-type", "image/png", "pBitmap", pBitmap))
         this.CreateFormData(&postdata, &contentType, params)
         return this.SendMessageAPI(postdata, contentType)
     }
 
-    static SendMessageAPI(postdata, contentType:="application/json", channel:="", url:="")
+    static SendMessageAPI(postdata, contentType := "application/json", channel := "", url := "")
     {
         global ChannelID
 
@@ -136,8 +123,6 @@ class Discord
     {
         static lastmsg := Map()
 
-        ; On the first poll after a macro restart, establish a baseline but do
-        ; not replay the last command from before the restart.
         if !lastmsg.Has(channel) {
             try
                 firstMessages := JSON.parse(this.GetMessageAPI("?limit=1", channel))
@@ -160,7 +145,7 @@ class Discord
         return messages
     }
 
-    static GetMessageAPI(params:="", channel:="")
+    static GetMessageAPI(params := "", channel := "")
     {
         global ChannelID
         if !channel
@@ -168,9 +153,6 @@ class Discord
         return this.Request("GET", this.baseURL "channels/" channel "/messages" params)
     }
 
-    ; Central Discord request path. Retries transient network failures, HTTP 429
-    ; using Discord's Retry-After/retry_after value, and 5xx server failures.
-    ; Authentication/permission/client errors are returned immediately.
     static Request(method, url, body?, contentType := "", maxAttempts := 3)
     {
         global BotToken
@@ -264,21 +246,24 @@ class Discord
             throw Error("Unable to allocate multipart buffer")
 
         pStream := 0
-        if DllCall("ole32\CreateStreamOnHGlobal", "Ptr", hData, "Int", 0, "PtrP", &pStream, "UInt")
+        if DllCall("ole32\CreateStreamOnHGlobal", "Ptr", hData, "Int", 0, "PtrP", &pStream, "UInt") {
+            DllCall("GlobalFree", "Ptr", hData, "Ptr")
             throw Error("Unable to create multipart stream")
+        }
 
+        pData := 0
         try {
             for field in fields
             {
                 str :=
                 (
-                '
-
-                ------------------------------' boundary '
-                Content-Disposition: form-data; name="' field["name"] '"' (field.Has("filename") ? ('; filename="' field["filename"] '"') : "") '
-                Content-Type: ' field["content-type"] '
-
-                ' (field.Has("content") ? (field["content"] "`r`n") : "")
+                    '
+                    
+                    ------------------------------' boundary '
+                    Content-Disposition: form-data; name="' field["name"] '"' (field.Has("filename") ? ('; filename="' field["filename"] '"') : "") '
+                    Content-Type: ' field["content-type"] '
+                    
+                    ' (field.Has("content") ? (field["content"] "`r`n") : "")
                 )
 
                 utf8 := Buffer(length := StrPut(str, "UTF-8") - 1)
@@ -292,7 +277,7 @@ class Discord
                         pFileStream := Gdip_SaveBitmapToStream(field["pBitmap"])
                         if !pFileStream
                             throw Error("Unable to encode screenshot")
-                        DllCall("shlwapi\IStream_Size", "Ptr", pFileStream, "UInt64P", &size:=0, "UInt")
+                        DllCall("shlwapi\IStream_Size", "Ptr", pFileStream, "UInt64P", &size := 0, "UInt")
                         DllCall("shlwapi\IStream_Reset", "Ptr", pFileStream, "UInt")
                         DllCall("shlwapi\IStream_Copy", "Ptr", pFileStream, "Ptr", pStream, "UInt", size, "UInt")
                     } finally {
@@ -308,7 +293,7 @@ class Discord
                         DllCall("shlwapi\SHCreateStreamOnFileEx", "WStr", field["file"], "Int", 0, "UInt", 0x80, "Int", 0, "Ptr", 0, "PtrP", &pFileStream)
                         if !pFileStream
                             throw Error("Unable to open multipart file")
-                        DllCall("shlwapi\IStream_Size", "Ptr", pFileStream, "UInt64P", &size:=0, "UInt")
+                        DllCall("shlwapi\IStream_Size", "Ptr", pFileStream, "UInt64P", &size := 0, "UInt")
                         DllCall("shlwapi\IStream_Copy", "Ptr", pFileStream, "Ptr", pStream, "UInt", size, "UInt")
                     } finally {
                         if pFileStream
@@ -321,24 +306,20 @@ class Discord
             utf8 := Buffer(length := StrPut(str, "UTF-8") - 1)
             StrPut(str, utf8, length, "UTF-8")
             DllCall("shlwapi\IStream_Write", "Ptr", pStream, "Ptr", utf8.Ptr, "UInt", length, "UInt")
-        } finally {
-            if pStream
-                ObjRelease(pStream)
-        }
 
-        pData := DllCall("GlobalLock", "Ptr", hData, "Ptr")
-        if !pData {
-            DllCall("GlobalFree", "Ptr", hData, "Ptr")
-            throw Error("Unable to lock multipart buffer")
-        }
+            pData := DllCall("GlobalLock", "Ptr", hData, "Ptr")
+            if !pData
+                throw Error("Unable to lock multipart buffer")
 
-        try {
             size := DllCall("GlobalSize", "Ptr", hData, "UPtr")
             retData := ComObjArray(0x11, size)
             pvData := NumGet(ComObjValue(retData), 8 + A_PtrSize, "Ptr")
             DllCall("RtlMoveMemory", "Ptr", pvData, "Ptr", pData, "UPtr", size)
         } finally {
-            DllCall("GlobalUnlock", "Ptr", hData)
+            if pData
+                DllCall("GlobalUnlock", "Ptr", hData)
+            if pStream
+                ObjRelease(pStream)
             DllCall("GlobalFree", "Ptr", hData, "Ptr")
         }
 

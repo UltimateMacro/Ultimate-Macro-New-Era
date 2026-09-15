@@ -4,10 +4,6 @@
 #Include %A_LineFile%/../../Gdip_ImageSearch.ahk
 #Include %A_LineFile%/../../Roblox.ahk
 
-; Advanced image search wrapper.
-; Contract: returned x/y coordinates are Roblox CLIENT coordinates so callers can
-; use them directly while CoordMode("Mouse", "Client") is active.
-
 global ImageSearchBackendState := {
     initialized: false,
     backend: "uninitialized",
@@ -25,9 +21,6 @@ GetImageSearchBackendInfo() {
     }
 }
 
-; Resolve the image-search backend once. Native OpenCV is optional: when it
-; is unavailable the portable GDI+ fallback below performs bounded multi-scale
-; matching and preserves the same CLIENT-coordinate contract.
 EnsureImageSearchBackend() {
     global ImageSearchBackendState
     static isInitialized := false
@@ -125,8 +118,6 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
             scale := NumGet(structResult, 24, "Float")
 
             if ((status >= 1 && status <= 4) && score >= 0.0) {
-                ; The native DLL historically returns coordinates relative to the
-                ; searched Roblox client. Keep that established contract here.
                 return {
                     status: "success",
                     score: Round(Float(score), 4),
@@ -144,9 +135,6 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
 
             return ImageSearchError("Native image search returned code " status, score)
         } catch Error as err {
-            ; Demote to the fallback for the rest of the session. The loaded
-            ; modules are intentionally left mapped: another thread may still be
-            ; inside a native call, and unloading underneath it would crash.
             useFallback := true
             ImageSearchBackendState.backend := "GDI+ fallback"
             ImageSearchBackendState.reason := "native call failed: " err.Message
@@ -154,8 +142,6 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
         }
     }
 
-    ; GDI+ fallback. Capture must use SCREEN coordinates, while the returned
-    ; match coordinates must remain CLIENT-relative for all callers.
     pToken := Gdip_Startup()
     if !pToken
         return ImageSearchError("GDI+ failed to start")
@@ -179,10 +165,6 @@ AdvImageSearch(templatePath, ax := 0, ay := 0, aw := 0, ah := 0, minScale := 0.0
         if (searchX2 <= searchX1 || searchY2 <= searchY1)
             return ImageSearchError("Invalid image-search bounds")
 
-        ; The portable fallback must honor the scale contract used by callers.
-        ; Search the current-client scale first, then nearby fractional scales
-        ; in distance order; canonical 1.0 is retained when it is in range.
-        ; This keeps common sizes usable without an 80 MB optional binary.
         scaleCandidates := BuildImageSearchScaleCandidates(baseScale, minScale, maxScale, scaleStep)
 
         for candidateScale in scaleCandidates {
@@ -261,16 +243,12 @@ BuildImageSearchScaleCandidates(baseScale, minScale, maxScale, scaleStep) {
     preferred := Min(maxScale, Max(minScale, baseScale))
     scales := []
 
-    ; Gdip_ImageSearch is comparatively expensive: each distinct scale can
-    ; resize the template and scan the whole requested region. Keep one small
-    ; total candidate budget, ordered outward from the current client scale.
     maxCandidates := 12
     maxOffsetSteps := 10
     AddImageSearchScaleCandidate(scales, preferred)
 
     offset := scaleStep
     loop maxOffsetSteps {
-        ; Reserve the final slot for canonical 1.0 when it is in range.
         if (scales.Length >= maxCandidates - 1)
             break
 

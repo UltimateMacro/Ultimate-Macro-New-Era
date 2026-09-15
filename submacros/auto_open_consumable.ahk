@@ -2,6 +2,7 @@
 #SingleInstance Force
 
 #Include %A_LineFile%/../../lib/Roblox.ahk
+#Include %A_LineFile%/../../lib/ToolWindow.ahk
 #Include %A_LineFile%/../../lib/ImageSearch/ImageSearch.ahk
 
 SetWorkingDir(A_ScriptDir "\..")
@@ -10,22 +11,29 @@ global unfocusX := 150, unfocusY := 200
 global isRunning := false
 global usedt := 0
 
-global aGui := Gui("+LastFound +Border +ToolWindow +AlwaysOnTop")
+global TOOL_W := 250
+global aGui := CreateToolWindow("Auto Consumables", TOOL_W)
 
-aGui.SetFont("s9")
-global text := aGui.Add("Text", "x10 y10 w180 h50 BackgroundTrans", "The tool for auto opening consumable crates.")
+aGui.SetFont("s9 w400 cAAAAAA", ToolWindowFont())
+global text := aGui.Add("Text", "x14 y50 w222 h36 BackgroundTrans",
+    "Opens consumable crates automatically and claims what is inside.")
 
-global usedtickets_text := aGui.Add("Text", "x10 y50 w180 BackgroundTrans", "Total opened consumable crates: " usedt)
+aGui.Add("Progress", "x14 y94 w222 h1 Disabled Background222222", 0)
 
-aGui.SetFont("s11")
-global Start_Btn := aGui.Add("Button", "x10 y75 w85 h25", "Start (F3)")
-global Stop_Btn := aGui.Add("Button", "x105 y75 w85 h25", "Stop (F4)")
+aGui.SetFont("s9 w400 cFFFFFF", ToolWindowFont())
+global usedtickets_text := aGui.Add("Text", "x14 y106 w222 h22 0x200 BackgroundTrans", "Crates opened: " usedt)
 
-Start_Btn.OnEvent("Click", (*) => StartMacro())
-Stop_Btn.OnEvent("Click", (*) => StopMacro())
+aGui.SetFont("s8 w400 c7E848E", ToolWindowFont())
+global hint_text := aGui.Add("Text", "x14 y140 w222 h32 BackgroundTrans",
+    "Open your crate inventory in Roblox first.`nF3 starts the tool, F4 stops it.")
 
-aGui.Show("w200 h110")
-aGui.OnEvent("Close", (*) => ExitApp())
+global Start_Btn := AddToolWindowButton(aGui, 14, 186, 108, 30, "Start (F3)", (*) => StartMacro())
+global Stop_Btn := AddToolWindowButton(aGui, 128, 186, 108, 30, "Stop (F4)", (*) => StopMacro())
+
+AddToolWindowStatus(aGui, 14, 224, 222)
+
+ShowToolWindow(aGui, TOOL_W, 252)
+aGui.OnEvent("Close", CloseToolWindow)
 
 SetTimer(() => RemoveInitialFocus(), -50)
 
@@ -36,58 +44,58 @@ RemoveInitialFocus() {
     ControlFocus(text, "ahk_id " aGui.Hwnd)
 }
 
-F3::StartMacro()
-F4::StopMacro()
+F3:: StartMacro()
+F4:: StopMacro()
 
 StartMacro() {
-    global IsRunning, aGui
+    global IsRunning
     if (IsRunning)
         return
     if !GetRobloxHWND() {
-        try aGui.Title := "Roblox not found"
+        SetToolWindowStatus("Roblox not found", true)
         return
     }
 
     IsRunning := true
-    try aGui.Title := "Running..."
-    SetTimer(StartSpinningtheWheel, 100)
+    SetToolWindowStatus("Running")
+    SetTimer(StartOpeningCrates, 100)
 }
 
 StopMacro() {
-    global IsRunning, aGui
+    global IsRunning
     if (!IsRunning)
         return
     IsRunning := false
 
-    try aGui.Title := "auto_open_consumable.ahk"
-    SetTimer(StartSpinningtheWheel, 0)
+    SetToolWindowStatus("Stopped")
+    SetTimer(StartOpeningCrates, 0)
 }
 
-StartSpinningtheWheel() {
+StartOpeningCrates() {
     global IsRunning
 
     if (!IsRunning)
         return
 
-    SetTimer(StartSpinningtheWheel, 0)
-    SpinWheel()
+    SetTimer(StartOpeningCrates, 0)
+    OpenCrate()
 
     if (IsRunning)
-        SetTimer(StartSpinningtheWheel, 100)
+        SetTimer(StartOpeningCrates, 100)
 }
 
-SpinWheel() {
-    global IsRunning, usedt, aGui, unfocusX, unfocusY, usedtickets_text
+OpenCrate() {
+    global IsRunning, usedt, unfocusX, unfocusY, usedtickets_text
     if !ActivateRoblox() {
         StopMacro()
-        try aGui.Title := "Roblox not found"
+        SetToolWindowStatus("Roblox not found", true)
         return
     }
 
     if (!IsRunning)
         return
 
-    getRobloxPos(,,&w,&h)
+    getRobloxPos(, , &w, &h)
     if (w <= 0 || h <= 0) {
         StopMacro()
         return
@@ -95,11 +103,11 @@ SpinWheel() {
 
     startTime := A_TickCount
 
-    Loop {
+    loop {
         if (!IsRunning)
             return
 
-        resOpen := AdvImageSearch("Resources/open.png", Round(w*0.25), Round(h*0.6), Round(w*0.5), h)
+        resOpen := AdvImageSearch("Resources/open.png", Round(w * 0.25), Round(h * 0.6), Round(w * 0.5), h)
         if (resOpen.status == "success" && resOpen.score > 0.7) {
             Click(resOpen.x, resOpen.y)
             MouseMove(ScaleX(unfocusX), ScaleY(unfocusY))
@@ -108,38 +116,38 @@ SpinWheel() {
         }
 
         if (A_TickCount - startTime > 3000) {
+            SetToolWindowStatus("No crate to open", true)
             StopMacro()
             return
         }
 
-        ; Avoid a tight OpenCV/GDI+ loop while waiting for the Open button.
         Sleep(75)
     }
 
     loop 15 {
-        Click(Round(w*0.5),Round(h*0.5))
+        Click(Round(w * 0.5), Round(h * 0.5))
         Sleep 5
     }
 
     usedt++
-    usedtickets_text.Value := "Total opened consumable crates: " usedt
+    usedtickets_text.Value := "Crates opened: " usedt
     usedtickets_text.Redraw()
 
-    getRobloxPos(,,&w,&h)
+    getRobloxPos(, , &w, &h)
 
     attempts := 0
-    Loop {
+    loop {
         if (!IsRunning)
             break
 
-        resConfirm := AdvImageSearch("Resources/next.png", Round(w*0.25), Round(h*0.6), Round(w*0.5), h)
+        resConfirm := AdvImageSearch("Resources/next.png", Round(w * 0.25), Round(h * 0.6), Round(w * 0.5), h)
 
         if (resConfirm.status == "success" && resConfirm.score > 0.55) {
             oldMode := A_SendMode
             oldDelay := A_MouseDelay
             SetMouseDelay(0)
             SendMode('Input')
-            Loop 30 {
+            loop 30 {
                 Click(resConfirm.x, resConfirm.y)
                 Sleep(1)
             }
@@ -147,12 +155,11 @@ SpinWheel() {
             SendMode(oldMode)
             break
         } else {
-            try aGui.Title := resConfirm.score
             attempts++
             Sleep 50
         }
 
-        resConfirm := AdvImageSearch("Resources/claim_c.png", Round(w*0.25), Round(h*0.6), Round(w*0.5), h)
+        resConfirm := AdvImageSearch("Resources/claim_c.png", Round(w * 0.25), Round(h * 0.6), Round(w * 0.5), h)
         if (resConfirm.status == "success" && resConfirm.score > 0.55) {
             MouseMove(resConfirm.x, resConfirm.y)
             Sleep 30

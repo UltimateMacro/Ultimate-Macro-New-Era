@@ -1,9 +1,6 @@
 ﻿#Requires AutoHotkey v2.0
 #SingleInstance Force
 
-; This file is both an include used by Main.ahk and a tiny restore helper.
-; Keep helper-only side effects inside the standalone guard so including this
-; library never hides or otherwise mutates the main process UI.
 global AutoSettingsLastErrorMessage := ""
 
 if (A_ScriptFullPath == A_LineFile) {
@@ -222,7 +219,8 @@ AutoSettingsReleaseMutex(mutex) {
 }
 
 AutoSettingsNewGeneration() {
-    return FormatTime(A_NowUTC, "yyyyMMddHHmmss") "-" DllCall("kernel32\GetCurrentProcessId", "UInt") "-" A_TickCount "-" Random(100000, 999999)
+    return FormatTime(A_NowUTC, "yyyyMMddHHmmss") "-" DllCall("kernel32\GetCurrentProcessId", "UInt") "-" A_TickCount "-" Random(
+        100000, 999999)
 }
 
 AutoSettingsReadBackupState(paths) {
@@ -281,8 +279,6 @@ AutoSettingsClassifierReason(currentState) {
     if (reason = "")
         return fallback
 
-    ; Keep diagnostics single-line and bounded. Validation reasons identify the
-    ; failing managed node or parser condition, never the user's XML values.
     reason := RegExReplace(reason, "[\r\n\t]+", " ")
     return SubStr(reason, 1, 300)
 }
@@ -390,8 +386,6 @@ AutoSettingsRobloxSessionActive(robloxProcess := "RobloxPlayerBeta.exe") {
     if !ProcessExist(robloxProcess)
         return false
 
-    ; Test fixtures and callers may provide a synthetic process name. Preserve
-    ; the old ProcessExist behavior unless this is the real Roblox executable.
     if (StrLower(String(robloxProcess)) != "robloxplayerbeta.exe")
         return true
 
@@ -405,13 +399,9 @@ AutoSettingsRobloxSessionActive(robloxProcess := "RobloxPlayerBeta.exe") {
             catch Error
                 return true
 
-            ; A real game process must keep blocking settings replacement. The
-            ; only process identity ignored here is Roblox's windowless tray
-            ; launcher, observed in live QA as `--launch-to-tray`.
             if !AutoSettingsRobloxCommandLineIsTray(commandLine)
                 return true
 
-            ; Be conservative if a nominal tray process owns a normal window.
             try {
                 if WinExist("ahk_pid " process.ProcessId)
                     return true
@@ -423,11 +413,8 @@ AutoSettingsRobloxSessionActive(robloxProcess := "RobloxPlayerBeta.exe") {
         if sawRoblox
             return false
 
-        ; ProcessExist and WMI can race. If the name still exists but WMI did
-        ; not enumerate it, fail closed rather than restoring under uncertainty.
         return ProcessExist(robloxProcess) != 0
     } catch Error {
-        ; WMI/COM inspection failure must never make an active game look closed.
         return true
     }
 }
@@ -469,12 +456,14 @@ ApplyMacroSettings(settingsPath := "", robloxProcess := "RobloxPlayerBeta.exe") 
                 FileMove(paths.backupTemp, paths.backup, 0)
                 generation := AutoSettingsNewGeneration()
                 if !AutoSettingsWriteMetadata(paths, generation, backupHash, appliedHash)
-                    return AutoSettingsFail("Original backup was preserved, but provenance metadata could not be verified", paths)
+                    return AutoSettingsFail(
+                        "Original backup was preserved, but provenance metadata could not be verified", paths)
                 backupState := AutoSettingsReadBackupState(paths)
             } else {
                 currentState := AutoSettingsClassifyCurrent(paths, backupState)
                 if (currentState.status = "foreign")
-                    return AutoSettingsFail("Current Roblox settings no longer match the verified backup or macro-applied state. Reason: "
+                    return AutoSettingsFail(
+                        "Current Roblox settings no longer match the verified backup or macro-applied state. Reason: "
                         AutoSettingsClassifierReason(currentState), paths)
                 if (currentState.status = "applied_exact" || currentState.status = "applied_semantic") {
                     AutoSettingsClearLastError()
@@ -484,7 +473,8 @@ ApplyMacroSettings(settingsPath := "", robloxProcess := "RobloxPlayerBeta.exe") 
                 transformedXml := TransformAutoSettingsXml(FileRead(paths.settings))
                 appliedHash := AutoSettingsWriteAppliedTemp(paths, transformedXml)
                 if (appliedHash != backupState.appliedHash)
-                    return AutoSettingsFail("Macro-applied settings identity changed while a backup was pending", paths)
+                    return AutoSettingsFail("Macro-applied settings identity changed while a backup was pending", paths
+                    )
             }
 
             if (backupState.status != "trusted")
@@ -537,7 +527,8 @@ RestoreOriginalSettings(expectedToken := "", settingsPath := "", robloxProcess :
         try {
             currentState := AutoSettingsClassifyCurrent(paths, state)
             if (currentState.status = "foreign")
-                return AutoSettingsFail("Current Roblox settings changed after macro application; backup was preserved. Reason: "
+                return AutoSettingsFail(
+                    "Current Roblox settings changed after macro application; backup was preserved. Reason: "
                     AutoSettingsClassifierReason(currentState), paths)
 
             if (currentState.status != "backup") {
@@ -548,12 +539,11 @@ RestoreOriginalSettings(expectedToken := "", settingsPath := "", robloxProcess :
                 if (AutoSettingsFileSha256(paths.restoreTemp) != state.backupHash)
                     throw Error("Restore copy failed backup identity verification")
 
-                ; Both checks are inside the lifecycle mutex and occur immediately
-                ; before replacement. A superseded helper can never restore.
                 if !AutoSettingsRestoreRequestMatches(paths, expectedToken)
                     return AutoSettingsFail("Restore generation was superseded before replacement", paths)
                 if AutoSettingsRobloxSessionActive(robloxProcess)
-                    return AutoSettingsFail("Roblox reopened immediately before restore; restore remains pending", paths)
+                    return AutoSettingsFail("Roblox reopened immediately before restore; restore remains pending",
+                        paths)
 
                 FileMove(paths.restoreTemp, paths.settings, 1)
                 AutoSettingsValidateFile(paths.settings)
@@ -625,7 +615,8 @@ RequestAutoSettingsRestore(rootDir := "", settingsPath := "", robloxProcess := "
             return AutoSettingsFail("Unknown Auto Settings backup was preserved: " state.reason, paths)
         currentState := AutoSettingsClassifyCurrent(paths, state)
         if (currentState.status = "foreign")
-            return AutoSettingsFail("Current Roblox settings changed after macro application; backup was preserved. Reason: "
+            return AutoSettingsFail(
+                "Current Roblox settings changed after macro application; backup was preserved. Reason: "
                 AutoSettingsClassifierReason(currentState), paths)
         token := state.generation "-" A_TickCount "-" Random(100000, 999999)
         if !AutoSettingsWriteRestoreRequest(paths, token)
@@ -648,8 +639,6 @@ RequestAutoSettingsRestore(rootDir := "", settingsPath := "", robloxProcess := "
 }
 
 RecoverPendingAutoSettings(rootDir := "", settingsPath := "", robloxProcess := "RobloxPlayerBeta.exe") {
-    ; RequestAutoSettingsRestore owns the atomic backup/metadata classification.
-    ; Never treat orphaned provenance as equivalent to no pending lifecycle.
     return RequestAutoSettingsRestore(rootDir, settingsPath, robloxProcess)
 }
 
