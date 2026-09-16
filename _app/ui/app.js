@@ -1,4 +1,4 @@
-(() => {
+﻿(() => {
   'use strict';
 
   const $ = (id) => document.getElementById(id);
@@ -2565,22 +2565,17 @@
 
   function strategyReplayText() {
     if (!state.doc || !state.doc.placements.length) return { text: '', used: 0, skipped: 0 };
-    const lines = replayHeaderLines(state.doc.strategyWidth || 1920, state.doc.strategyHeight || 1009);
     let used = 0;
     let skipped = 0;
-    state.doc.placements.forEach((placement, index) => {
+    state.doc.placements.forEach((placement) => {
       const slot = Number(placement.slot) || 0;
       if (slot < 1 || slot > 5) {
         skipped++;
         return;
       }
-      const id = String(placement.towerId || `tower_${index + 1}`).replace(/[\r\n)]/g, '');
-      lines.push(
-        `SpawnTower(${Math.round(Number(placement.x) || 0)}, ${Math.round(Number(placement.y) || 0)}, ${slot}, ${id})`,
-      );
       used++;
     });
-    return { text: used ? `${lines.join('\r\n')}\r\n` : '', used, skipped };
+    return { text: used && !skipped ? `${renderText().replace(/\s*$/, '')}\r\n` : '', used, skipped };
   }
 
   function replayHeaderLines(width, height) {
@@ -2605,9 +2600,16 @@
 
   async function replayStrategyInSandbox() {
     if (!state.doc) return;
+    if (!(await applyCodeEdits())) return;
     const payload = strategyReplayText();
     if (!payload.text) {
-      toast('This strategy has no placements in loadout slots 1-5 to replay.', 'warn', 3600);
+      toast(
+        payload.skipped
+          ? 'Every SpawnTower must use a loadout slot from 1 to 5 before the full strategy can be replayed.'
+          : 'This strategy has no placements in loadout slots 1-5 to replay.',
+        'warn',
+        4200,
+      );
       return;
     }
     const done = busy(els.replayStrategyBtn, 'Launching…');
@@ -2626,12 +2628,10 @@
         state.rowEls.forEach((row, index) => updateRow(index, row));
         updateReplaySummary();
         pollReplayStatus(state.replay.epoch);
-        setStatus(`Sandbox replay runner launched for ${payload.used} placement${payload.used === 1 ? '' : 's'}.`);
+        setStatus(`Full Sandbox strategy replay launched for ${payload.used} placement${payload.used === 1 ? '' : 's'}.`);
         toast(
-          payload.skipped
-            ? `Replay launched • ${payload.skipped} placement${payload.skipped === 1 ? '' : 's'} outside slots 1-5 were skipped.`
-            : 'Replay launched. Keep the Sandbox match open and clear existing towers first.',
-          payload.skipped ? 'warn' : 'success',
+          'Full strategy replay launched. Placements, requested upgrades, waits, and supported Enforcer actions will run in order.',
+          'success',
           4800,
         );
       }

@@ -6034,13 +6034,16 @@ ActivateEnforcerVan(wait := 0) {
     global EnforcerVanKey, CancelPlacementKey, LastOpenedTowerID, unfocusX, unfocusY
     global Recording, Towers, canUseAbility, canBeUpgraded, needtocheckTowerUI
 
-    if (wait > 0 && !Recording)
-        Sleep(wait)
+    waitMs := IsNumber(wait) ? Max(0, Integer(wait)) : 0
+    if (waitMs > 0 && !Recording)
+        Sleep(waitMs)
 
     foundBottomEnforcer := false
+    sourceTowerID := ""
     for towerID, tower in Towers {
         if IsEnforcerRuntimeTower(towerID) && tower.path = 2 && tower.level >= 5 {
             foundBottomEnforcer := true
+            sourceTowerID := towerID
             break
         }
     }
@@ -6055,10 +6058,12 @@ ActivateEnforcerVan(wait := 0) {
     try {
         loop 3 {
             SendEvent("{" CancelPlacementKey "}")
-            if (LastOpenedTowerID != "") {
-                Click(ScaleX(unfocusX), ScaleY(unfocusY))
-                Sleep(250)
-            }
+            ; The selected tower panel can remain open even when LastOpenedTowerID is stale.
+            ; Always click the known empty point before sending the global ability key.
+            Click(ScaleX(unfocusX), ScaleY(unfocusY))
+            LastOpenedTowerID := ""
+            needtocheckTowerUI := true
+            Sleep(250)
 
             SendEvent("{" EnforcerVanKey "}")
             Sleep(400)
@@ -6081,6 +6086,8 @@ ActivateEnforcerVan(wait := 0) {
                 continue
             }
 
+            RuntimeLogInfo("enforcer_van_input_sent", "SWAT Van activation input was sent after clearing tower selection",
+                "source=" sourceTowerID "; wait_ms=" waitMs "; attempt=" A_Index)
             LogToConsole("Activated Enforcer SWAT Van")
             return true
         }
@@ -10746,6 +10753,12 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
         isGreen := HasStableUpgradeAffordance(XA, YA, X2, Y2)
         if (isGreen && canBeUpgraded) {
+            ; Normalize pointer state before taking evidence. A click-hover transition must
+            ; never be mistaken for a successful upgrade.
+            if (!UseHForUpgrade) {
+                MouseMove(ScaleX(unfocusX), ScaleY(unfocusY), 0)
+                Sleep(80)
+            }
             beforeEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
             canUseAbility := false
             if (UseHForUpgrade) {
@@ -10766,35 +10779,23 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
             Sleep(settleDelay)
             needtocheckTowerUI := true
 
-            afterEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
+            if (!UseHForUpgrade) {
+                MouseMove(ScaleX(unfocusX), ScaleY(unfocusY), 0)
+                Sleep(80)
+            }
+
             verifiedResV2 := ""
             verifiedResV1 := ""
             uiVerified := waitForTowerUI(&verifiedResV2, &verifiedResV1, 1000)
-            if (!uiVerified || beforeEvidence = "" || afterEvidence = "" || beforeEvidence = afterEvidence) {
-                Sleep(300)
-                lateEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
-                if (lateEvidence != "" && beforeEvidence != "" && lateEvidence != beforeEvidence) {
-                    afterEvidence := lateEvidence
-                } else if (upgradeActionAttempts < 2 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
-                    upgradeActionAttempts++
-                    RuntimeLogWarn("upgrade_retry", "Upgrade was not confirmed; retrying within bounded budget",
-                        "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
-                    canUseAbility := true
-                    needtocheckTowerUI := true
-                    Sleep(250)
-                    continue
-                } else {
-                    LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state.", true)
-                    RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce sufficient post-action evidence after bounded retries",
-                        "tower=" towerID "; next_level=" nextLevel)
-                    canUseAbility := true
-                    return false
-                }
-            }
+            evidenceChanged := uiVerified
+                && WaitForPersistentUpgradeEvidenceChange(XA, YA, WA, HA, beforeEvidence, 1800)
 
-            if (afterEvidence = "" || beforeEvidence = afterEvidence) {
-                LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state.", true)
-                RuntimeLogWarn("upgrade_ambiguous", "Upgrade evidence remained unchanged after passive verification",
+            if (!evidenceChanged) {
+                ; Never send a second upgrade input after an ambiguous click/key press.
+                ; A successful purchase can leave the next upgrade button immediately green,
+                ; especially in Sandbox / high-cash runs. Retrying here can skip a level.
+                LogToConsole("Tower " towerID " upgrade input was not visually confirmed; refusing to send another input or advance internal state.", true)
+                RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce persistent post-action evidence",
                     "tower=" towerID "; next_level=" nextLevel)
                 canUseAbility := true
                 return false
@@ -10802,6 +10803,16 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
             upgradeActionAttempts := 0
             Towers[towerID].level += 1
+            if ((path = 1 || path = 2) && effectivePathLevel > 0
+                && Towers[towerID].level >= effectivePathLevel) {
+                pathChanged := Towers[towerID].path != path || Towers[towerID].pathLevel != effectivePathLevel
+                Towers[towerID].path := Integer(path)
+                Towers[towerID].pathLevel := effectivePathLevel
+                if pathChanged {
+                    RuntimeLogInfo("upgrade_path_confirmed", "Persisted the tower path after a confirmed branch upgrade",
+                        "tower=" towerID "; path=" path "; branch_level=" effectivePathLevel)
+                }
+            }
             if Towers[towerID].HasProp("pendingPlacement")
                 Towers[towerID].pendingPlacement := false
             upgradesDone++
@@ -10849,36 +10860,127 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
     }
 }
 
-UpgradeButtonIsReady(x1, y1, x2, y2, &foundX := 0, &foundY := 0) {
-    enabledColors := [0x206435, 0x206235, 0x2B8046, 0x1D5930]
-    for color in enabledColors {
-        try {
-            if PixelSearch(&foundX, &foundY, x1, y1, x2, y2, color, 16)
-                return true
-        } catch Error {
-            continue
+UpgradePixelLooksEnabled(color) {
+    r := (color >> 16) & 0xFF
+    g := (color >> 8) & 0xFF
+    b := color & 0xFF
+    return (g >= 72 && g >= r + 22 && g >= b + 10)
+}
+
+UpgradeButtonGreenCoverage(x1, y1, x2, y2, &foundX := 0, &foundY := 0) {
+    width := x2 - x1
+    height := y2 - y1
+    if (width <= 0 || height <= 0)
+        return 0
+
+    xSamples := [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+    ySamples := [0.25, 0.50, 0.75]
+    greenSamples := 0
+
+    for yRatio in ySamples {
+        for xRatio in xSamples {
+            px := Round(x1 + width * xRatio)
+            py := Round(y1 + height * yRatio)
+            try color := PixelGetColor(px, py, "RGB")
+            catch Error
+                continue
+
+            if UpgradePixelLooksEnabled(color) {
+                greenSamples++
+                if (!foundX && !foundY) {
+                    foundX := px
+                    foundY := py
+                }
+            }
         }
     }
-    return false
+
+    return greenSamples
+}
+
+UpgradeButtonIsReady(x1, y1, x2, y2, &foundX := 0, &foundY := 0) {
+    ; A single matching pixel is not enough: red/grey unaffordable controls can
+    ; contain green-ish antialiasing or neighboring UI. Require broad green
+    ; coverage across the button interior instead.
+    return UpgradeButtonGreenCoverage(x1, y1, x2, y2, &foundX, &foundY) >= 8
 }
 
 HasStableUpgradeAffordance(x1, y1, x2, y2) {
     if !UpgradeButtonIsReady(x1, y1, x2, y2)
         return false
-    Sleep(60)
+    Sleep(90)
+    if !UpgradeButtonIsReady(x1, y1, x2, y2)
+        return false
+    Sleep(90)
     return UpgradeButtonIsReady(x1, y1, x2, y2)
+}
+
+UpgradeEvidenceDeltaCount(beforeEvidence, afterEvidence) {
+    if (beforeEvidence = "" || afterEvidence = "")
+        return 0
+
+    beforeParts := StrSplit(beforeEvidence, "|")
+    afterParts := StrSplit(afterEvidence, "|")
+    limit := Min(beforeParts.Length, afterParts.Length)
+    changed := 0
+
+    loop limit {
+        if (beforeParts[A_Index] != afterParts[A_Index])
+            changed++
+    }
+    return changed
+}
+
+WaitForPersistentUpgradeEvidenceChange(x, y, w, h, beforeEvidence, timeoutMs := 1800) {
+    if (beforeEvidence = "")
+        return false
+
+    deadline := A_TickCount + Max(400, timeoutMs)
+    changedFrames := 0
+
+    loop {
+        evidence := CaptureUpgradeEvidence(x, y, w, h)
+        delta := UpgradeEvidenceDeltaCount(beforeEvidence, evidence)
+
+        ; The previous implementation required the entire sampled UI to become
+        ; byte-for-byte identical for three frames. TDS animates/anti-aliases this
+        ; panel, so a real upgrade could be rejected forever. Instead, require a
+        ; meaningful quantized difference from the pre-click state on two
+        ; consecutive frames. Pointer hover is already normalized before sampling.
+        if (delta >= 3) {
+            changedFrames++
+            if (changedFrames >= 2)
+                return true
+        } else {
+            changedFrames := 0
+        }
+
+        if (A_TickCount >= deadline)
+            break
+        Sleep(120)
+    }
+    return false
 }
 
 CaptureUpgradeEvidence(x, y, w, h) {
     if (w <= 0 || h <= 0)
         return ""
 
+    ; Dense sampling makes price/label changes visible without depending on one
+    ; exact pixel. Quantizing the RGB sample filters tiny antialiasing noise.
+    xSamples := [0.06, 0.13, 0.20, 0.27, 0.34, 0.42, 0.50, 0.58, 0.66, 0.73, 0.80, 0.87, 0.94]
+    ySamples := [0.08, 0.22, 0.36, 0.50, 0.64, 0.78, 0.92]
     evidence := ""
-    for _, point in [[0.12, 0.20], [0.50, 0.20], [0.88, 0.20], [0.12, 0.50], [0.50, 0.50],
-        [0.88, 0.50], [0.12, 0.80], [0.50, 0.80], [0.88, 0.80]] {
-        try evidence .= PixelGetColor(x + Round(w * point[1]), y + Round(h * point[2]), "RGB") "|"
-        catch Error
-            return ""
+
+    for yRatio in ySamples {
+        for xRatio in xSamples {
+            try {
+                color := PixelGetColor(x + Round(w * xRatio), y + Round(h * yRatio), "RGB")
+                evidence .= (color & 0xF8F8F8) "|"
+            } catch Error {
+                return ""
+            }
+        }
     }
     return evidence
 }

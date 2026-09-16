@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Root = "",
   [string]$AhkPath = "",
   [switch]$Quiet
@@ -156,10 +156,27 @@ if ($dupTowers.Count) { Fail ('Duplicate tower catalog sections: ' + ($dupTowers
 $enforcerBlock = [regex]::Match($towersIni, '(?ms)^\[Enforcer\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
 if ($enforcerBlock -notmatch 'wikiPage=Enforcer' -or $enforcerBlock -notmatch 'category=Evolved' -or $enforcerBlock -notmatch 'availability=current' -or $enforcerBlock -notmatch 'placementFootprint=1' -or $enforcerBlock -notmatch 'rangeTop=10,12,12,12,12,17,19\.5,19\.5' -or $enforcerBlock -notmatch 'rangeBottom=10,12,12,12,12,13,13,14') { Fail 'Enforcer evolved tower catalog support is incomplete' } else { Pass 'Enforcer evolved tower catalog support' }
 
+if ($replayText -notmatch 'replay\.commands' -or $replayText -notmatch 'SLE_ExecuteUpgradeCommand' -or $replayText -notmatch 'SLE_ExecuteEnforcerReposition' -or $replayText -notmatch 'SLE_ExecuteEnforcerVan') { Fail 'Sandbox replay does not execute the supported strategy command sequence' } else { Pass 'Sandbox replay executes supported strategy commands in order' }
+if ($replayText -notmatch 'bottomPath := \(command\.path = 2' -or $replayText -notmatch 'SLE_BuyOneUpgrade') { Fail 'Sandbox replay does not preserve split-path upgrade input' } else { Pass 'Sandbox replay preserves split-path upgrade input' }
+if ($replayText -match 'SLE_UpgradePlacedTower\(contract\.root, hwnd, placement\.x' -or $replayText -notmatch 'SLE_OpenReplayTowerPanel') { Fail 'Sandbox replay upgrade lifecycle still re-clicks placements instead of executing explicit UpgradeTower commands' } else { Pass 'Sandbox replay opens one tower panel per grouped UpgradeTower command' }
+if ($replayText -notmatch 'SLE_WaitForUpgradeAffordance' -or $replayText -notmatch 'SLE_UpgradeEvidenceDelta' -or $replayText -notmatch 'changedFrames >= 2') { Fail 'Sandbox replay upgrade confirmation is missing stable affordability/delta guards' } else { Pass 'Sandbox replay upgrade confirmation uses stable affordability and tolerant visual deltas' }
+if ($js -notmatch 'function strategyReplayText\(\)[\s\S]{0,900}renderText\(\)' -or $js -match 'function strategyReplayText\(\)[\s\S]{0,900}lines\.push\([\s\S]{0,300}SpawnTower') { Fail 'Strategy Lab still reduces replay to generated SpawnTower-only text' } else { Pass 'Strategy Lab sends the complete edited strategy to Sandbox replay' }
+
 $mainPath = Join-Path (Split-Path -Parent $Root) 'Main.ahk'
 $mainText = if (Test-Path -LiteralPath $mainPath) { [IO.File]::ReadAllText($mainPath) } else { '' }
+$upgradeRuntime = [regex]::Match($mainText, '(?ms)^UpgradeTower\(towerID,.*?(?=^UpgradePixelLooksEnabled\()').Value
+$enforcerVanRuntime = [regex]::Match($mainText, '(?ms)^ActivateEnforcerVan\(wait := 0\).*?(?=^EnforcerVanOnCooldown\()').Value
 if ($mainText -notmatch 'Hacker\|Enforcer\|EvolvedEnforcer' -or $mainText -notmatch 'Hacker/Enforcer = 5') { Fail 'Main runtime Enforcer split-path recognition is incomplete' } else { Pass 'Main runtime Enforcer split-path recognition' }
 if ($mainText -notmatch 'ActivateEnforcerVan' -or $mainText -notmatch 'EnforcerReposition' -or $mainText -notmatch 'EnforcerVanKey') { Fail 'Main runtime Enforcer ability commands are incomplete' } else { Pass 'Main runtime Enforcer ability commands' }
+if ($mainText -notmatch 'UpgradeButtonGreenCoverage' -or $mainText -notmatch 'greenSamples\+\+' -or $mainText -notmatch 'UpgradeButtonGreenCoverage\([^\r\n]+\) >= 8') { Fail 'Upgrade affordability guard does not require broad green coverage' } else { Pass 'Upgrade affordability guard requires broad green coverage' }
+if ($mainText -match 'enabledColors := \[0x206435, 0x206235, 0x2B8046, 0x1D5930\]') { Fail 'Upgrade affordability guard still accepts a single matching green pixel' } else { Pass 'Single-pixel upgrade affordability gate removed' }
+if ($mainText -notmatch 'UpgradeEvidenceDeltaCount' -or $mainText -notmatch 'delta >= 3' -or $mainText -notmatch 'changedFrames >= 2') { Fail 'Upgrade confirmation does not tolerate animated UI while requiring persistent visual change' } else { Pass 'Upgrade confirmation uses tolerant persistent visual deltas' }
+if ($upgradeRuntime -match 'upgrade_retry' -or $upgradeRuntime -match 'continue[\s\S]{0,250}upgrade_ambiguous') { Fail 'Ambiguous upgrade input can still be blindly retried' } else { Pass 'Ambiguous upgrade input is never blindly retried' }
+if ($mainText -notmatch 'MouseMove\(ScaleX\(unfocusX\), ScaleY\(unfocusY\), 0\)' -or $mainText -notmatch '0xF8F8F8' -or $mainText -notmatch 'xSamples := \[0\.06, 0\.13') { Fail 'Upgrade evidence is not hover-normalized and densely quantized' } else { Pass 'Upgrade evidence is hover-normalized and densely quantized' }
+if ($upgradeRuntime -notmatch 'WaitForPersistentUpgradeEvidenceChange[\s\S]+Towers\[towerID\]\.level \+= 1[\s\S]+Towers\[towerID\]\.path := Integer\(path\)[\s\S]+Towers\[towerID\]\.pathLevel := effectivePathLevel') { Fail 'Confirmed split-path upgrades do not persist runtime path metadata after evidence validation' } else { Pass 'Confirmed split-path upgrades persist runtime path metadata' }
+if ($upgradeRuntime -notmatch '\(path = 1 \|\| path = 2\)[\s\S]+Towers\[towerID\]\.level >= effectivePathLevel') { Fail 'Runtime path persistence is not restricted to a confirmed path branch' } else { Pass 'Runtime path persistence is restricted to the confirmed branch' }
+if ($enforcerVanRuntime -notmatch 'waitMs := IsNumber\(wait\) \? Max\(0, Integer\(wait\)\) : 0' -or $enforcerVanRuntime -notmatch 'Sleep\(waitMs\)') { Fail 'SWAT Van wait is not normalized as non-negative milliseconds' } else { Pass 'SWAT Van wait uses non-negative milliseconds' }
+if ($enforcerVanRuntime -match 'if \(LastOpenedTowerID != ""\)[\s\S]{0,180}Click\(ScaleX\(unfocusX\), ScaleY\(unfocusY\)\)') { Fail 'SWAT Van empty-space click still depends on cached tower selection state' } elseif ($enforcerVanRuntime -notmatch 'SendEvent\("\{" CancelPlacementKey "\}"\)[\s\S]{0,300}Click\(ScaleX\(unfocusX\), ScaleY\(unfocusY\)\)[\s\S]{0,220}LastOpenedTowerID := ""[\s\S]{0,300}SendEvent\("\{" EnforcerVanKey "\}"\)') { Fail 'SWAT Van does not unconditionally clear selection before sending its key' } else { Pass 'SWAT Van clears tower selection before every activation attempt' }
 
 $spatialPath = Join-Path $Root 'ui\spatial-actions.js'
 $spatialText = if (Test-Path -LiteralPath $spatialPath) { [IO.File]::ReadAllText($spatialPath) } else { '' }
