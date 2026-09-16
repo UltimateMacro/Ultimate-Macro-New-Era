@@ -1,0 +1,109 @@
+name: Apply combined QA fixes
+
+on:
+  push:
+    branches:
+      - fix/upgrade-replay-spatial-actions-qa
+
+permissions:
+  contents: write
+
+jobs:
+  apply-validate-package:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decode and apply audited patch
+        shell: pwsh
+        run: |
+          $encoded = (Get-Content -Raw '_qa/combined-spatial-upgrade.patch.gz.b64').Trim()
+          $gzPath = Join-Path $env:RUNNER_TEMP 'combined.patch.gz'
+          $patchPath = Join-Path $env:RUNNER_TEMP 'combined.patch'
+          [IO.File]::WriteAllBytes($gzPath, [Convert]::FromBase64String($encoded))
+          $input = [IO.File]::OpenRead($gzPath)
+          try {
+            $gzip = [IO.Compression.GZipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
+            try {
+              $output = [IO.File]::Create($patchPath)
+              try { $gzip.CopyTo($output) } finally { $output.Dispose() }
+            } finally { $gzip.Dispose() }
+          } finally { $input.Dispose() }
+          git apply --check $patchPath
+          if ($LASTEXITCODE -ne 0) { throw 'git apply --check failed' }
+          git apply $patchPath
+          if ($LASTEXITCODE -ne 0) { throw 'git apply failed' }
+
+      - name: Validate JavaScript and spatial action contracts
+        shell: pwsh
+        run: |
+          node --check _app/ui/app.js
+          node --check _app/ui/spatial-actions.js
+          node _app/tests/spatial_actions.test.js
+          if ($LASTEXITCODE -ne 0) { throw 'JavaScript validation failed' }
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          foreach ($file in @('_app/run_editor.ps1','_app/self_test.ps1','_app/capture_roblox.ps1','_app/sync_portraits.ps1')) {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { throw "$file :: $($errors.Message -join '; ')" }
+          }
+
+      - name: Validate AutoHotkey
+        shell: pwsh
+        run: |
+          $ahk = Resolve-Path 'submacros/AutoHotkey64.exe'
+          & $ahk /ErrorStdOut=UTF-8 /Validate (Resolve-Path 'Main.ahk')
+          if ($LASTEXITCODE -ne 0) { throw 'Main.ahk validation failed' }
+          & $ahk /ErrorStdOut=UTF-8 /Validate (Resolve-Path '_app/StrategyEditorHost.ahk')
+          if ($LASTEXITCODE -ne 0) { throw 'StrategyEditorHost.ahk validation failed' }
+          & $ahk /ErrorStdOut=UTF-8 /Validate (Resolve-Path '_app/calibration/sandbox_replay.ahk')
+          if ($LASTEXITCODE -ne 0) { throw 'sandbox_replay.ahk validation failed' }
+
+      - name: Run Strategy Lab self-test
+        shell: pwsh
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File '_app/self_test.ps1' -Root '_app' -AhkPath (Resolve-Path 'submacros/AutoHotkey64.exe') -Quiet
+          if ($LASTEXITCODE -ne 0) { throw 'Strategy Lab self-test failed' }
+
+      - name: Check diff hygiene
+        shell: pwsh
+        run: |
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed' }
+
+      - name: Remove temporary applicator files
+        shell: pwsh
+        run: |
+          git rm '_qa/combined-spatial-upgrade.patch.gz.b64'
+          git rm '.github/workflows/export-qa-base.yml'
+          git rm '.github/workflows/apply-combined-qa.yml'
+
+      - name: Commit validated implementation
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Main.ahk _app/calibration/sandbox_replay.ahk _app/self_test.ps1 _app/ui/app.js
+          git commit -m 'Fix upgrade confirmation and full Sandbox replay'
+          git push origin HEAD:fix/upgrade-replay-spatial-actions-qa
+
+      - name: Build clean QA ZIP
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'Ultimate-Macro-v1.3.5-QA-upgrade-spatial-v4.zip'
+          $items = Get-ChildItem -Force | Where-Object { $_.Name -notin @('.git','_qa') }
+          Compress-Archive -Path $items.FullName -DestinationPath $zip -CompressionLevel Optimal
+          Get-FileHash $zip -Algorithm SHA256 | Format-List
+          "QA_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ultimate-Macro-v1.3.5-QA-upgrade-spatial-v4
+          path: ${{ env.QA_ZIP }}
+          if-no-files-found: error
