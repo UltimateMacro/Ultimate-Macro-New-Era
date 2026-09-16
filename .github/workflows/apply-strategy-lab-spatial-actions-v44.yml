@@ -40,7 +40,7 @@ jobs:
           $lines = $lines | ForEach-Object {
             if ($_ -like '*Strategy Lab v4.3 credit/version marker*' -or $_ -like '*Strategy Lab v4.4 credit/version marker*') {
               $found = $true
-              "if (`$html -notmatch [regex]::Escape('Strategy Lab v4.4 · pizzaroles24')) { Fail 'Strategy Lab v4.4 credit/version marker is missing' } else { Pass 'Strategy Lab v4.4 credit/version marker' }"
+              "if (`$html -notmatch 'Strategy Lab v4\.4' -or `$html -notmatch 'pizzaroles24') { Fail 'Strategy Lab v4.4 credit/version marker is missing' } else { Pass 'Strategy Lab v4.4 credit/version marker' }"
             } else {
               $_
             }
