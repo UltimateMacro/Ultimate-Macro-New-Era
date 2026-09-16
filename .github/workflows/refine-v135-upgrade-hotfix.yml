@@ -1,0 +1,274 @@
+name: Refine v1.3.5 upgrade hotfix
+
+on:
+  push:
+    branches:
+      - fix/v1.3.5-upgrade-affordance
+    paths:
+      - .github/workflows/refine-v135-upgrade-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refine-and-validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v1.3.5-upgrade-affordance
+          fetch-depth: 0
+
+      - name: Refine upgrade confirmation evidence
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import re
+
+          path = Path('Main.ahk')
+          text = path.read_text(encoding='utf-8-sig')
+
+          old = '''        isGreen := HasStableUpgradeAffordance(XA, YA, X2, Y2)
+          if (isGreen && canBeUpgraded) {
+              beforeEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
+              canUseAbility := false
+'''
+          new = '''        isGreen := HasStableUpgradeAffordance(XA, YA, X2, Y2)
+          if (isGreen && canBeUpgraded) {
+              ; Normalize pointer state before taking evidence. A click-hover transition must
+              ; never be mistaken for a successful upgrade.
+              if (!UseHForUpgrade) {
+                  MouseMove(ScaleX(unfocusX), ScaleY(unfocusY), 0)
+                  Sleep(80)
+              }
+              beforeEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
+              canUseAbility := false
+'''
+          if old not in text:
+              raise SystemExit('pre-upgrade evidence block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''            settleDelay := Max(250, IsNumber(UpgradeDelay) ? Integer(UpgradeDelay) : 250)
+              Sleep(settleDelay)
+              needtocheckTowerUI := true
+
+              verifiedResV2 := ""
+      verifiedResV1 := ""
+      uiVerified := waitForTowerUI(&verifiedResV2, &verifiedResV1, 1000)
+      evidenceChanged := uiVerified
+          && WaitForPersistentUpgradeEvidenceChange(XA, YA, WA, HA, beforeEvidence, 1800)
+
+      if (!evidenceChanged) {
+          if (upgradeActionAttempts < 1 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
+              upgradeActionAttempts++
+              RuntimeLogWarn("upgrade_retry", "Upgrade was not persistently confirmed; retrying once within bounded budget",
+                  "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
+              canUseAbility := true
+              needtocheckTowerUI := true
+              Sleep(350)
+              continue
+          }
+
+          LogToConsole("Tower " towerID " upgrade was not persistently confirmed; refusing to advance internal state.", true)
+          RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce persistent post-action evidence",
+              "tower=" towerID "; next_level=" nextLevel)
+          canUseAbility := true
+          return false
+      }
+
+      upgradeActionAttempts := 0
+'''
+          new = '''            settleDelay := Max(250, IsNumber(UpgradeDelay) ? Integer(UpgradeDelay) : 250)
+              Sleep(settleDelay)
+              needtocheckTowerUI := true
+
+              if (!UseHForUpgrade) {
+                  MouseMove(ScaleX(unfocusX), ScaleY(unfocusY), 0)
+                  Sleep(80)
+              }
+
+              verifiedResV2 := ""
+              verifiedResV1 := ""
+              uiVerified := waitForTowerUI(&verifiedResV2, &verifiedResV1, 1000)
+              evidenceChanged := uiVerified
+                  && WaitForPersistentUpgradeEvidenceChange(XA, YA, WA, HA, beforeEvidence, 1800)
+
+              if (!evidenceChanged) {
+                  if (upgradeActionAttempts < 1 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
+                      upgradeActionAttempts++
+                      RuntimeLogWarn("upgrade_retry", "Upgrade was not persistently confirmed; retrying once within bounded budget",
+                          "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
+                      canUseAbility := true
+                      needtocheckTowerUI := true
+                      Sleep(350)
+                      continue
+                  }
+
+                  LogToConsole("Tower " towerID " upgrade was not persistently confirmed; refusing to advance internal state.", true)
+                  RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce persistent post-action evidence",
+                      "tower=" towerID "; next_level=" nextLevel)
+                  canUseAbility := true
+                  return false
+              }
+
+              upgradeActionAttempts := 0
+'''
+          if old not in text:
+              raise SystemExit('post-upgrade confirmation block not found')
+          text = text.replace(old, new, 1)
+
+          pattern = re.compile(
+              r'WaitForPersistentUpgradeEvidenceChange\(x, y, w, h, beforeEvidence, timeoutMs := 1800\) \{.*?\n\}\n\n'
+              r'CaptureUpgradeEvidence\(x, y, w, h\) \{.*?\n\}\n',
+              re.S,
+          )
+          replacement = r'''WaitForPersistentUpgradeEvidenceChange(x, y, w, h, beforeEvidence, timeoutMs := 1800) {
+              if (beforeEvidence = "")
+                  return false
+
+              deadline := A_TickCount + Max(400, timeoutMs)
+              candidateEvidence := ""
+              stableFrames := 0
+
+              loop {
+                  evidence := CaptureUpgradeEvidence(x, y, w, h)
+                  if (evidence != "" && evidence != beforeEvidence) {
+                      if (evidence = candidateEvidence) {
+                          stableFrames++
+                      } else {
+                          candidateEvidence := evidence
+                          stableFrames := 1
+                      }
+
+                      ; Require a changed state to settle, rather than accepting one-frame
+                      ; hover/animation noise as proof that the upgrade happened.
+                      if (stableFrames >= 3)
+                          return true
+                  } else {
+                      candidateEvidence := ""
+                      stableFrames := 0
+                  }
+
+                  if (A_TickCount >= deadline)
+                      break
+                  Sleep(120)
+              }
+              return false
+          }
+
+          CaptureUpgradeEvidence(x, y, w, h) {
+              if (w <= 0 || h <= 0)
+                  return ""
+
+              ; Dense sampling makes price/label changes visible without depending on one
+              ; exact pixel. Quantizing the RGB sample filters tiny antialiasing noise.
+              xSamples := [0.06, 0.13, 0.20, 0.27, 0.34, 0.42, 0.50, 0.58, 0.66, 0.73, 0.80, 0.87, 0.94]
+              ySamples := [0.08, 0.22, 0.36, 0.50, 0.64, 0.78, 0.92]
+              evidence := ""
+
+              for yRatio in ySamples {
+                  for xRatio in xSamples {
+                      try {
+                          color := PixelGetColor(x + Round(w * xRatio), y + Round(h * yRatio), "RGB")
+                          evidence .= (color & 0xF8F8F8) "|"
+                      } catch Error {
+                          return ""
+                      }
+                  }
+              }
+              return evidence
+          }
+          '''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'expected one evidence helper pair, replaced {count}')
+
+          path.write_text(text, encoding='utf-8-sig')
+
+          test_path = Path('_app/self_test.ps1')
+          tests = test_path.read_text(encoding='utf-8-sig')
+          tests = tests.replace("if ($mainText -notmatch 'WaitForPersistentUpgradeEvidenceChange' -or $mainText -notmatch 'changedFrames >= 4' -or $mainText -notmatch 'upgrade was not persistently confirmed') { Fail 'Upgrade confirmation does not require persistent post-action evidence' } else { Pass 'Upgrade confirmation requires persistent post-action evidence' }",
+              "if ($mainText -notmatch 'WaitForPersistentUpgradeEvidenceChange' -or $mainText -notmatch 'stableFrames >= 3' -or $mainText -notmatch 'candidateEvidence' -or $mainText -notmatch 'upgrade was not persistently confirmed') { Fail 'Upgrade confirmation does not require stable post-action evidence' } else { Pass 'Upgrade confirmation requires stable post-action evidence' }")
+          marker = "if ($mainText -notmatch 'upgradeActionAttempts < 1') { Fail 'Unconfirmed upgrade retry budget is not bounded to one retry' } else { Pass 'Unconfirmed upgrade retry budget is bounded' }\n"
+          addition = "if ($mainText -notmatch 'MouseMove\\(ScaleX\\(unfocusX\\), ScaleY\\(unfocusY\\), 0\\)' -or $mainText -notmatch '0xF8F8F8' -or $mainText -notmatch 'xSamples := \\[0\\.06, 0\\.13') { Fail 'Upgrade evidence is not hover-normalized and densely quantized' } else { Pass 'Upgrade evidence is hover-normalized and densely quantized' }\n"
+          if marker not in tests:
+              raise SystemExit('retry-budget test marker not found')
+          if 'Upgrade evidence is hover-normalized and densely quantized' not in tests:
+              tests = tests.replace(marker, marker + addition, 1)
+          test_path.write_text(tests, encoding='utf-8-sig')
+          '@ | Set-Content -LiteralPath refine_patch.py -Encoding UTF8
+          python refine_patch.py
+          Remove-Item refine_patch.py -Force
+
+      - name: Run focused hotfix contracts
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          text = Path('Main.ahk').read_text(encoding='utf-8-sig')
+          checks = {
+              'multi-point affordability': 'UpgradeButtonGreenCoverage',
+              'stable confirmation': 'stableFrames >= 3',
+              'quantized dense evidence': '0xF8F8F8',
+              'hover normalization': 'MouseMove(ScaleX(unfocusX), ScaleY(unfocusY), 0)',
+              'bounded retry': 'upgradeActionAttempts < 1',
+          }
+          missing = [name for name, token in checks.items() if token not in text]
+          if missing:
+              raise SystemExit('missing hotfix contracts: ' + ', '.join(missing))
+          if text.count('MouseMove(ScaleX(unfocusX), ScaleY(unfocusY), 0)') < 2:
+              raise SystemExit('hover normalization must occur before and after upgrade input')
+          if 'enabledColors := [0x206435, 0x206235, 0x2B8046, 0x1D5930]' in text:
+              raise SystemExit('single-pixel upgrade gate still present')
+          print('Focused v1.3.5 upgrade contracts: PASS')
+          '@ | Set-Content -LiteralPath refine_contracts.py -Encoding UTF8
+          python refine_contracts.py
+          Remove-Item refine_contracts.py -Force
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '_app/self_test.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw ($errors | ForEach-Object Message | Out-String) }
+          Write-Host 'PowerShell syntax: PASS'
+
+      - name: Validate AutoHotkey and self-test
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'AutoHotkey_2.0.26.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'AutoHotkey_2.0.26'
+          Invoke-WebRequest 'https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.26/AutoHotkey_2.0.26.zip' -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+          $ahk = Get-ChildItem -LiteralPath $dir -Recurse -Filter AutoHotkey64.exe | Select-Object -First 1 -ExpandProperty FullName
+          if ([string]::IsNullOrWhiteSpace($ahk)) { throw 'AutoHotkey64.exe not found' }
+
+          $stdout = Join-Path $env:RUNNER_TEMP 'main-ahk.out.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'main-ahk.err.txt'
+          $mainPath = (Resolve-Path 'Main.ahk').Path
+          $args = '/ErrorStdOut=UTF-8 /Validate "' + $mainPath.Replace('"', '\"') + '"'
+          $proc = Start-Process -FilePath $ahk -ArgumentList $args -WorkingDirectory (Get-Location) -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden
+          if ($proc.ExitCode -ne 0) {
+            Write-Host ((Get-Content $stderr -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $stdout -Raw -ErrorAction SilentlyContinue))
+            throw "Main.ahk validation failed with exit code $($proc.ExitCode)"
+          }
+          Write-Host 'Main.ahk AutoHotkey /Validate: PASS'
+
+          & '_app/self_test.ps1' -Root (Resolve-Path '_app') -AhkPath $ahk -Quiet
+
+      - name: Check diff hygiene
+        shell: pwsh
+        run: |
+          git diff --check
+          git diff --stat
+
+      - name: Commit refinement
+        shell: pwsh
+        run: |
+          git config user.name "Pizzaroles"
+          git config user.email "alpizars2005@icloud.com"
+          git add Main.ahk _app/self_test.ps1
+          git commit -m "Harden v1.3.5 upgrade confirmation evidence" -m "Normalize mouse hover around click upgrades, sample a dense quantized evidence grid, and require a stable changed UI state before advancing tower level."
+          git push origin HEAD:fix/v1.3.5-upgrade-affordance
