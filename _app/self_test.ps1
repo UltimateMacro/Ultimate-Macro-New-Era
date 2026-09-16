@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$Root = "",
   [string]$AhkPath = "",
   [switch]$Quiet
@@ -71,7 +71,7 @@ function Test-AhkSyntax([string]$Relative) {
 }
 
 $required = @(
-  'StrategyEditorHost.ahk', 'ui\index.html', 'ui\styles.css', 'ui\app.js',
+  'StrategyEditorHost.ahk', 'ui\index.html', 'ui\styles.css', 'ui\spatial-actions.css', 'ui\app.js', 'ui\spatial-actions.js',
   'data\towers.ini', 'data\maps.ini', 'capture_roblox.ps1', 'sync_portraits.ps1',
   'calibration\sandbox_replay.ahk'
 )
@@ -160,6 +160,13 @@ $mainPath = Join-Path (Split-Path -Parent $Root) 'Main.ahk'
 $mainText = if (Test-Path -LiteralPath $mainPath) { [IO.File]::ReadAllText($mainPath) } else { '' }
 if ($mainText -notmatch 'Hacker\|Enforcer\|EvolvedEnforcer' -or $mainText -notmatch 'Hacker/Enforcer = 5') { Fail 'Main runtime Enforcer split-path recognition is incomplete' } else { Pass 'Main runtime Enforcer split-path recognition' }
 if ($mainText -notmatch 'ActivateEnforcerVan' -or $mainText -notmatch 'EnforcerReposition' -or $mainText -notmatch 'EnforcerVanKey') { Fail 'Main runtime Enforcer ability commands are incomplete' } else { Pass 'Main runtime Enforcer ability commands' }
+
+$spatialPath = Join-Path $Root 'ui\spatial-actions.js'
+$spatialText = if (Test-Path -LiteralPath $spatialPath) { [IO.File]::ReadAllText($spatialPath) } else { '' }
+if ($spatialText -notmatch 'CloneTower' -or $spatialText -notmatch 'BrawlerReposition' -or $spatialText -notmatch 'EnforcerReposition' -or $spatialText -notmatch 'rewriteLine') { Fail 'Strategy Lab spatial-action parser/rewriter is incomplete' } else { Pass 'Strategy Lab spatial-action parser/rewriter' }
+if ($html -notmatch 'id="actionLayer"' -or $html -notmatch 'id="tabActions"' -or $html -notmatch 'id="actionRows"' -or $html -notmatch 'spatial-actions\.js' -or $html -notmatch 'Strategy Lab v4\.4') { Fail 'Strategy Lab v4.4 spatial-action UI shell is incomplete' } else { Pass 'Strategy Lab v4.4 spatial-action UI shell' }
+if ($js -notmatch 'buildActionLayer' -or $js -notmatch 'selectAction' -or $js -notmatch 'moveAction' -or $js -notmatch 'StrategySpatial\.rewriteLine') { Fail 'Strategy Lab spatial-action visual editing is incomplete' } else { Pass 'Strategy Lab spatial-action visual editing' }
+
 if ($mainText -notmatch 'ApplyRuntimePlacementSafePitch' -or $mainText -notmatch 'reposition_camera_pitch_recovery') { Fail 'Main runtime reposition camera recovery is missing' } else { Pass 'Main runtime reposition camera recovery' }
 if ($mainText -notmatch 'swat_cooldown\.png' -or $mainText -notmatch 'helicopter_cooldown\.png' -or $mainText -notmatch 'helicopter_nocash\.png') { Fail 'Main runtime Enforcer ability error detection is incomplete' } else { Pass 'Main runtime Enforcer ability error detection' }
 if ($js -notmatch "name: 'EnforcerReposition'" -or $js -notmatch "name: 'ActivateEnforcerVan'") { Fail 'Strategy Lab command reference is missing the Enforcer ability commands' } else { Pass 'Strategy Lab command reference documents the Enforcer ability commands' }
@@ -167,7 +174,7 @@ if ($mainText -notmatch 'wasRunning := IsSet\(RunningStrategy\)' -or $mainText -
 $zoomTable = 'Map\("cataclysm", 1\)'
 if ($mainText -notmatch $zoomTable -or $hostText -notmatch $zoomTable -or $replayText -notmatch $zoomTable) { Fail 'Macro, host and replay disagree about the map specific camera zoom table' } else { Pass 'Map specific camera zoom table matches across macro, host and replay' }
 if ($mainText -notmatch 'ApplyMapCameraZoom\(\) >= 0') { Fail 'Cataclysm path does not apply the shared map camera zoom' } else { Pass 'Cataclysm path applies the shared map camera zoom' }
-if ($html -notmatch 'Strategy Lab v4\.3 · pizzaroles24') { Fail 'Strategy Lab v4.3 credit/version marker is missing' } else { Pass 'Strategy Lab v4.3 credit/version marker' }
+if ($html -notmatch 'Strategy Lab v4\.4' -or $html -notmatch 'pizzaroles24') { Fail 'Strategy Lab v4.4 credit/version marker is missing' } else { Pass 'Strategy Lab v4.4 credit/version marker' }
 
 if ($failures.Count -gt 0) {
   Write-Host ''

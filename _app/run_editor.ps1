@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$StrategyPath = ""
 )
 
@@ -229,7 +229,7 @@ function Ensure-WebViewToo {
 }
 
 function Ensure-AppFiles {
-  foreach ($rel in @('StrategyEditorHost.ahk', 'ui\index.html', 'ui\styles.css', 'ui\app.js', 'data\towers.ini', 'data\maps.ini', 'capture_roblox.ps1', 'sync_portraits.ps1', 'self_test.ps1', 'calibration\sandbox_replay.ahk')) {
+  foreach ($rel in @('StrategyEditorHost.ahk', 'ui\index.html', 'ui\styles.css', 'ui\spatial-actions.css', 'ui\app.js', 'ui\spatial-actions.js', 'data\towers.ini', 'data\maps.ini', 'capture_roblox.ps1', 'sync_portraits.ps1', 'self_test.ps1', 'calibration\sandbox_replay.ahk')) {
     $path = Join-Path $root $rel
     if (!(Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -lt 20) {
       throw "Strategy Lab Editor package is incomplete: missing $rel"
