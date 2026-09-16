@@ -54,16 +54,26 @@ jobs:
             if ($errors.Count) { throw "$file :: $($errors.Message -join '; ')" }
           }
 
-      - name: Validate AutoHotkey
+      - name: Validate AutoHotkey with diagnostics
         shell: pwsh
         run: |
-          $ahk = Resolve-Path 'submacros/AutoHotkey64.exe'
-          & $ahk /ErrorStdOut=UTF-8 /Validate (Resolve-Path 'Main.ahk')
-          if ($LASTEXITCODE -ne 0) { throw 'Main.ahk validation failed' }
-          & $ahk /ErrorStdOut=UTF-8 /Validate (Resolve-Path '_app/StrategyEditorHost.ahk')
-          if ($LASTEXITCODE -ne 0) { throw 'StrategyEditorHost.ahk validation failed' }
-          & $ahk /ErrorStdOut=UTF-8 /Validate (Resolve-Path '_app/calibration/sandbox_replay.ahk')
-          if ($LASTEXITCODE -ne 0) { throw 'sandbox_replay.ahk validation failed' }
+          $ahk = (Resolve-Path 'submacros/AutoHotkey64.exe').Path
+          function Test-Ahk([string]$file) {
+            $full = (Resolve-Path $file).Path
+            $out = Join-Path $env:RUNNER_TEMP ((Split-Path $file -Leaf) + '.out.txt')
+            $err = Join-Path $env:RUNNER_TEMP ((Split-Path $file -Leaf) + '.err.txt')
+            $args = '/ErrorStdOut=UTF-8 /Validate "' + $full + '"'
+            $p = Start-Process -FilePath $ahk -ArgumentList $args -WorkingDirectory $PWD -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden
+            $o = if (Test-Path $out) { Get-Content -Raw $out } else { '' }
+            $e = if (Test-Path $err) { Get-Content -Raw $err } else { '' }
+            if ($o) { Write-Host $o }
+            if ($e) { Write-Host $e }
+            if ($p.ExitCode -ne 0) { throw "$file validation failed with exit code $($p.ExitCode)`n$e`n$o" }
+            Write-Host "AHK PASS: $file"
+          }
+          Test-Ahk 'Main.ahk'
+          Test-Ahk '_app/StrategyEditorHost.ahk'
+          Test-Ahk '_app/calibration/sandbox_replay.ahk'
 
       - name: Run Strategy Lab self-test
         shell: pwsh
