@@ -32,7 +32,13 @@ jobs:
 
       - name: Apply integration patch
         shell: pwsh
-        run: python _dev/apply_spatial_actions_v44.py
+        run: |
+          python _dev/apply_spatial_actions_v44.py
+          $path = '_app/self_test.ps1'
+          $text = Get-Content -LiteralPath $path -Raw
+          $text = $text.Replace('Strategy Lab v4\.3 · pizzaroles24', 'Strategy Lab v4\.4 · pizzaroles24')
+          $text = $text.Replace('Strategy Lab v4.3 credit/version marker', 'Strategy Lab v4.4 credit/version marker')
+          [IO.File]::WriteAllText((Resolve-Path $path), $text, [Text.UTF8Encoding]::new($false))
 
       - name: Run JavaScript validation
         shell: pwsh
@@ -57,7 +63,7 @@ jobs:
 
       - name: Run Strategy Lab self-test
         shell: pwsh
-        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File _app/self_test.ps1
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File _app/self_test.ps1 -AhkPath submacros\AutoHotkey64.exe
 
       - name: Check diff hygiene
         shell: pwsh
