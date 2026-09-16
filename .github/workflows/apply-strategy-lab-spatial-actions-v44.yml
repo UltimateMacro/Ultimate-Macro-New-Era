@@ -35,10 +35,18 @@ jobs:
         run: |
           python _dev/apply_spatial_actions_v44.py
           $path = '_app/self_test.ps1'
-          $text = Get-Content -LiteralPath $path -Raw
-          $text = $text.Replace('Strategy Lab v4\.3 · pizzaroles24', 'Strategy Lab v4\.4 · pizzaroles24')
-          $text = $text.Replace('Strategy Lab v4.3 credit/version marker', 'Strategy Lab v4.4 credit/version marker')
-          [IO.File]::WriteAllText((Resolve-Path $path), $text, [Text.UTF8Encoding]::new($false))
+          $lines = Get-Content -LiteralPath $path
+          $found = $false
+          $lines = $lines | ForEach-Object {
+            if ($_ -like '*Strategy Lab v4.3 credit/version marker*' -or $_ -like '*Strategy Lab v4.4 credit/version marker*') {
+              $found = $true
+              "if (`$html -notmatch [regex]::Escape('Strategy Lab v4.4 · pizzaroles24')) { Fail 'Strategy Lab v4.4 credit/version marker is missing' } else { Pass 'Strategy Lab v4.4 credit/version marker' }"
+            } else {
+              $_
+            }
+          }
+          if (-not $found) { throw 'Strategy Lab footer contract anchor not found' }
+          [IO.File]::WriteAllLines((Resolve-Path $path), [string[]]$lines, [Text.UTF8Encoding]::new($false))
 
       - name: Run JavaScript validation
         shell: pwsh
