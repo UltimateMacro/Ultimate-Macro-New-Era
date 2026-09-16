@@ -19,6 +19,17 @@ jobs:
           ref: feature/strategy-lab-spatial-actions-v44
           fetch-depth: 0
 
+      - name: Normalize updater asset order
+        shell: pwsh
+        run: |
+          $path = 'submacros/safe_update.ps1'
+          $text = Get-Content -LiteralPath $path -Raw
+          $pattern = "(?m)^(\s*'_app\\ui\\app\.js',)\r?\n(\s*'_app\\ui\\index\.html',)\r?\n(\s*'_app\\ui\\styles\.css',)"
+          $replacement = '$2' + [Environment]::NewLine + '$3' + [Environment]::NewLine + '$1'
+          $next = [regex]::Replace($text, $pattern, $replacement, 1)
+          if ($next -eq $text) { throw 'safe_update asset order anchor not found' }
+          [IO.File]::WriteAllText((Resolve-Path $path), $next, [Text.UTF8Encoding]::new($false))
+
       - name: Apply integration patch
         shell: pwsh
         run: python _dev/apply_spatial_actions_v44.py
