@@ -10766,41 +10766,31 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
             Sleep(settleDelay)
             needtocheckTowerUI := true
 
-            afterEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
             verifiedResV2 := ""
-            verifiedResV1 := ""
-            uiVerified := waitForTowerUI(&verifiedResV2, &verifiedResV1, 1000)
-            if (!uiVerified || beforeEvidence = "" || afterEvidence = "" || beforeEvidence = afterEvidence) {
-                Sleep(300)
-                lateEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
-                if (lateEvidence != "" && beforeEvidence != "" && lateEvidence != beforeEvidence) {
-                    afterEvidence := lateEvidence
-                } else if (upgradeActionAttempts < 2 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
-                    upgradeActionAttempts++
-                    RuntimeLogWarn("upgrade_retry", "Upgrade was not confirmed; retrying within bounded budget",
-                        "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
-                    canUseAbility := true
-                    needtocheckTowerUI := true
-                    Sleep(250)
-                    continue
-                } else {
-                    LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state.", true)
-                    RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce sufficient post-action evidence after bounded retries",
-                        "tower=" towerID "; next_level=" nextLevel)
-                    canUseAbility := true
-                    return false
-                }
-            }
+    verifiedResV1 := ""
+    uiVerified := waitForTowerUI(&verifiedResV2, &verifiedResV1, 1000)
+    evidenceChanged := uiVerified
+        && WaitForPersistentUpgradeEvidenceChange(XA, YA, WA, HA, beforeEvidence, 1800)
 
-            if (afterEvidence = "" || beforeEvidence = afterEvidence) {
-                LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state.", true)
-                RuntimeLogWarn("upgrade_ambiguous", "Upgrade evidence remained unchanged after passive verification",
-                    "tower=" towerID "; next_level=" nextLevel)
-                canUseAbility := true
-                return false
-            }
+    if (!evidenceChanged) {
+        if (upgradeActionAttempts < 1 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
+            upgradeActionAttempts++
+            RuntimeLogWarn("upgrade_retry", "Upgrade was not persistently confirmed; retrying once within bounded budget",
+                "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
+            canUseAbility := true
+            needtocheckTowerUI := true
+            Sleep(350)
+            continue
+        }
 
-            upgradeActionAttempts := 0
+        LogToConsole("Tower " towerID " upgrade was not persistently confirmed; refusing to advance internal state.", true)
+        RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce persistent post-action evidence",
+            "tower=" towerID "; next_level=" nextLevel)
+        canUseAbility := true
+        return false
+    }
+
+    upgradeActionAttempts := 0
             Towers[towerID].level += 1
             if Towers[towerID].HasProp("pendingPlacement")
                 Towers[towerID].pendingPlacement := false
@@ -10849,24 +10839,82 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
     }
 }
 
-UpgradeButtonIsReady(x1, y1, x2, y2, &foundX := 0, &foundY := 0) {
-    enabledColors := [0x206435, 0x206235, 0x2B8046, 0x1D5930]
-    for color in enabledColors {
-        try {
-            if PixelSearch(&foundX, &foundY, x1, y1, x2, y2, color, 16)
-                return true
-        } catch Error {
-            continue
+UpgradePixelLooksEnabled(color) {
+    r := (color >> 16) & 0xFF
+    g := (color >> 8) & 0xFF
+    b := color & 0xFF
+    return (g >= 72 && g >= r + 22 && g >= b + 10)
+}
+
+UpgradeButtonGreenCoverage(x1, y1, x2, y2, &foundX := 0, &foundY := 0) {
+    width := x2 - x1
+    height := y2 - y1
+    if (width <= 0 || height <= 0)
+        return 0
+
+    xSamples := [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+    ySamples := [0.25, 0.50, 0.75]
+    greenSamples := 0
+
+    for yRatio in ySamples {
+        for xRatio in xSamples {
+            px := Round(x1 + width * xRatio)
+            py := Round(y1 + height * yRatio)
+            try color := PixelGetColor(px, py, "RGB")
+            catch Error
+                continue
+
+            if UpgradePixelLooksEnabled(color) {
+                greenSamples++
+                if (!foundX && !foundY) {
+                    foundX := px
+                    foundY := py
+                }
+            }
         }
     }
-    return false
+
+    return greenSamples
+}
+
+UpgradeButtonIsReady(x1, y1, x2, y2, &foundX := 0, &foundY := 0) {
+    ; A single matching pixel is not enough: red/grey unaffordable controls can
+    ; contain green-ish antialiasing or neighboring UI. Require broad green
+    ; coverage across the button interior instead.
+    return UpgradeButtonGreenCoverage(x1, y1, x2, y2, &foundX, &foundY) >= 8
 }
 
 HasStableUpgradeAffordance(x1, y1, x2, y2) {
     if !UpgradeButtonIsReady(x1, y1, x2, y2)
         return false
-    Sleep(60)
+    Sleep(90)
+    if !UpgradeButtonIsReady(x1, y1, x2, y2)
+        return false
+    Sleep(90)
     return UpgradeButtonIsReady(x1, y1, x2, y2)
+}
+
+WaitForPersistentUpgradeEvidenceChange(x, y, w, h, beforeEvidence, timeoutMs := 1800) {
+    if (beforeEvidence = "")
+        return false
+
+    deadline := A_TickCount + Max(400, timeoutMs)
+    changedFrames := 0
+    loop {
+        evidence := CaptureUpgradeEvidence(x, y, w, h)
+        if (evidence != "" && evidence != beforeEvidence) {
+            changedFrames++
+            if (changedFrames >= 4)
+                return true
+        } else {
+            changedFrames := 0
+        }
+
+        if (A_TickCount >= deadline)
+            break
+        Sleep(120)
+    }
+    return false
 }
 
 CaptureUpgradeEvidence(x, y, w, h) {
