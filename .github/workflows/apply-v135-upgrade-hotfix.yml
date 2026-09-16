@@ -162,7 +162,7 @@ jobs:
           test_path = Path('_app/self_test.ps1')
           tests = test_path.read_text(encoding='utf-8-sig')
           marker = "if ($mainText -notmatch 'ActivateEnforcerVan' -or $mainText -notmatch 'EnforcerReposition' -or $mainText -notmatch 'EnforcerVanKey') { Fail 'Main runtime Enforcer ability commands are incomplete' } else { Pass 'Main runtime Enforcer ability commands' }\n"
-          addition = r'''if ($mainText -notmatch 'UpgradeButtonGreenCoverage' -or $mainText -notmatch 'greenSamples\+\+' -or $mainText -notmatch 'greenSamples\) >= 8') { Fail 'Upgrade affordability guard does not require broad green coverage' } else { Pass 'Upgrade affordability guard requires broad green coverage' }
+          addition = r'''if ($mainText -notmatch 'UpgradeButtonGreenCoverage' -or $mainText -notmatch 'greenSamples\+\+' -or $mainText -notmatch 'UpgradeButtonGreenCoverage\([^\r\n]+\) >= 8') { Fail 'Upgrade affordability guard does not require broad green coverage' } else { Pass 'Upgrade affordability guard requires broad green coverage' }
           if ($mainText -match 'enabledColors := \[0x206435, 0x206235, 0x2B8046, 0x1D5930\]') { Fail 'Upgrade affordability guard still accepts a single matching green pixel' } else { Pass 'Single-pixel upgrade affordability gate removed' }
           if ($mainText -notmatch 'WaitForPersistentUpgradeEvidenceChange' -or $mainText -notmatch 'changedFrames >= 4' -or $mainText -notmatch 'upgrade was not persistently confirmed') { Fail 'Upgrade confirmation does not require persistent post-action evidence' } else { Pass 'Upgrade confirmation requires persistent post-action evidence' }
           if ($mainText -notmatch 'upgradeActionAttempts < 1') { Fail 'Unconfirmed upgrade retry budget is not bounded to one retry' } else { Pass 'Unconfirmed upgrade retry budget is bounded' }
@@ -184,7 +184,7 @@ jobs:
           text = Path('Main.ahk').read_text(encoding='utf-8-sig')
           required = [
               'UpgradeButtonGreenCoverage',
-              'greenSamples) >= 8',
+              '&foundY) >= 8',
               'WaitForPersistentUpgradeEvidenceChange',
               'changedFrames >= 4',
               'upgradeActionAttempts < 1',
@@ -199,7 +199,7 @@ jobs:
           python hotfix_contracts.py
           Remove-Item hotfix_contracts.py -Force
 
-      - name: Run Strategy Lab self-test without AHK validator
+      - name: Validate PowerShell syntax
         shell: pwsh
         run: |
           $path = '_app/self_test.ps1'
@@ -208,6 +208,23 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path), [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -gt 0) { throw ($errors | ForEach-Object Message | Out-String) }
           Write-Host 'PowerShell syntax: PASS'
+
+      - name: Validate AutoHotkey and run self-test
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'AutoHotkey_2.0.26.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'AutoHotkey_2.0.26'
+          Invoke-WebRequest 'https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.26/AutoHotkey_2.0.26.zip' -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+          $ahk = Get-ChildItem -LiteralPath $dir -Recurse -Filter AutoHotkey64.exe | Select-Object -First 1 -ExpandProperty FullName
+          if ([string]::IsNullOrWhiteSpace($ahk)) { throw 'AutoHotkey64.exe not found after extraction' }
+
+          $mainOutput = & $ahk '/ErrorStdOut=UTF-8' '/Validate' (Resolve-Path 'Main.ahk') 2>&1
+          if ($LASTEXITCODE -ne 0) { $mainOutput | Write-Host; throw "Main.ahk validation failed with exit code $LASTEXITCODE" }
+          Write-Host 'Main.ahk AutoHotkey /Validate: PASS'
+
+          & '_app/self_test.ps1' -Root (Resolve-Path '_app') -AhkPath $ahk -Quiet
+          if ($LASTEXITCODE -ne 0) { throw "Strategy Lab self-test failed with exit code $LASTEXITCODE" }
 
       - name: Check diff hygiene
         shell: pwsh
