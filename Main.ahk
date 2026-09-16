@@ -10746,6 +10746,12 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
         isGreen := HasStableUpgradeAffordance(XA, YA, X2, Y2)
         if (isGreen && canBeUpgraded) {
+            ; Normalize pointer state before taking evidence. A click-hover transition must
+            ; never be mistaken for a successful upgrade.
+            if (!UseHForUpgrade) {
+                MouseMove(ScaleX(unfocusX), ScaleY(unfocusY), 0)
+                Sleep(80)
+            }
             beforeEvidence := CaptureUpgradeEvidence(XA, YA, WA, HA)
             canUseAbility := false
             if (UseHForUpgrade) {
@@ -10766,31 +10772,36 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
             Sleep(settleDelay)
             needtocheckTowerUI := true
 
+            if (!UseHForUpgrade) {
+                MouseMove(ScaleX(unfocusX), ScaleY(unfocusY), 0)
+                Sleep(80)
+            }
+
             verifiedResV2 := ""
-    verifiedResV1 := ""
-    uiVerified := waitForTowerUI(&verifiedResV2, &verifiedResV1, 1000)
-    evidenceChanged := uiVerified
-        && WaitForPersistentUpgradeEvidenceChange(XA, YA, WA, HA, beforeEvidence, 1800)
+            verifiedResV1 := ""
+            uiVerified := waitForTowerUI(&verifiedResV2, &verifiedResV1, 1000)
+            evidenceChanged := uiVerified
+                && WaitForPersistentUpgradeEvidenceChange(XA, YA, WA, HA, beforeEvidence, 1800)
 
-    if (!evidenceChanged) {
-        if (upgradeActionAttempts < 1 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
-            upgradeActionAttempts++
-            RuntimeLogWarn("upgrade_retry", "Upgrade was not persistently confirmed; retrying once within bounded budget",
-                "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
-            canUseAbility := true
-            needtocheckTowerUI := true
-            Sleep(350)
-            continue
-        }
+            if (!evidenceChanged) {
+                if (upgradeActionAttempts < 1 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
+                    upgradeActionAttempts++
+                    RuntimeLogWarn("upgrade_retry", "Upgrade was not persistently confirmed; retrying once within bounded budget",
+                        "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
+                    canUseAbility := true
+                    needtocheckTowerUI := true
+                    Sleep(350)
+                    continue
+                }
 
-        LogToConsole("Tower " towerID " upgrade was not persistently confirmed; refusing to advance internal state.", true)
-        RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce persistent post-action evidence",
-            "tower=" towerID "; next_level=" nextLevel)
-        canUseAbility := true
-        return false
-    }
+                LogToConsole("Tower " towerID " upgrade was not persistently confirmed; refusing to advance internal state.", true)
+                RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce persistent post-action evidence",
+                    "tower=" towerID "; next_level=" nextLevel)
+                canUseAbility := true
+                return false
+            }
 
-    upgradeActionAttempts := 0
+            upgradeActionAttempts := 0
             Towers[towerID].level += 1
             if Towers[towerID].HasProp("pendingPlacement")
                 Towers[towerID].pendingPlacement := false
@@ -10899,15 +10910,26 @@ WaitForPersistentUpgradeEvidenceChange(x, y, w, h, beforeEvidence, timeoutMs := 
         return false
 
     deadline := A_TickCount + Max(400, timeoutMs)
-    changedFrames := 0
+    candidateEvidence := ""
+    stableFrames := 0
+
     loop {
         evidence := CaptureUpgradeEvidence(x, y, w, h)
         if (evidence != "" && evidence != beforeEvidence) {
-            changedFrames++
-            if (changedFrames >= 4)
+            if (evidence = candidateEvidence) {
+                stableFrames++
+            } else {
+                candidateEvidence := evidence
+                stableFrames := 1
+            }
+
+            ; Require a changed state to settle, rather than accepting one-frame
+            ; hover/animation noise as proof that the upgrade happened.
+            if (stableFrames >= 3)
                 return true
         } else {
-            changedFrames := 0
+            candidateEvidence := ""
+            stableFrames := 0
         }
 
         if (A_TickCount >= deadline)
@@ -10921,12 +10943,21 @@ CaptureUpgradeEvidence(x, y, w, h) {
     if (w <= 0 || h <= 0)
         return ""
 
+    ; Dense sampling makes price/label changes visible without depending on one
+    ; exact pixel. Quantizing the RGB sample filters tiny antialiasing noise.
+    xSamples := [0.06, 0.13, 0.20, 0.27, 0.34, 0.42, 0.50, 0.58, 0.66, 0.73, 0.80, 0.87, 0.94]
+    ySamples := [0.08, 0.22, 0.36, 0.50, 0.64, 0.78, 0.92]
     evidence := ""
-    for _, point in [[0.12, 0.20], [0.50, 0.20], [0.88, 0.20], [0.12, 0.50], [0.50, 0.50],
-        [0.88, 0.50], [0.12, 0.80], [0.50, 0.80], [0.88, 0.80]] {
-        try evidence .= PixelGetColor(x + Round(w * point[1]), y + Round(h * point[2]), "RGB") "|"
-        catch Error
-            return ""
+
+    for yRatio in ySamples {
+        for xRatio in xSamples {
+            try {
+                color := PixelGetColor(x + Round(w * xRatio), y + Round(h * yRatio), "RGB")
+                evidence .= (color & 0xF8F8F8) "|"
+            } catch Error {
+                return ""
+            }
+        }
     }
     return evidence
 }
