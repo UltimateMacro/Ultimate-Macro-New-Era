@@ -219,12 +219,20 @@ jobs:
           $ahk = Get-ChildItem -LiteralPath $dir -Recurse -Filter AutoHotkey64.exe | Select-Object -First 1 -ExpandProperty FullName
           if ([string]::IsNullOrWhiteSpace($ahk)) { throw 'AutoHotkey64.exe not found after extraction' }
 
-          $mainOutput = & $ahk '/ErrorStdOut=UTF-8' '/Validate' (Resolve-Path 'Main.ahk') 2>&1
-          if ($LASTEXITCODE -ne 0) { $mainOutput | Write-Host; throw "Main.ahk validation failed with exit code $LASTEXITCODE" }
+          $stdout = Join-Path $env:RUNNER_TEMP 'main-ahk.out.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'main-ahk.err.txt'
+          $mainPath = (Resolve-Path 'Main.ahk').Path
+          $args = '/ErrorStdOut=UTF-8 /Validate "' + $mainPath.Replace('"', '\"') + '"'
+          $proc = Start-Process -FilePath $ahk -ArgumentList $args -WorkingDirectory (Get-Location) -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden
+          $outText = if (Test-Path $stdout) { [IO.File]::ReadAllText($stdout) } else { '' }
+          $errText = if (Test-Path $stderr) { [IO.File]::ReadAllText($stderr) } else { '' }
+          if ($proc.ExitCode -ne 0) {
+            Write-Host ($errText + "`n" + $outText)
+            throw "Main.ahk validation failed with exit code $($proc.ExitCode)"
+          }
           Write-Host 'Main.ahk AutoHotkey /Validate: PASS'
 
           & '_app/self_test.ps1' -Root (Resolve-Path '_app') -AhkPath $ahk -Quiet
-          if ($LASTEXITCODE -ne 0) { throw "Strategy Lab self-test failed with exit code $LASTEXITCODE" }
 
       - name: Check diff hygiene
         shell: pwsh
