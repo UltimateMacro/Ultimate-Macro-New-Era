@@ -1,0 +1,26 @@
+name: Export QA base
+
+on:
+  push:
+    branches:
+      - fix/upgrade-replay-spatial-actions-qa
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build source snapshot
+        run: |
+          zip -r spatial-actions-base.zip . \
+            -x '.git/*' \
+            -x 'spatial-actions-base.zip' \
+            -x '.github/workflows/export-qa-base.yml'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spatial-actions-base
+          path: spatial-actions-base.zip
+          if-no-files-found: error
