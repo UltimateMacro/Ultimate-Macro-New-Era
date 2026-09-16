@@ -60,6 +60,7 @@
     footprintLayer: $('footprintLayer'),
     markerLayer: $('markerLayer'),
     calibrationLayer: $('calibrationLayer'),
+    actionLayer: $('actionLayer'),
     viewportLoader: $('viewportLoader'),
     viewportLoaderText: $('viewportLoaderText'),
 
@@ -89,11 +90,15 @@
     syncPortraitsBtn: $('syncPortraitsBtn'),
 
     tabPlacements: $('tabPlacements'),
+    tabActions: $('tabActions'),
     tabStrategy: $('tabStrategy'),
     placementHeading: $('placementHeading'),
     placementCount: $('placementCount'),
+    actionCount: $('actionCount'),
     panelPlacements: $('panelPlacements'),
+    panelActions: $('panelActions'),
     panelStrategy: $('panelStrategy'),
+    actionRows: $('actionRows'),
 
     replayBar: $('replayBar'),
     replayPlacedCount: $('replayPlacedCount'),
@@ -151,6 +156,7 @@
     doc: null,
     activeSlot: 0,
     selectedIndex: -1,
+    selectedActionIndex: -1,
     scale: 1,
     fitScale: 1,
     offsetX: 0,
@@ -173,6 +179,9 @@
     footprintEls: [],
     rangeEls: [],
     rowEls: [],
+    actionEls: [],
+    actionRowEls: [],
+    actionDragging: null,
     collisionSet: new Set(),
     collisionPairs: new Set(),
     footprintsVisible: true,
@@ -771,6 +780,7 @@
     if (payload.geometryProjection) state.doc.geometryProjection = payload.geometryProjection;
     refreshGeometryVisuals();
     state.doc.placements.forEach((p, index) => updateMarkerPosition(index, state.markerEls[index], p));
+    refreshActionGeometry();
   }
 
   function clearMapVisual() {
@@ -1088,12 +1098,14 @@
     if (typeof payload === 'string') payload = JSON.parse(payload);
     if (!Array.isArray(payload.placements)) payload.placements = [];
     if (!Array.isArray(payload.requiredTowers)) payload.requiredTowers = [];
+    payload.spatialActions = spatialActionsFromText(payload.text || '');
 
     stopReplayPolling();
     resetEditorMode();
     state.doc = payload;
     state.activeSlot = 0;
     state.selectedIndex = -1;
+    state.selectedActionIndex = -1;
     state.undo = [];
     state.redo = [];
     state.dirty = false;
@@ -1146,7 +1158,9 @@
     buildRanges();
     buildFootprints();
     buildMarkers();
+    buildActionLayer();
     buildRows();
+    buildActionRows();
     recomputeCollisions();
     renderCalibrationMarks();
     updateCalibrationControls();
@@ -1515,6 +1529,184 @@
     marker.title = `${placement.towerName || `Slot ${placement.slot}`} • ${placement.x}, ${placement.y}`;
   }
 
+
+  function spatialActionsFromText(text) {
+    if (!window.StrategySpatial?.parse) return [];
+    return window.StrategySpatial.parse(text || '');
+  }
+
+  function placementByTowerId(towerId) {
+    const wanted = String(towerId || '').trim().toLowerCase();
+    if (!wanted || !state.doc) return null;
+    return state.doc.placements.find((p) => String(p.towerId || '').trim().toLowerCase() === wanted) || null;
+  }
+
+  function actionTargetTowerName(action) {
+    return placementByTowerId(action?.targetId)?.towerName || action?.targetId || 'Unknown';
+  }
+
+  function actionSourcePoint(action, index) {
+    if (!state.doc || !action) return action || { x: 0, y: 0 };
+    let source = placementByTowerId(action.targetId) || placementByTowerId(action.actorId);
+    for (let i = 0; i < index; i++) {
+      const prior = state.doc.spatialActions?.[i];
+      if (!prior || prior.kind === 'clone') continue;
+      if (String(prior.targetId || '').trim().toLowerCase() === String(action.targetId || '').trim().toLowerCase()) {
+        source = prior;
+      }
+    }
+    return source || action;
+  }
+
+  function actionShortLabel(action, index) {
+    const prefix = action.kind === 'clone' ? 'C' : action.kind === 'brawler-reposition' ? 'B' : 'E';
+    return `${prefix}${index + 1}`;
+  }
+
+  function buildActionLayer() {
+    els.actionLayer.replaceChildren();
+    state.actionEls = [];
+    const actions = state.doc?.spatialActions || [];
+    const ns = 'http://www.w3.org/2000/svg';
+    actions.forEach((action, index) => {
+      const group = document.createElementNS(ns, 'g');
+      group.dataset.index = String(index);
+      const line = document.createElementNS(ns, 'line');
+      line.classList.add('action-link');
+      const handle = document.createElementNS(ns, 'circle');
+      handle.classList.add('action-handle');
+      handle.setAttribute('r', '11');
+      handle.dataset.index = String(index);
+      handle.addEventListener('pointerdown', actionPointerDown);
+      const label = document.createElementNS(ns, 'text');
+      label.classList.add('action-label');
+      label.textContent = actionShortLabel(action, index);
+      group.append(line, handle, label);
+      els.actionLayer.appendChild(group);
+      const entry = { group, line, handle, label };
+      state.actionEls.push(entry);
+      updateActionPosition(index, entry, action);
+    });
+  }
+
+  function updateActionPosition(index, entry = state.actionEls[index], action = state.doc?.spatialActions?.[index]) {
+    if (!entry || !action) return;
+    const source = displayPoint(actionSourcePoint(action, index));
+    const target = displayPoint(action);
+    entry.line.setAttribute('x1', String(source.x));
+    entry.line.setAttribute('y1', String(source.y));
+    entry.line.setAttribute('x2', String(target.x));
+    entry.line.setAttribute('y2', String(target.y));
+    entry.handle.setAttribute('cx', String(target.x));
+    entry.handle.setAttribute('cy', String(target.y));
+    entry.label.setAttribute('x', String(target.x + 15));
+    entry.label.setAttribute('y', String(target.y - 12));
+    entry.group.setAttribute('aria-label', `${action.label}: ${action.targetId} to ${action.x}, ${action.y}`);
+  }
+
+  function refreshActionGeometry() {
+    (state.doc?.spatialActions || []).forEach((action, index) => updateActionPosition(index, state.actionEls[index], action));
+  }
+
+  function buildActionRows() {
+    els.actionRows.replaceChildren();
+    const actions = state.doc?.spatialActions || [];
+    state.actionRowEls = actions.map((action, index) => {
+      const tr = document.createElement('tr');
+      tr.className = 'action-row';
+      tr.dataset.index = String(index);
+      tr.appendChild(cell(String(index + 1), 'c-idx'));
+      tr.appendChild(cell(action.label, 'action-kind'));
+      tr.appendChild(cell(actionTargetTowerName(action)));
+      tr.appendChild(cell(String(action.x), 'c-num'));
+      tr.appendChild(cell(String(action.y), 'c-num'));
+      tr.addEventListener('click', () => selectAction(index, true));
+      els.actionRows.appendChild(tr);
+      return tr;
+    });
+    if (!actions.length) emptyRow(els.actionRows, 5, 'No draggable CloneTower / BrawlerReposition / EnforcerReposition actions.');
+    els.actionCount.textContent = String(actions.length);
+  }
+
+  function updateActionRow(index) {
+    const action = state.doc?.spatialActions?.[index];
+    const row = state.actionRowEls[index];
+    if (!action || !row) return;
+    row.cells[3].textContent = String(action.x);
+    row.cells[4].textContent = String(action.y);
+  }
+
+  function clearActionSelection() {
+    if (state.selectedActionIndex >= 0) {
+      state.actionEls[state.selectedActionIndex]?.handle.classList.remove('selected');
+      state.actionRowEls[state.selectedActionIndex]?.classList.remove('selected');
+    }
+    state.selectedActionIndex = -1;
+  }
+
+  async function selectAction(index, center = false) {
+    if (!state.doc || index < 0 || index >= (state.doc.spatialActions?.length || 0)) return;
+    if (state.selectedIndex >= 0) {
+      state.markerEls[state.selectedIndex]?.classList.remove('selected');
+      state.rowEls[state.selectedIndex]?.classList.remove('selected');
+      state.selectedIndex = -1;
+      updateRangeVisibility();
+    }
+    clearActionSelection();
+    state.selectedActionIndex = index;
+    state.actionEls[index]?.handle.classList.add('selected');
+    state.actionRowEls[index]?.classList.add('selected');
+    state.actionRowEls[index]?.scrollIntoView({ block: 'nearest' });
+
+    const action = state.doc.spatialActions[index];
+    const source = actionSourcePoint(action, index);
+    els.selectedName.textContent = action.label;
+    els.selectedName.title = action.command;
+    els.metaSlot.textContent = action.actorId || '—';
+    els.metaId.textContent = action.targetId || '—';
+    els.metaPos.textContent = `${action.x}, ${action.y}`;
+    els.metaPlane.textContent = 'ACTION';
+    els.metaRing.textContent = `from ${Math.round(source.x)}, ${Math.round(source.y)}`;
+    els.metaRange.textContent = action.kind === 'clone' ? 'clone destination' : 'move destination';
+    els.metaStatus.textContent = 'Editable';
+    els.metaRing.className = '';
+    els.metaRange.className = '';
+    els.metaStatus.className = 'ok';
+    els.xInput.value = action.x;
+    els.yInput.value = action.y;
+    updateFootprintControls(null);
+    els.portrait.style.display = 'none';
+    els.portraitFallback.style.display = 'block';
+    syncControls();
+    if (center) ensureMarkerVisible(action);
+  }
+
+  function moveAction(index, x, y, record = true, markDirty = true) {
+    if (!state.doc || index < 0 || index >= (state.doc.spatialActions?.length || 0)) return false;
+    const action = state.doc.spatialActions[index];
+    const nextX = Math.round(clamp(Number(x) || 0, 0, state.doc.strategyWidth));
+    const nextY = Math.round(clamp(Number(y) || 0, 0, state.doc.strategyHeight));
+    if (action.x === nextX && action.y === nextY) return false;
+    const oldX = action.x;
+    const oldY = action.y;
+    action.x = nextX;
+    action.y = nextY;
+    if (record) {
+      state.undo.push({ kind: 'action', index, oldX, oldY, newX: nextX, newY: nextY });
+      state.redo = [];
+    }
+    updateActionPosition(index);
+    updateActionRow(index);
+    refreshActionGeometry();
+    if (state.selectedActionIndex === index) {
+      els.xInput.value = nextX;
+      els.yInput.value = nextY;
+    }
+    if (markDirty) setDirty(true);
+    syncControls();
+    return true;
+  }
+
   function buildRows() {
     els.placementRows.replaceChildren();
     state.rowEls = state.doc.placements.map((p, index) => {
@@ -1593,8 +1785,9 @@
       return;
     }
     const total = state.doc.placements.length;
+    const actionTotal = state.doc.spatialActions?.length || 0;
     const overlaps = state.collisionPairs.size;
-    els.summaryText.textContent = `${total} placement${total === 1 ? '' : 's'} · ${overlaps} overlap${overlaps === 1 ? '' : 's'}`;
+    els.summaryText.textContent = `${total} placement${total === 1 ? '' : 's'} · ${actionTotal} action${actionTotal === 1 ? '' : 's'} · ${overlaps} overlap${overlaps === 1 ? '' : 's'}`;
     els.summaryText.title = overlaps
       ? 'Placement hitboxes that intersect on the same plane. Attack ranges are ignored here.'
       : '';
@@ -1616,6 +1809,7 @@
 
   async function selectPlacement(index, center = false) {
     if (!state.doc || index < 0 || index >= state.doc.placements.length) return;
+    clearActionSelection();
     if (state.selectedIndex >= 0) {
       state.markerEls[state.selectedIndex]?.classList.remove('selected');
       state.rowEls[state.selectedIndex]?.classList.remove('selected');
@@ -1674,6 +1868,7 @@
   }
 
   function clearSelection() {
+    clearActionSelection();
     if (state.selectedIndex >= 0) {
       state.markerEls[state.selectedIndex]?.classList.remove('selected');
       state.rowEls[state.selectedIndex]?.classList.remove('selected');
@@ -1916,7 +2111,7 @@
     p.x = nextX;
     p.y = nextY;
     if (record) {
-      state.undo.push({ index, oldX, oldY, newX: nextX, newY: nextY });
+      state.undo.push({ kind: 'placement', index, oldX, oldY, newX: nextX, newY: nextY });
       state.redo = [];
     }
 
@@ -1924,6 +2119,7 @@
     updateFootprintPosition(index);
     updateRangePosition(index);
     updateRow(index);
+    refreshActionGeometry();
     recomputeCollisions();
     if (state.selectedIndex === index) {
       els.xInput.value = nextX;
@@ -1936,14 +2132,23 @@
   }
 
   function applyCoordinateInputs() {
-    if (state.selectedIndex < 0) return;
+    if (state.selectedIndex < 0 && state.selectedActionIndex < 0) return;
     const rawX = els.xInput.value.trim();
     const rawY = els.yInput.value.trim();
     if (rawX === '' || rawY === '' || !Number.isFinite(Number(rawX)) || !Number.isFinite(Number(rawY))) {
-      const p = state.doc.placements[state.selectedIndex];
-      els.xInput.value = p.x;
-      els.yInput.value = p.y;
+      const selected = state.selectedActionIndex >= 0
+        ? state.doc.spatialActions[state.selectedActionIndex]
+        : state.doc.placements[state.selectedIndex];
+      els.xInput.value = selected.x;
+      els.yInput.value = selected.y;
       toast('X and Y must both be numbers.', 'warn');
+      return;
+    }
+    if (state.selectedActionIndex >= 0) {
+      if (moveAction(state.selectedActionIndex, rawX, rawY, true)) {
+        const action = state.doc.spatialActions[state.selectedActionIndex];
+        setStatus(`${action.label} destination moved to (${action.x}, ${action.y}).`);
+      }
       return;
     }
     if (movePlacement(state.selectedIndex, rawX, rawY, true)) {
@@ -1955,9 +2160,15 @@
   function undo() {
     const item = state.undo.pop();
     if (!item) return;
-    movePlacement(item.index, item.oldX, item.oldY, false, false);
-    state.redo.push(item);
-    selectPlacement(item.index, true);
+    if (item.kind === 'action') {
+      moveAction(item.index, item.oldX, item.oldY, false, false);
+      state.redo.push(item);
+      selectAction(item.index, true);
+    } else {
+      movePlacement(item.index, item.oldX, item.oldY, false, false);
+      state.redo.push(item);
+      selectPlacement(item.index, true);
+    }
     setDirty(state.undo.length > 0);
     syncControls();
   }
@@ -1965,9 +2176,15 @@
   function redo() {
     const item = state.redo.pop();
     if (!item) return;
-    movePlacement(item.index, item.newX, item.newY, false, false);
-    state.undo.push(item);
-    selectPlacement(item.index, true);
+    if (item.kind === 'action') {
+      moveAction(item.index, item.newX, item.newY, false, false);
+      state.undo.push(item);
+      selectAction(item.index, true);
+    } else {
+      movePlacement(item.index, item.newX, item.newY, false, false);
+      state.undo.push(item);
+      selectPlacement(item.index, true);
+    }
     setDirty(true);
     syncControls();
   }
@@ -1986,6 +2203,11 @@
       const idx = Number(p.lineNo) - 1;
       if (idx < 0 || idx >= lines.length) continue;
       lines[idx] = lines[idx].replace(/^(\s*SpawnTower\(\s*)-?\d+(\s*,\s*)-?\d+(.*)$/i, `$1${p.x}$2${p.y}$3`);
+    }
+    for (const action of state.doc.spatialActions || []) {
+      const idx = Number(action.lineNo) - 1;
+      if (idx < 0 || idx >= lines.length || !window.StrategySpatial?.rewriteLine) continue;
+      lines[idx] = window.StrategySpatial.rewriteLine(lines[idx], action);
     }
     return lines.join(state.doc.newline || '\r\n');
   }
@@ -2091,14 +2313,21 @@
 
   function placeSelectedAtPointer(clientX, clientY) {
     if (!state.doc) return;
+    const target = worldToStrategy(clientX, clientY);
+    if (state.selectedActionIndex >= 0) {
+      const index = state.selectedActionIndex;
+      const action = state.doc.spatialActions[index];
+      if (moveAction(index, target.x, target.y, true, true))
+        setStatus(`${action.label} destination moved to (${target.x}, ${target.y}).`);
+      return;
+    }
     if (state.selectedIndex < 0) {
-      setStatus('Select a placement first, then right-click the map to move it there.');
-      toast('Select a placement first, then right-click the map.', 'info', 2600);
+      setStatus('Select a placement or action first, then right-click the map to move it there.');
+      toast('Select a placement or action first, then right-click the map.', 'info', 2600);
       return;
     }
     const index = state.selectedIndex;
     const p = state.doc.placements[index];
-    const target = worldToStrategy(clientX, clientY);
     if (movePlacement(index, target.x, target.y, true, true)) {
       const overlap = state.collisionSet.has(index) ? ' • projected overlap' : '';
       setStatus(`Placed ${p.towerName || `Slot ${p.slot}`} at (${target.x}, ${target.y})${overlap}.`);
@@ -2130,6 +2359,7 @@
     updateFootprintPosition(index);
     updateRangePosition(index);
     updateRow(index);
+    refreshActionGeometry();
     recomputeCollisions(index);
     if (state.selectedIndex === index) {
       els.xInput.value = p.x;
@@ -2145,7 +2375,7 @@
     const p = state.doc.placements[drag.index];
     if (p.x === drag.oldX && p.y === drag.oldY) return;
 
-    state.undo.push({ index: drag.index, oldX: drag.oldX, oldY: drag.oldY, newX: p.x, newY: p.y });
+    state.undo.push({ kind: 'placement', index: drag.index, oldX: drag.oldX, oldY: drag.oldY, newX: p.x, newY: p.y });
     state.redo = [];
     setDirty(true);
     syncControls();
@@ -2153,6 +2383,55 @@
     const overlap = state.collisionSet.has(drag.index) ? ' • projected overlap' : '';
     setStatus(`Moved ${p.towerName || `Slot ${p.slot}`} to (${p.x}, ${p.y})${overlap}.`);
   }
+
+
+  function actionPointerDown(ev) {
+    if (!state.doc || ev.button !== 0 || state.calibration.marking) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const index = Number(ev.currentTarget.dataset.index);
+    selectAction(index, false);
+    const action = state.doc.spatialActions[index];
+    state.actionDragging = { pointerId: ev.pointerId, index, oldX: action.x, oldY: action.y };
+    ev.currentTarget.classList.add('dragging');
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+  }
+
+  function actionPointerMove(ev) {
+    if (!state.actionDragging || ev.pointerId !== state.actionDragging.pointerId) return;
+    const index = state.actionDragging.index;
+    const action = state.doc.spatialActions[index];
+    const target = worldToStrategy(ev.clientX, ev.clientY);
+    if (action.x === target.x && action.y === target.y) return;
+    action.x = target.x;
+    action.y = target.y;
+    updateActionPosition(index);
+    updateActionRow(index);
+    refreshActionGeometry();
+    if (state.selectedActionIndex === index) {
+      els.xInput.value = action.x;
+      els.yInput.value = action.y;
+      els.metaPos.textContent = `${action.x}, ${action.y}`;
+    }
+  }
+
+  function finishActionDrag(ev) {
+    if (!state.actionDragging || ev.pointerId !== state.actionDragging.pointerId) return;
+    const drag = state.actionDragging;
+    state.actionDragging = null;
+    state.actionEls[drag.index]?.handle.classList.remove('dragging');
+    const action = state.doc.spatialActions[drag.index];
+    if (action.x === drag.oldX && action.y === drag.oldY) return;
+    state.undo.push({ kind: 'action', index: drag.index, oldX: drag.oldX, oldY: drag.oldY, newX: action.x, newY: action.y });
+    state.redo = [];
+    setDirty(true);
+    syncControls();
+    setStatus(`${action.label} destination moved to (${action.x}, ${action.y}).`);
+  }
+
+  els.actionLayer.addEventListener('pointermove', actionPointerMove);
+  els.actionLayer.addEventListener('pointerup', finishActionDrag);
+  els.actionLayer.addEventListener('pointercancel', finishActionDrag);
 
   for (const layer of [els.markerLayer, els.footprintLayer]) {
     layer.addEventListener('pointermove', markerPointerMove);
@@ -2163,6 +2442,15 @@
   els.viewport.addEventListener('contextmenu', (ev) => {
     if (!state.doc || state.calibration.marking) return;
     ev.preventDefault();
+    const actionHandle = ev.target.closest('.action-handle');
+    if (actionHandle) {
+      const index = Number(actionHandle.dataset.index);
+      if (Number.isInteger(index)) {
+        selectAction(index, false);
+        setStatus('Action selected. Right-click an empty map position to move its destination there.');
+      }
+      return;
+    }
     const marker = ev.target.closest('.marker');
     if (marker) {
       const index = Number(marker.dataset.index);
@@ -2181,7 +2469,7 @@
       addCalibrationMark(ev.clientX, ev.clientY);
       return;
     }
-    if (!state.doc || ev.button !== 0 || ev.target.closest('.marker, .footprint')) return;
+    if (!state.doc || ev.button !== 0 || ev.target.closest('.marker, .footprint, .action-handle')) return;
     ev.preventDefault();
     els.viewport.setPointerCapture(ev.pointerId);
     state.panning = {
@@ -2210,7 +2498,7 @@
     const tapped = ev.type === 'pointerup' && !state.panning.moved;
     state.panning = null;
     els.viewport.classList.remove('panning');
-    if (tapped && state.selectedIndex >= 0 && !state.calibration.marking) {
+    if (tapped && (state.selectedIndex >= 0 || state.selectedActionIndex >= 0) && !state.calibration.marking) {
       clearSelection();
       setStatus('Selection cleared.');
     }
@@ -3307,6 +3595,7 @@
     if (typeof payload === 'string') payload = JSON.parse(payload);
     if (!Array.isArray(payload.placements)) payload.placements = [];
     if (!Array.isArray(payload.requiredTowers)) payload.requiredTowers = [];
+    payload.spatialActions = spatialActionsFromText(payload.text || '');
 
     const previous = state.doc;
     const sameSize =
@@ -3318,6 +3607,7 @@
     stopReplayPolling();
     state.doc = payload;
     state.selectedIndex = -1;
+    state.selectedActionIndex = -1;
     state.undo = [];
     state.redo = [];
     state.collisionSet = new Set();
@@ -3343,7 +3633,9 @@
     buildRanges();
     buildFootprints();
     buildMarkers();
+    buildActionLayer();
     buildRows();
+    buildActionRows();
     recomputeCollisions();
     renderCalibrationMarks();
     updateCalibrationControls();
@@ -3410,7 +3702,7 @@
     document.body.classList.toggle('code-mode', code);
     els.stageHint.textContent = code
       ? 'Ctrl+E switches back · Apply parses the text · Save writes it to a .strat'
-      : 'Wheel zoom  ·  Drag map to pan  ·  Drag tower to move  ·  Right-click to place selected';
+      : 'Wheel zoom  ·  Drag tower/action to move  ·  Right-click to place selected destination';
   }
 
   function resetEditorMode() {
@@ -3445,17 +3737,22 @@
 
   function showRailPanel(which) {
     const placements = which === 'placements';
+    const actions = which === 'actions';
+    const strategy = !placements && !actions;
     els.panelPlacements.hidden = !placements;
-    els.panelStrategy.hidden = placements;
+    els.panelActions.hidden = !actions;
+    els.panelStrategy.hidden = !strategy;
     els.tabPlacements.classList.toggle('is-active', placements);
-    els.tabStrategy.classList.toggle('is-active', !placements);
+    els.tabActions.classList.toggle('is-active', actions);
+    els.tabStrategy.classList.toggle('is-active', strategy);
     els.tabPlacements.setAttribute('aria-selected', String(placements));
-    els.tabStrategy.setAttribute('aria-selected', String(!placements));
+    els.tabActions.setAttribute('aria-selected', String(actions));
+    els.tabStrategy.setAttribute('aria-selected', String(strategy));
   }
 
   function syncControls() {
     const loaded = Boolean(state.doc);
-    const selected = loaded && state.selectedIndex >= 0;
+    const selected = loaded && (state.selectedIndex >= 0 || state.selectedActionIndex >= 0);
     const mapName = selectedMapName();
 
     const visual = loaded && !state.codeMode;
@@ -3484,7 +3781,7 @@
     els.xInput.disabled = !selected;
     els.yInput.disabled = !selected;
     els.applyXYBtn.disabled = !selected;
-    els.refreshSelectedBtn.disabled = !selected || !state.doc.placements[state.selectedIndex]?.towerName;
+    els.refreshSelectedBtn.disabled = state.selectedIndex < 0 || !state.doc.placements[state.selectedIndex]?.towerName;
   }
 
   els.openBtn.addEventListener('click', openStrategy);
@@ -3578,6 +3875,7 @@
   els.syncPortraitsBtn.addEventListener('click', syncLoadoutPortraits);
 
   els.tabPlacements.addEventListener('click', () => showRailPanel('placements'));
+  els.tabActions.addEventListener('click', () => showRailPanel('actions'));
   els.tabStrategy.addEventListener('click', () => showRailPanel('strategy'));
 
   els.confirmOkBtn.addEventListener('click', () => settleConfirm(true));

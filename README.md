@@ -23,7 +23,7 @@ Ultimate Macro: The New Era is a free, open-source automation tool for Roblox To
 - Official Discord Remote Control through EngineerBot
 - Profile Manager for importing and exporting settings, hotkeys, and strategies
 - Optional Auto Configure Settings for Roblox
-- Strategy Lab, a separate safe visual editor for `.strat` files with published placement footprints, attack ranges, map backgrounds, calibration persistence, and split-path range tracking, opened straight
+- Strategy Lab, a separate safe visual editor for `.strat` files with published placement footprints, attack ranges, map backgrounds, calibration persistence, split-path range tracking, and draggable Clone/Brawler/Enforcer action destinations, opened straight
   from the Create tab (or by running `StrategyLab.exe`)
 - Every setting saves automatically the moment you change it
 

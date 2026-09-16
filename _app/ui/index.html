@@ -1,10 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ultimate Macro | Strategy Lab</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="spatial-actions.css" />
 </head>
 <body>
   <header class="titlebar" id="titlebar">
@@ -122,6 +123,7 @@
           <div id="rangeLayer" class="range-layer"></div>
           <div id="footprintLayer" class="footprint-layer"></div>
           <div id="markerLayer" class="marker-layer"></div>
+          <svg id="actionLayer" class="action-layer" aria-label="Spatial strategy actions"></svg>
           <div id="calibrationLayer" class="calibration-layer"></div>
         </div>
         <div id="viewportLoader" class="viewport-loader" hidden aria-live="polite">
@@ -228,6 +230,10 @@
           aria-controls="panelPlacements">
           <span id="placementHeading">Placements</span><span id="placementCount" class="tab-count">0</span>
         </button>
+        <button class="rail-tab" id="tabActions" type="button" role="tab" aria-selected="false"
+          aria-controls="panelActions">
+          Actions <span id="actionCount" class="tab-count">0</span>
+        </button>
         <button class="rail-tab" id="tabStrategy" type="button" role="tab" aria-selected="false"
           aria-controls="panelStrategy">
           Strategy
@@ -253,6 +259,22 @@
                 </tr>
               </thead>
               <tbody id="placementRows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="rail-panel" id="panelActions" role="tabpanel" aria-labelledby="tabActions" hidden>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="c-idx">#</th>
+                  <th>Action</th>
+                  <th>Unit</th>
+                  <th class="c-num">X</th>
+                  <th class="c-num">Y</th>
+                </tr>
+              </thead>
+              <tbody id="actionRows"></tbody>
             </table>
           </div>
         </section>
@@ -283,7 +305,7 @@
     <span id="statusText">Ready.</span>
     <div class="status-meta">
       <span id="summaryText"></span>
-      <span class="strategy-lab-credit">Strategy Lab v4.3 · pizzaroles24</span>
+      <span class="strategy-lab-credit">Strategy Lab v4.4 · pizzaroles24</span>
     </div>
   </footer>
   <div id="calibrationMarkHud" class="mark-hud" hidden>
@@ -422,6 +444,7 @@
       </div>
     </section>
   </div>
+  <script src="spatial-actions.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
