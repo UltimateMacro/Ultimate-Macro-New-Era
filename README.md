@@ -18,7 +18,7 @@ Ultimate Macro: The New Era is a free, open-source automation tool for Roblox To
 - Automatic daily and playtime rewards
 - Resolution-aware image detection and OCR
 - Potato Mode and Legacy Mode
-- 1.5x and 2x TimeScale support
+- 0.5x, 1.5x, and 2x TimeScale support
 - Discord webhooks with stats, screenshots, and logs
 - Official Discord Remote Control through EngineerBot
 - Profile Manager for importing and exporting settings, hotkeys, and strategies

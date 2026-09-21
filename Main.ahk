@@ -251,6 +251,8 @@ if (TimeScaleMode = "1.5x") {
     UseTimeScale := true, TimeScaleMultiplier := 1.5
 } else if (TimeScaleMode = "2x") {
     UseTimeScale := true, TimeScaleMultiplier := 2
+} else if (TimeScaleMode = "0.5x") {
+    UseTimeScale := true, TimeScaleMultiplier := 0.5
 } else {
     UseTimeScale := false, TimeScaleMultiplier := 1
 }
@@ -2047,11 +2049,11 @@ CollectPlaytimeRewardsCtrl.Value := (CollectPlaytimeRewards = "1" || CollectPlay
 SettingsPanel.SetFont("s9 w400 cAAAAAA")
 global Tab5_LblTimescale := SettingsPanel.Add("Text", "x330 y202 w110 h22 0x200 BackgroundTrans", "Timescale:")
 SettingsPanel.SetFont("s9 w400 c000000")
-global TimeScaleModeCtrl := SettingsPanel.Add("DropDownList", "x444 y201 w110", ["OFF", "1.5x", "2x"])
+global TimeScaleModeCtrl := SettingsPanel.Add("DropDownList", "x444 y201 w110", ["OFF", "0.5x", "1.5x", "2x"])
 TimeScaleModeCtrl.Text := TimeScaleMode
 SettingsPanel.SetFont("s9 w400 c7E848E", UIFont())
 global Tab5_HelpTimescale := SettingsPanel.Add("Text", "x560 y201 w18 h22 0x200 Center", "?")
-RegisterHelpTip(Tab5_HelpTimescale, "Timescale: how fast the match is played.`n`n1.5x is more stable and suits most strategies.`n2x needs strategies built for it but is much faster.`n`nIf you run out of timescale tickets the run continues at normal speed.")
+RegisterHelpTip(Tab5_HelpTimescale, "Timescale: how fast the match is played.`n`n0.5x slows the match down for practice or hard strategies.`n1.5x is more stable and suits most strategies.`n2x needs strategies built for it but is much faster.`n`nIf you run out of timescale tickets the run continues at normal speed.")
 
 SettingsPanel.SetFont("s9 w400 cAAAAAA")
 global Tab5_LblUpgradeDelay := SettingsPanel.Add("Text", "x330 y230 w110 h22 0x200 BackgroundTrans", "Upgrade Delay:")
@@ -3287,6 +3289,9 @@ ApplyTimeScaleMode(mode) {
     } else if (TimeScaleMode = "2x") {
         UseTimeScale := true
         TimeScaleMultiplier := 2
+    } else if (TimeScaleMode = "0.5x") {
+        UseTimeScale := true
+        TimeScaleMultiplier := 0.5
     } else {
         UseTimeScale := false
         TimeScaleMultiplier := 1
@@ -10120,6 +10125,11 @@ activateTimescale() {
     } else if (TimeScaleMode = "1.5x") {
         Sleep(20)
         Send("{Enter}")
+    } else if (TimeScaleMode = "0.5x") {
+        loop 4 {
+            Sleep(20)
+            Send("{Enter}")
+        }
     }
 
     CloseTimescaleNavigation()
