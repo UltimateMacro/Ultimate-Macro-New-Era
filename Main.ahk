@@ -538,7 +538,7 @@ DetectUpgrade(*) {
             }
 
             Towers[towerID].level += 1
-            LogToConsole("Upgraded tower " towerID " to level " Towers[towerID].level ".")
+            LogToConsole("Upgraded tower " towerID " to level " Towers[towerID].level "." TowerLogCoords(towerID))
             UpdateTowerIndicator(towerID)
 
             if (Towers[towerID].path != 0 && Towers[towerID].path != "") {
@@ -4875,7 +4875,7 @@ PlaceTowerHK(*) {
     towerID := idBox.Value
     ActivateRoblox()
 
-    LogToConsole("Recording: placing tower " towerID " (slot " slot ") at x:" mx " y:" my "...")
+    LogToConsole("Recording: placing tower " towerID " (slot " slot ") at x:" mx " y:" my "..." LogCoords(mx, my))
 
     getRobloxPos(, , &w, &h)
 
@@ -4884,7 +4884,7 @@ PlaceTowerHK(*) {
     if UseNumbersForHotbar {
         Send("{" slot "}")
     } else if !SelectHotbarSlotByClick(slot) {
-        LogToConsole("Recording placement cancelled because hotbar slot " slot " could not be resolved.")
+        LogToConsole("Recording placement cancelled because hotbar slot " slot " could not be resolved." LogCoords(mx, my))
         return
     }
 
@@ -4899,7 +4899,7 @@ PlaceTowerHK(*) {
     Towers[towerID] := { x: mx, y: my, slot: slot, level: 0, path: 0, pathLevel: 0, target: "First Enemy" }
     RecordedTowerIds[towerID] := true
     UpdateTowerIndicator(towerID)
-    LogToConsole("Recorded tower " towerID " (slot " slot ")")
+    LogToConsole("Recorded tower " towerID " (slot " slot ")" LogCoords(mx, my))
 
     RecordStep("SpawnTower(" mx ", " my ", " slot ", " towerID ")")
 
@@ -5001,7 +5001,7 @@ ChangeDJTrackHK(*) {
     box := InputBox("Enter Track Color (Purple/Red/Green):", "DJ Track", "w300 h130", "Green")
     if (box.Result != "Cancel") {
         RecordStep('SetDJTrack("' box.Value '")')
-        LogToConsole("Recorded DJ-track " box.Value)
+        LogToConsole("Recorded DJ-track " box.Value TowerLogCoords("DJ"))
     }
 }
 
@@ -5040,6 +5040,7 @@ DeleteTowerRecordingHK(*) {
 
         newSteps := []
 
+        removedCoords := TowerLogCoords(closestID)
         escapedID := RegExReplace(closestID, "([\.\ \+\*\?\^\$\(\)\[\]\{\}\|])", "\$1")
 
         for i, step in RecordedSteps {
@@ -5063,7 +5064,7 @@ DeleteTowerRecordingHK(*) {
         if RecordedTowerIds.Has(closestID)
             RecordedTowerIds.Delete(closestID)
 
-        LogToConsole("Removed tower " closestID " from the recording")
+        LogToConsole("Removed tower " closestID " from the recording" removedCoords)
     }
 }
 
@@ -5099,11 +5100,12 @@ SellTowerHK(*) {
             try WinClose("ahk_id " Towers[closestID].hwnd)
             Towers[closestID].hwnd := ""
         }
+        soldCoords := TowerLogCoords(closestID)
         RecordStep("SellTower(" closestID ")")
         SellTower(closestID)
         if Towers.Has(closestID)
             Towers.Delete(closestID)
-        LogToConsole("Recorded sell tower " closestID)
+        LogToConsole("Recorded sell tower " closestID soldCoords)
     }
 }
 
@@ -5211,7 +5213,7 @@ BrawlerRepositionHK(*) {
 
     if (ActiveRTowerID != "" && IsEnforcerRuntimeTower(ActiveRTowerID)) {
         if !Towers.Has(ActiveRTowerID) || Towers[ActiveRTowerID].path != 1 || Towers[ActiveRTowerID].level < 5 {
-            LogToConsole("Enforcer Helicopter Reposition requires top path level 5 or higher.")
+            LogToConsole("Enforcer Helicopter Reposition requires top path level 5 or higher." TowerLogCoords(ActiveRTowerID))
             return
         }
         RecordEnforcerReposition(ActiveRTowerID)
@@ -5237,20 +5239,20 @@ BrawlerRepositionHK(*) {
         try {
             clicked := KeyWait("LButton", "D T15")
             if (!clicked) {
-                LogToConsole("Reposition cancelled: no click within 15 seconds.")
+                LogToConsole("Reposition cancelled: no click within 15 seconds." TowerLogCoords(towerID))
                 return
             }
 
             MouseGetPos(&mx, &my)
 
             if (!Towers.Has(towerID)) {
-                LogToConsole("Tower " towerID " not found for reposition!")
+                LogToConsole("Tower " towerID " not found for reposition!" LogCoords(mx, my))
                 return
             }
 
             result := TryRepositionDestination(towerID, mx, my, "Brawler")
             if !result.ok {
-                LogToConsole("Brawler reposition was not confirmed; the step was not recorded.")
+                LogToConsole("Brawler reposition was not confirmed; the step was not recorded." LogCoords(mx, my))
                 return
             }
 
@@ -5265,7 +5267,7 @@ BrawlerRepositionHK(*) {
     }
 
     RecordStep("BrawlerReposition(" towerID ", " mx ", " my ")")
-    LogToConsole("Recorded BrawlerReposition(" towerID ", " mx ", " my ")")
+    LogToConsole("Recorded BrawlerReposition(" towerID ", " mx ", " my ")" LogCoords(mx, my))
 }
 
 RecordEnforcerReposition(sourceID) {
@@ -5276,10 +5278,10 @@ RecordEnforcerReposition(sourceID) {
 
     SetRecordingTowerClickHotkeys(false)
     try {
-        LogToConsole("Enforcer Reposition: click the tower to move.")
+        LogToConsole("Enforcer Reposition: click the tower to move." TowerLogCoords(sourceID))
         clicked := KeyWait("LButton", "D T15")
         if !clicked {
-            LogToConsole("Enforcer Reposition cancelled: no target tower selected.")
+            LogToConsole("Enforcer Reposition cancelled: no target tower selected." TowerLogCoords(sourceID))
             return false
         }
 
@@ -5292,15 +5294,15 @@ RecordEnforcerReposition(sourceID) {
             targetID := Trim(idBox.Value)
         }
         if (targetID = "" || !Towers.Has(targetID)) {
-            LogToConsole("Enforcer Reposition cancelled: target tower was not recognized.")
+            LogToConsole("Enforcer Reposition cancelled: target tower was not recognized." LogCoords(targetX, targetY))
             return false
         }
 
         KeyWait("LButton")
-        LogToConsole("Enforcer Reposition: click the destination.")
+        LogToConsole("Enforcer Reposition: click the destination." TowerLogCoords(targetID))
         clicked := KeyWait("LButton", "D T15")
         if !clicked {
-            LogToConsole("Enforcer Reposition cancelled: no destination selected.")
+            LogToConsole("Enforcer Reposition cancelled: no destination selected." TowerLogCoords(targetID))
             return false
         }
 
@@ -5316,7 +5318,7 @@ RecordEnforcerReposition(sourceID) {
         }
 
         if IsRepositionExplicitlyRejected() {
-            LogToConsole("Enforcer Reposition was rejected by TDS; the step was not recorded.")
+            LogToConsole("Enforcer Reposition was rejected by TDS; the step was not recorded." LogCoords(destX, destY))
             return false
         }
 
@@ -5325,7 +5327,7 @@ RecordEnforcerReposition(sourceID) {
         UpdateTowerIndicator(targetID)
         ActiveRTowerID := sourceID
         RecordStep("EnforcerReposition(" sourceID ", " targetID ", " destX ", " destY ")")
-        LogToConsole("Recorded EnforcerReposition(" sourceID ", " targetID ", " destX ", " destY ")")
+        LogToConsole("Recorded EnforcerReposition(" sourceID ", " targetID ", " destX ", " destY ")" LogCoords(destX, destY))
         return true
     } finally {
         SetRecordingTowerClickHotkeys(true)
@@ -5479,7 +5481,7 @@ ChangeTargetsHK(*) {
     ChangeTargets(towerID, target)
 
     RecordStep("ChangeTargets(" towerID ", " target ")")
-    LogToConsole("Recorded ChangeTargets(" towerID ", " target ")")
+    LogToConsole("Recorded ChangeTargets(" towerID ", " target ")" TowerLogCoords(towerID))
 }
 
 CataclysmPath() {
@@ -5572,6 +5574,7 @@ ChangeTargets(towerID, target) {
     }
 
     targets := ["First Enemy", "Last Enemy", "Strongest", "Weakest", "Closest", "Farthest", "Random"]
+    towerCoords := TowerLogCoords(towerID)
     canUseAbility := false
 
     try {
@@ -5586,7 +5589,7 @@ ChangeTargets(towerID, target) {
         needtocheckTowerUI := true
         attempts := 0
 
-        LogToConsole("Changing " towerID " targets to " target "...")
+        LogToConsole("Changing " towerID " targets to " target "..." towerCoords)
 
         upgTime := A_TickCount
         loop {
@@ -5607,7 +5610,7 @@ ChangeTargets(towerID, target) {
                 if (!openedSuccessfully && canBeUpgraded) {
                     attempts++
                     if (attempts > 30) {
-                        LogToConsole("Tower " towerID " menu not found after 30 attempts, reloading...", true)
+                        LogToConsole("Tower " towerID " menu not found after 30 attempts, reloading..." towerCoords, true)
                         SafeReload()
                         return false
                     }
@@ -5624,7 +5627,7 @@ ChangeTargets(towerID, target) {
             startedSearching := A_TickCount
             loop {
                 if (A_TickCount - startedSearching > 5000) {
-                    LogToConsole("Failed to change tower targets...", true)
+                    LogToConsole("Failed to change tower targets..." towerCoords, true)
                     return false
                 }
 
@@ -5652,7 +5655,7 @@ ChangeTargets(towerID, target) {
             }
 
             if (targetIndex = 0) {
-                LogToConsole("Cannot change tower " towerID ": unknown target '" target "'.", true)
+                LogToConsole("Cannot change tower " towerID ": unknown target '" target "'." towerCoords, true)
                 return false
             }
 
@@ -5715,7 +5718,7 @@ ChangeTargets(towerID, target) {
             checkTargetImg := AdvancedImageSearch("Resources/TowerUI/" target ".png", 0, 0, w / 2, h / 1.3)
 
             if (checkTargetImg.score > 0.66) {
-                LogToConsole("Successfully changed tower's target to " target)
+                LogToConsole("Successfully changed tower's target to " target towerCoords)
                 break
             }
 
@@ -5733,7 +5736,7 @@ ChangeTargets(towerID, target) {
             Towers[towerID].target := detectedTarget
 
             if (detectedTarget == target) {
-                LogToConsole("Successfully changed tower's target to " target)
+                LogToConsole("Successfully changed tower's target to " target towerCoords)
                 break
             }
         }
@@ -5745,8 +5748,9 @@ ChangeTargets(towerID, target) {
 CloneTower(towerId, x, y, wait := 0) {
     global Towers, unfocusX, unfocusY, LastOpenedTowerID, CancelPlacementKey, HologramKey, Recording, canUseAbility
 
+    cloneCoords := LogCoords(x, y)
     if (!Towers.Has(towerID)) {
-        LogToConsole("Tower " towerID " not found!")
+        LogToConsole("Tower " towerID " not found!" cloneCoords)
         return false
     }
 
@@ -5775,7 +5779,7 @@ CloneTower(towerId, x, y, wait := 0) {
 
         if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/hologram_tower_cooldown.png"
         ) || ReadMessage(["hologram", "ability", "is on", "cooldown", "hol%ram%", "ility"])) {
-            LogToConsole("Failed to clone " towerId "! (hologram cooldown) Retrying again in 5 seconds...")
+            LogToConsole("Failed to clone " towerId "! (hologram cooldown) Retrying again in 5 seconds..." cloneCoords)
             canUseAbility := true
             Sleep 4650
             canUseAbility := false
@@ -5825,7 +5829,7 @@ CloneTower(towerId, x, y, wait := 0) {
 
         if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/no_cash_cloning.png") ||
             ReadMessage(["don't", "have", "enough", "cash", "clone", "this"])) {
-            LogToConsole("Failed to clone " towerId "! (no cash) Retrying again in 5 seconds...")
+            LogToConsole("Failed to clone " towerId "! (no cash) Retrying again in 5 seconds..." cloneCoords)
             canUseAbility := true
             Sleep 4650
             canUseAbility := false
@@ -5834,7 +5838,7 @@ CloneTower(towerId, x, y, wait := 0) {
 
         openedUI := waitForTowerUI(, , 500)
         if (openedUI) {
-            LogToConsole("Failed to clone tower: accidentally opened upgrade ui! Retrying again..")
+            LogToConsole("Failed to clone tower: accidentally opened upgrade ui! Retrying again.." cloneCoords)
             Click(ScaleX(unfocusX), ScaleY(unfocusY))
             Sleep(500)
             continue
@@ -5856,7 +5860,7 @@ CloneTower(towerId, x, y, wait := 0) {
         if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/stunned.png") ||
             ReadMessage(["error", "that", "cannot", "cann", "activated", "while", "stunned"], , ["need", "more", "to"],
                 "\$|\d")) {
-            LogToConsole("Failed to clone " towerId "! (hacker is stunned) Retrying again in 5 seconds...")
+            LogToConsole("Failed to clone " towerId "! (hacker is stunned) Retrying again in 5 seconds..." cloneCoords)
             canUseAbility := true
             Sleep 4650
             canUseAbility := false
@@ -5866,13 +5870,13 @@ CloneTower(towerId, x, y, wait := 0) {
         if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/cannot_place_here.png") ||
             ReadMessage(["cannot", "here", "hereg", "herd", "her", "here!", "cann", "cannd", "he", "h", "hed"], , ["need",
                 "more", "to"], "\$|\d")) {
-            LogToConsole("Failed to clone " towerId "! (cannot place here!) Retrying again in 5 seconds...")
+            LogToConsole("Failed to clone " towerId "! (cannot place here!) Retrying again in 5 seconds..." cloneCoords)
             canUseAbility := true
             Sleep 4650
             canUseAbility := false
             continue
         } else {
-            LogToConsole("Successfully cloned tower " towerId ".")
+            LogToConsole("Successfully cloned tower " towerId "." cloneCoords)
             break
         }
     }
@@ -5887,7 +5891,7 @@ BrawlerReposition(towerId, x, y) {
     canUseAbility := false
     try {
         if (!Towers.Has(towerID)) {
-            LogToConsole("Tower " towerID " not found!")
+            LogToConsole("Tower " towerID " not found!" LogCoords(x, y))
             return false
         }
 
@@ -5910,7 +5914,7 @@ BrawlerReposition(towerId, x, y) {
                     break
                 attempts++
                 if (attempts > 30) {
-                    LogToConsole("Tower " towerID " menu not found after 30 attempts.")
+                    LogToConsole("Tower " towerID " menu not found after 30 attempts." TowerLogCoords(towerId))
                     return false
                 }
                 variation := Random(-4, 4)
@@ -5930,7 +5934,7 @@ BrawlerReposition(towerId, x, y) {
             if (ImageSearch(&fx, &fy, x1, y1, x2, y2, "*Trans000000 *50 " A_WorkingDir "/Resources/reposition_cooldown.png")
                 || ReadMessage(["reposition", "ability", "is on", "cooldown", "ility"])) {
                 if (A_TickCount >= abilityDeadline) {
-                    LogToConsole("Brawler Reposition stayed on cooldown too long.")
+                    LogToConsole("Brawler Reposition stayed on cooldown too long." LogCoords(x, y))
                     return false
                 }
                 Sleep 4500
@@ -5944,7 +5948,7 @@ BrawlerReposition(towerId, x, y) {
             Towers[towerId].x := result.x
             Towers[towerId].y := result.y
             UpdateTowerIndicator(towerId)
-            LogToConsole("Successfully repositioned " towerId " to " result.x ", " result.y ".")
+            LogToConsole("Successfully repositioned " towerId " to " result.x ", " result.y "." LogCoords(result.x, result.y))
             return true
         }
     } finally {
@@ -5957,12 +5961,12 @@ EnforcerReposition(sourceID, targetID, x, y) {
     global canUseAbility, canBeUpgraded, needtocheckTowerUI
 
     if !Towers.Has(sourceID) || !Towers.Has(targetID) {
-        LogToConsole("Enforcer Reposition failed: source or target tower is missing.")
+        LogToConsole("Enforcer Reposition failed: source or target tower is missing." LogCoords(x, y))
         return false
     }
 
     if !IsEnforcerRuntimeTower(sourceID) || Towers[sourceID].path != 1 || Towers[sourceID].level < 5 {
-        LogToConsole("Enforcer Reposition requires a top-path Enforcer at level 5 or higher.")
+        LogToConsole("Enforcer Reposition requires a top-path Enforcer at level 5 or higher." TowerLogCoords(sourceID))
         return false
     }
 
@@ -5982,7 +5986,7 @@ EnforcerReposition(sourceID, targetID, x, y) {
             while !waitForTowerUI() {
                 attempts++
                 if attempts > 30 {
-                    LogToConsole("Enforcer Reposition failed: source tower menu did not open.")
+                    LogToConsole("Enforcer Reposition failed: source tower menu did not open." TowerLogCoords(sourceID))
                     return false
                 }
                 Click(Towers[sourceID].x, Towers[sourceID].y + ScaleY(Random(-4, 4)))
@@ -5995,7 +5999,7 @@ EnforcerReposition(sourceID, targetID, x, y) {
             unavailable := EnforcerRepositionUnavailable()
             if (unavailable != "") {
                 if (A_TickCount >= abilityDeadline) {
-                    LogToConsole("Enforcer Reposition unavailable: " unavailable ".")
+                    LogToConsole("Enforcer Reposition unavailable: " unavailable "." TowerLogCoords(sourceID))
                     return false
                 }
                 Sleep(unavailable = "cash" ? 2500 : 4500)
@@ -6010,7 +6014,7 @@ EnforcerReposition(sourceID, targetID, x, y) {
         Sleep(350)
 
         if IsTargetTowerMoveRejected() {
-            LogToConsole("Enforcer Reposition failed: TDS rejected target tower " targetID ".")
+            LogToConsole("Enforcer Reposition failed: TDS rejected target tower " targetID "." TowerLogCoords(targetID))
             return false
         }
 
@@ -6021,7 +6025,7 @@ EnforcerReposition(sourceID, targetID, x, y) {
         Towers[targetID].x := result.x
         Towers[targetID].y := result.y
         UpdateTowerIndicator(targetID)
-        LogToConsole("Successfully repositioned " targetID " with " sourceID " to " result.x ", " result.y ".")
+        LogToConsole("Successfully repositioned " targetID " with " sourceID " to " result.x ", " result.y "." LogCoords(result.x, result.y))
         return true
     } finally {
         canUseAbility := true
@@ -6038,9 +6042,11 @@ ActivateEnforcerVan(wait := 0) {
         Sleep(wait)
 
     foundBottomEnforcer := false
+    vanCoords := ""
     for towerID, tower in Towers {
         if IsEnforcerRuntimeTower(towerID) && tower.path = 2 && tower.level >= 5 {
             foundBottomEnforcer := true
+            vanCoords := LogCoords(tower.x, tower.y)
             break
         }
     }
@@ -6065,7 +6071,7 @@ ActivateEnforcerVan(wait := 0) {
 
             if EnforcerVanOnCooldown() {
                 if A_Index = 3 {
-                    LogToConsole("SWAT Van is still on cooldown after 3 attempts.")
+                    LogToConsole("SWAT Van is still on cooldown after 3 attempts." vanCoords)
                     return false
                 }
                 Sleep(5000)
@@ -6074,14 +6080,14 @@ ActivateEnforcerVan(wait := 0) {
 
             if IsAbilityStunnedMessage() {
                 if A_Index = 3 {
-                    LogToConsole("SWAT Van could not activate because the tower is stunned.")
+                    LogToConsole("SWAT Van could not activate because the tower is stunned." vanCoords)
                     return false
                 }
                 Sleep(4500)
                 continue
             }
 
-            LogToConsole("Activated Enforcer SWAT Van")
+            LogToConsole("Activated Enforcer SWAT Van" vanCoords)
             return true
         }
     } finally {
@@ -6196,7 +6202,7 @@ TryRepositionDestination(towerID, baseX, baseY, label := "Reposition") {
             nudge := ApplyRuntimePlacementSafePitch()
             pitchRecovered := true
             RuntimeLogInfo("reposition_camera_pitch_recovery", "Adjusted camera pitch after TDS rejected reposition",
-                "tower=" towerID "; label=" label "; nudge_px=" nudge "; x=" px "; y=" py)
+                "tower=" towerID "; label=" label "; nudge_px=" nudge "; x=" px "; y=" py LogCoords(px, py))
             Sleep(300)
             MouseMove(px, py)
             Sleep(80)
@@ -6208,7 +6214,7 @@ TryRepositionDestination(towerID, baseX, baseY, label := "Reposition") {
     }
 
     SendEvent("{" CancelPlacementKey "}")
-    LogToConsole(label " reposition failed after bounded placement recovery.")
+    LogToConsole(label " reposition failed after bounded placement recovery." LogCoords(baseX, baseY))
     return { ok: false, x: baseX, y: baseY, pitchRecovered: pitchRecovered }
 }
 
@@ -6252,7 +6258,7 @@ ActivateRaiseTheDead(wait := 0) {
     }
 
     SendEvent("{" RaiseDeadKey "}")
-    LogToConsole("Successfully activated 'Raise the Dead'")
+    LogToConsole("Successfully activated 'Raise the Dead'" TowerTypeLogCoords("Necromancer"))
 }
 
 OnKeyDown(ih, vk, sc) {
@@ -6483,7 +6489,7 @@ SelectPath(pathGui, pathNum) {
     Towers[towerID].path := pathNum
     Towers[towerID].pathLevel := branchLevel
     UpdateTowerIndicator(towerID)
-    LogToConsole("Tower " towerID " set to path " pathNum " starting at level " branchLevel)
+    LogToConsole("Tower " towerID " set to path " pathNum " starting at level " branchLevel TowerLogCoords(towerID))
 }
 
 TestWebhook(ctrl, *) {
@@ -7842,8 +7848,10 @@ PlayStrategy() {
             if !ExecuteStep(step) {
                 if (IsSet(RunningStrategy) && !RunningStrategy)
                     return false
+                stepCoords := RegExMatch(step, "i)SpawnTower\s*\(\s*(\d+)\s*,\s*(\d+)", &sm)
+                    ? LogCoords(sX(sm[1], StrategyWidth), sY(sm[2], StrategyHeight)) : ""
                 RuntimeLogWarn("placement_step_failed", "Placement did not complete; continuing with the next step",
-                    "step=" i)
+                    "step=" i stepCoords)
             }
             i++
         } else {
@@ -10214,10 +10222,13 @@ SpawnTower(X, Y, slotNumber, towerID) {
     global RunningStrategy, needtocheckTowerUI, unfocusX, unfocusY
     if (IsSet(RunningStrategy) && !RunningStrategy)
         return false
-    LogToConsole("Placing tower " towerID " (slot " slotNumber ") at x:" X " y:" Y "...")
+    recordedX := X
+    recordedY := Y
 
     X := sX(X, StrategyWidth)
     Y := sY(Y, StrategyHeight)
+    placeCoords := LogCoords(X, Y)
+    LogToConsole("Placing tower " towerID " (slot " slotNumber ") at x:" recordedX " y:" recordedY "..." placeCoords)
 
     getRobloxPos(, , , &h)
     TowerY := Y
@@ -10245,7 +10256,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
         }
 
         if (A_TickCount - startTime > 300000) {
-            LogToConsole("Tower placement timed out (5+ minutes). Reloading the macro...")
+            LogToConsole("Tower placement timed out (5+ minutes). Reloading the macro..." placeCoords)
             SafeReload()
             return false
         }
@@ -10262,9 +10273,9 @@ SpawnTower(X, Y, slotNumber, towerID) {
         }
 
         if (currentX = "") {
-            LogToConsole("Tower " towerID " has no untried placement positions left.", true)
+            LogToConsole("Tower " towerID " has no untried placement positions left." placeCoords, true)
             RuntimeLogWarn("placement_targets_exhausted", "Every candidate placement position was rejected",
-                "tower=" towerID "; attempts=" placeAttempts)
+                "tower=" towerID "; attempts=" placeAttempts placeCoords)
             SendEvent("{" CancelPlacementKey "}")
             canUseAbility := true
             return false
@@ -10272,14 +10283,15 @@ SpawnTower(X, Y, slotNumber, towerID) {
 
         placeAttempts++
         if (placeAttempts > maxPlacementAttempts) {
-            LogToConsole("Tower " towerID " placement exceeded the bounded retry budget.", true)
+            LogToConsole("Tower " towerID " placement exceeded the bounded retry budget." placeCoords, true)
             RuntimeLogWarn("placement_retry_exhausted", "Placement stopped after bounded retries",
-                "tower=" towerID "; attempts=" (placeAttempts - 1))
+                "tower=" towerID "; attempts=" (placeAttempts - 1) placeCoords)
             SendEvent("{" CancelPlacementKey "}")
             canUseAbility := true
             return false
         }
 
+        placeCoords := LogCoords(currentX, currentY)
         ActivateRoblox()
 
         if (needsHotbarSelection) {
@@ -10289,9 +10301,9 @@ SpawnTower(X, Y, slotNumber, towerID) {
                 if !WaitForTowerUIClosed(2500) {
                     Towers[towerID] := { x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0,
                         target: "First Enemy", pendingPlacement: true }
-                    LogToConsole("Tower " towerID " placement is still uncertain; existing tower UI did not close. Continuing without another click.", true)
+                    LogToConsole("Tower " towerID " placement is still uncertain; existing tower UI did not close. Continuing without another click." placeCoords, true)
                     RuntimeLogWarn("placement_pending_precondition", "Prior tower panel stayed visible during placement precondition",
-                        "tower=" towerID)
+                        "tower=" towerID placeCoords)
                     SendEvent("{" CancelPlacementKey "}")
                     canUseAbility := true
                     return true
@@ -10303,7 +10315,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
             if UseNumbersForHotbar {
                 Send("{" slotNumber "}")
             } else if !SelectHotbarSlotByClick(slotNumber) {
-                LogToConsole("Hotbar slot " slotNumber " could not be resolved; retrying placement...")
+                LogToConsole("Hotbar slot " slotNumber " could not be resolved; retrying placement..." placeCoords)
                 targetIndex--
                 Sleep(500)
                 continue
@@ -10314,7 +10326,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
         }
 
         if (placeAttempts > 1)
-            LogToConsole("Retrying tower " towerID " at untried position x:" currentX " y:" currentY "...")
+            LogToConsole("Retrying tower " towerID " at untried position x:" currentX " y:" currentY "..." placeCoords)
 
         MouseMove(currentX, currentY, A_DefaultMouseSpeed)
         Sleep((PotatoMode = 1) ? 100 : 40)
@@ -10325,7 +10337,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
         placedSuccessfully := waitForTowerUI(&resV2, , 5000)
 
         if (!placedSuccessfully) {
-            placementStatus := ResolvePlacementAmbiguity(towerID, &resV2)
+            placementStatus := ResolvePlacementAmbiguity(towerID, &resV2, placeCoords)
             if (placementStatus = "success") {
                 placedSuccessfully := true
             } else if (placementStatus = "cancelled") {
@@ -10333,10 +10345,10 @@ SpawnTower(X, Y, slotNumber, towerID) {
                 return false
             } else if (placementStatus = "funds") {
                 samePositionAttempts := 0
-                LogToConsole("Tower " towerID " is waiting for enough cash; keeping the recorded position.")
+                LogToConsole("Tower " towerID " is waiting for enough cash; keeping the recorded position." placeCoords)
                 RuntimeLogInfo("placement_waiting_for_funds",
                     "Placement was blocked by insufficient funds, so coordinates were preserved",
-                    "tower=" towerID "; x=" currentX "; y=" currentY)
+                    "tower=" towerID "; x=" currentX "; y=" currentY placeCoords)
                 SendEvent("{" CancelPlacementKey "}")
                 needsHotbarSelection := true
                 targetIndex--
@@ -10346,10 +10358,10 @@ SpawnTower(X, Y, slotNumber, towerID) {
             } else if (placementStatus = "unknown") {
                 if (samePositionAttempts < maxSameSpotRetries) {
                     samePositionAttempts++
-                    LogToConsole("Tower " towerID " placement is unconfirmed; keeping the recorded spot.")
+                    LogToConsole("Tower " towerID " placement is unconfirmed; keeping the recorded spot." placeCoords)
                     RuntimeLogInfo("placement_retry_same_position",
                         "Placement was unconfirmed without a space rejection, so the recorded position is kept",
-                        "tower=" towerID "; x=" currentX "; y=" currentY "; attempt=" samePositionAttempts)
+                        "tower=" towerID "; x=" currentX "; y=" currentY "; attempt=" samePositionAttempts placeCoords)
                     SendEvent("{" CancelPlacementKey "}")
                     needsHotbarSelection := true
                     targetIndex--
@@ -10358,17 +10370,17 @@ SpawnTower(X, Y, slotNumber, towerID) {
                     continue
                 }
 
-                LogToConsole("Tower " towerID " placement could not be confirmed; stopping rather than shifting the strategy.", true)
+                LogToConsole("Tower " towerID " placement could not be confirmed; stopping rather than shifting the strategy." placeCoords, true)
                 RuntimeLogWarn("placement_unknown_exhausted",
                     "Placement remained unknown after bounded same-position retries; coordinates were not changed",
-                    "tower=" towerID "; x=" currentX "; y=" currentY "; attempts=" samePositionAttempts)
+                    "tower=" towerID "; x=" currentX "; y=" currentY "; attempts=" samePositionAttempts placeCoords)
                 SendEvent("{" CancelPlacementKey "}")
                 canUseAbility := true
                 return false
             } else if (placementStatus = "space") {
                 RuntimeLogInfo("placement_space_rejected",
                     "TDS explicitly rejected the recorded position; trying the next bounded offset",
-                    "tower=" towerID "; x=" currentX "; y=" currentY)
+                    "tower=" towerID "; x=" currentX "; y=" currentY placeCoords)
             }
         }
 
@@ -10378,12 +10390,12 @@ SpawnTower(X, Y, slotNumber, towerID) {
                 storedY := currentY - ScaleY(5)
             Towers[towerID] := { x: currentX, y: storedY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0,
                 target: "First Enemy" }
-            LogToConsole("Tower " towerID " placed successfully")
+            LogToConsole("Tower " towerID " placed successfully" placeCoords)
             LastOpenedTowerID := towerID
             break
         }
 
-        LogToConsole("Cannot place tower " towerID " at x:" currentX " y:" currentY ". Trying a different spot...")
+        LogToConsole("Cannot place tower " towerID " at x:" currentX " y:" currentY ". Trying a different spot..." placeCoords)
         rejectedPositions[PlacementPositionKey(currentX, currentY)] := true
         SendEvent("{" CancelPlacementKey "}")
         needsHotbarSelection := true
@@ -10397,6 +10409,28 @@ SpawnTower(X, Y, slotNumber, towerID) {
 
 PlacementPositionKey(px, py) {
     return Round(px) "," Round(py)
+}
+
+LogCoords(px, py) {
+    return " (" Round(px) ", " Round(py) ")"
+}
+
+TowerLogCoords(towerID) {
+    global Towers
+    try {
+        if (Towers.Has(towerID) && HasProp(Towers[towerID], "x") && HasProp(Towers[towerID], "y"))
+            return LogCoords(Towers[towerID].x, Towers[towerID].y)
+    }
+    return ""
+}
+
+TowerTypeLogCoords(towerType, minLevel := 0) {
+    global Towers
+    for id, t in Towers {
+        if (t.level >= minLevel && RuntimeTowerType(id) = towerType)
+            return TowerLogCoords(id)
+    }
+    return ""
 }
 
 BuildPlacementTargets(baseX, baseY) {
@@ -10460,7 +10494,7 @@ GetPlacementFailureReason() {
     return "unknown"
 }
 
-ResolvePlacementAmbiguity(towerID, &resV2) {
+ResolvePlacementAmbiguity(towerID, &resV2, placeCoords := "") {
     global RunningStrategy
 
     passiveDeadline := A_TickCount + 2500
@@ -10482,7 +10516,7 @@ ResolvePlacementAmbiguity(towerID, &resV2) {
         return failureReason
 
     RuntimeLogWarn("placement_ambiguous", "Placement remained unresolved after passive re-verification",
-        "tower=" towerID)
+        "tower=" towerID placeCoords)
     return "unknown"
 }
 
@@ -10496,10 +10530,11 @@ SellTower(towerID) {
         return false
     }
 
-    LogToConsole("Selling tower " towerID "...")
-    needtocheckTowerUI := true
     targetX := Towers[towerID].x
     targetY := Towers[towerID].y
+    sellCoords := LogCoords(targetX, targetY)
+    LogToConsole("Selling tower " towerID "..." sellCoords)
+    needtocheckTowerUI := true
     Click(targetX, targetY)
     Sleep(400)
 
@@ -10512,9 +10547,9 @@ SellTower(towerID) {
         if (!menuFound) {
             attempts++
             if (attempts > 15) {
-                LogToConsole("Tower " towerID " menu not found for selling", true)
+                LogToConsole("Tower " towerID " menu not found for selling" sellCoords, true)
                 RuntimeLogWarn("sell_menu_missing", "The tower panel never opened for a sell step",
-                    "tower=" towerID)
+                    "tower=" towerID sellCoords)
                 return false
             }
             variation := Random(-10, 10)
@@ -10528,9 +10563,9 @@ SellTower(towerID) {
         if (!IsObject(sellButton)) {
             sellAttempts++
             if (sellAttempts > 8) {
-                LogToConsole("Tower " towerID " was not sold: the Sell button could not be located.", true)
+                LogToConsole("Tower " towerID " was not sold: the Sell button could not be located." sellCoords, true)
                 RuntimeLogWarn("sell_button_missing", "The Sell label was not found inside the open tower panel",
-                    "tower=" towerID)
+                    "tower=" towerID sellCoords)
                 return false
             }
             Sleep(200)
@@ -10544,9 +10579,9 @@ SellTower(towerID) {
         if (!WaitForTowerUIClosed(1200)) {
             sellAttempts++
             if (sellAttempts > 8) {
-                LogToConsole("Tower " towerID " sell was not confirmed; the tower panel stayed open.", true)
+                LogToConsole("Tower " towerID " sell was not confirmed; the tower panel stayed open." sellCoords, true)
                 RuntimeLogWarn("sell_unconfirmed", "The tower panel remained open after the Sell button was clicked",
-                    "tower=" towerID)
+                    "tower=" towerID sellCoords)
                 SellTowerForget(towerID)
                 return false
             }
@@ -10554,7 +10589,7 @@ SellTower(towerID) {
             continue
         }
 
-        LogToConsole("Tower " towerID " sold successfully")
+        LogToConsole("Tower " towerID " sold successfully" sellCoords)
         SellTowerForget(towerID)
         return true
     }
@@ -10611,6 +10646,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
     targetX := Towers[towerID].x
     targetY := Towers[towerID].y
+    upgradeCoords := LogCoords(targetX, targetY)
 
     if (!skipOpen && LastOpenedTowerID != towerID) {
         canUseAbility := false
@@ -10641,9 +10677,9 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
         openedSuccessfully := false
 
         if (A_TickCount - upgradeDeadline > 300000) {
-            LogToConsole("Tower " towerID " could not be upgraded within 5 minutes. Skipping step.", true)
+            LogToConsole("Tower " towerID " could not be upgraded within 5 minutes. Skipping step." upgradeCoords, true)
             RuntimeLogWarn("upgrade_timeout", "Upgrade step abandoned",
-                "tower=" towerID "; done=" upgradesDone "/" totalUpgrades)
+                "tower=" towerID "; done=" upgradesDone "/" totalUpgrades upgradeCoords)
             canUseAbility := true
             return false
         }
@@ -10665,8 +10701,8 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                 if (attempts > 30) {
                     menuRecoveryCount++
                     RuntimeLogWarn("upgrade_menu_recovery", "Tower menu could not be verified; resetting local selection",
-                        "tower=" towerID "; recovery=" menuRecoveryCount "/3; done=" upgradesDone "/" totalUpgrades)
-                    LogToConsole("Tower " towerID " menu was not found; resetting its selection (" menuRecoveryCount "/3)...", true)
+                        "tower=" towerID "; recovery=" menuRecoveryCount "/3; done=" upgradesDone "/" totalUpgrades upgradeCoords)
+                    LogToConsole("Tower " towerID " menu was not found; resetting its selection (" menuRecoveryCount "/3)..." upgradeCoords, true)
                     attempts := 0
                     canUseAbility := false
                     Click(ScaleX(unfocusX), ScaleY(unfocusY))
@@ -10678,8 +10714,8 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                     canUseAbility := true
                     if (menuRecoveryCount >= 3) {
                         RuntimeLogWarn("upgrade_menu_unavailable", "Upgrade step skipped without reloading the macro",
-                            "tower=" towerID "; done=" upgradesDone "/" totalUpgrades)
-                        LogToConsole("Tower " towerID " menu stayed unavailable; skipping this upgrade step without restarting the run.", true)
+                            "tower=" towerID "; done=" upgradesDone "/" totalUpgrades upgradeCoords)
+                        LogToConsole("Tower " towerID " menu stayed unavailable; skipping this upgrade step without restarting the run." upgradeCoords, true)
                         return false
                     }
                     continue
@@ -10778,24 +10814,24 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                 } else if (upgradeActionAttempts < 2 && HasStableUpgradeAffordance(XA, YA, X2, Y2)) {
                     upgradeActionAttempts++
                     RuntimeLogWarn("upgrade_retry", "Upgrade was not confirmed; retrying within bounded budget",
-                        "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts)
+                        "tower=" towerID "; next_level=" nextLevel "; attempt=" upgradeActionAttempts upgradeCoords)
                     canUseAbility := true
                     needtocheckTowerUI := true
                     Sleep(250)
                     continue
                 } else {
-                    LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state.", true)
+                    LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state." upgradeCoords, true)
                     RuntimeLogWarn("upgrade_ambiguous", "Upgrade input did not produce sufficient post-action evidence after bounded retries",
-                        "tower=" towerID "; next_level=" nextLevel)
+                        "tower=" towerID "; next_level=" nextLevel upgradeCoords)
                     canUseAbility := true
                     return false
                 }
             }
 
             if (afterEvidence = "" || beforeEvidence = afterEvidence) {
-                LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state.", true)
+                LogToConsole("Tower " towerID " upgrade was not confirmed; refusing to advance internal state." upgradeCoords, true)
                 RuntimeLogWarn("upgrade_ambiguous", "Upgrade evidence remained unchanged after passive verification",
-                    "tower=" towerID "; next_level=" nextLevel)
+                    "tower=" towerID "; next_level=" nextLevel upgradeCoords)
                 canUseAbility := true
                 return false
             }
@@ -10806,7 +10842,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
                 Towers[towerID].pendingPlacement := false
             upgradesDone++
             MacroPhase("playing_upgrade_progress", 900000)
-            LogToConsole("Tower " towerID " upgraded to level " Towers[towerID].level " (" upgradesDone "/" totalUpgrades ")"
+            LogToConsole("Tower " towerID " upgraded to level " Towers[towerID].level " (" upgradesDone "/" totalUpgrades ")" upgradeCoords
             )
             UpdateTowerIndicator(towerID)
 
@@ -10829,7 +10865,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
         if (A_TickCount - maxLevelChecked > 3000) {
             maxLevelChecked := A_TickCount
             if (AdvancedImageSearch("Resources/fully_upgraded.png", XA, YA, WA, HA).score >= 0.69) {
-                LogToConsole("Tower " towerID " is already fully upgraded, moving on.")
+                LogToConsole("Tower " towerID " is already fully upgraded, moving on." upgradeCoords)
                 if Towers[towerID].HasProp("pendingPlacement")
                     Towers[towerID].pendingPlacement := false
                 canUseAbility := true
@@ -10840,8 +10876,8 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
         if (A_TickCount >= nextWaitLog) {
             waitedSeconds := Round((A_TickCount - upgradeDeadline) / 1000)
             RuntimeLogInfo("upgrade_waiting", "Waiting for upgrade availability",
-                "tower=" towerID "; waited_s=" waitedSeconds "; done=" upgradesDone "/" totalUpgrades)
-            LogToConsole("Waiting to upgrade " towerID " (cash or upgrade button unavailable, " waitedSeconds "s)...")
+                "tower=" towerID "; waited_s=" waitedSeconds "; done=" upgradesDone "/" totalUpgrades upgradeCoords)
+            LogToConsole("Waiting to upgrade " towerID " (cash or upgrade button unavailable, " waitedSeconds "s)..." upgradeCoords)
             nextWaitLog := A_TickCount + 15000
         }
 
@@ -11044,7 +11080,7 @@ UseAbilitiesPass() {
         }
         LastChainTime := A_TickCount
         SendEvent("{" ChainKey "}")
-        LogToConsole("Activated Call of Arms")
+        LogToConsole("Activated Call of Arms" TowerTypeLogCoords("Commander", 2))
         canUseAbility := true
         if (LastOpenedTowerID != "" && Towers.Has(LastOpenedTowerID)) {
             Click(Towers[LastOpenedTowerID].x, Towers[LastOpenedTowerID].y)
@@ -11075,7 +11111,7 @@ UseAbilitiesPass() {
             }
             LastCaravanTime := A_TickCount
             SendEvent("{" CaravanKey "}")
-            LogToConsole("Activated Support Caravan")
+            LogToConsole("Activated Support Caravan" TowerTypeLogCoords("Commander", 4))
             if (LastOpenedTowerID != "" && Towers.Has(LastOpenedTowerID)) {
                 Click(Towers[LastOpenedTowerID].x, Towers[LastOpenedTowerID].y)
                 Sleep 400
@@ -11111,13 +11147,13 @@ UseAbilitiesPass() {
                 ReadMessage(["error", "that", "cannot", "cann", "activated", "while", "stunned"], , ["need", "more", "to"],
                     "\$|\d")) {
                 if (A_Index = 3) {
-                    LogToConsole("Drop the Beat still stunned after 3 attempts, will retry next cycle")
+                    LogToConsole("Drop the Beat still stunned after 3 attempts, will retry next cycle" TowerLogCoords("DJ"))
                     break
                 }
-                LogToConsole("Failed to use Drop the Beat! The tower is stunned! Retrying...")
+                LogToConsole("Failed to use Drop the Beat! The tower is stunned! Retrying..." TowerLogCoords("DJ"))
                 Sleep 4400
             } else {
-                LogToConsole("Successfully used Drop the Beat")
+                LogToConsole("Successfully used Drop the Beat" TowerLogCoords("DJ"))
                 break
             }
         }
@@ -11160,17 +11196,18 @@ SetDJTrack(track) {
         return false
     }
 
+    djCoords := TowerLogCoords("DJ")
     cleanTrack := StrReplace(track, Chr(34), "")
     cleanTrack := StrReplace(cleanTrack, "'", "")
     trackName := Format("{:L}", Trim(cleanTrack))
     trackImage := "Resources\" trackName ".png"
     if (trackName = "" || !FileExist(trackImage)) {
-        LogToConsole("Unknown DJ track/color: " track, true)
-        RuntimeLogWarn("dj_track_invalid", "DJ track image is unavailable", "track=" trackName)
+        LogToConsole("Unknown DJ track/color: " track djCoords, true)
+        RuntimeLogWarn("dj_track_invalid", "DJ track image is unavailable", "track=" trackName djCoords)
         return false
     }
 
-    LogToConsole("Setting DJ track to " track "...")
+    LogToConsole("Setting DJ track to " track "..." djCoords)
     canUseAbility := false
     needtocheckTowerUI := true
     mouseCaptured := false
@@ -11191,9 +11228,9 @@ SetDJTrack(track) {
         loop {
             attempts++
             if (A_TickCount >= deadline) {
-                LogToConsole("Could not change DJ track to " track " within 25 seconds.", true)
+                LogToConsole("Could not change DJ track to " track " within 25 seconds." djCoords, true)
                 RuntimeLogWarn("dj_track_timeout", "DJ track control was not reliably detected",
-                    "track=" trackName "; attempts=" attempts)
+                    "track=" trackName "; attempts=" attempts djCoords)
                 return false
             }
 
@@ -11218,7 +11255,7 @@ SetDJTrack(track) {
                 Sleep(350)
 
                 if DJTrackCooldownActive(w, h) {
-                    LogToConsole("DJ track is on cooldown. Waiting and retrying...")
+                    LogToConsole("DJ track is on cooldown. Waiting and retrying..." djCoords)
                     remainingMs := deadline - A_TickCount
                     if (remainingMs <= 250)
                         continue
@@ -11237,7 +11274,7 @@ SetDJTrack(track) {
                 ) {
                     RuntimeLogInfo("dj_track_confirmation_retry",
                         "DJ track control remained stable after the first click; sending one confirmation click",
-                        "track=" trackName "; attempt=" attempts)
+                        "track=" trackName "; attempt=" attempts djCoords)
                     ActivateRoblox()
                     MouseMove(confirmTrack.x, confirmTrack.y, A_DefaultMouseSpeed)
                     Sleep(80)
@@ -11245,17 +11282,17 @@ SetDJTrack(track) {
                     Sleep(300)
 
                     if DJTrackCooldownActive(w, h) {
-                        LogToConsole("Successfully changed DJ track to " track)
+                        LogToConsole("Successfully changed DJ track to " track djCoords)
                         RuntimeLogInfo("dj_track_changed",
                             "DJ track selection confirmed by cooldown on the bounded verification click",
-                            "track=" trackName "; attempts=" attempts)
+                            "track=" trackName "; attempts=" attempts djCoords)
                         return true
                     }
                 }
 
-                LogToConsole("Successfully changed DJ track to " track)
+                LogToConsole("Successfully changed DJ track to " track djCoords)
                 RuntimeLogInfo("dj_track_changed", "DJ track selection completed after bounded UI verification",
-                    "track=" trackName "; attempts=" attempts)
+                    "track=" trackName "; attempts=" attempts djCoords)
                 return true
             }
 
