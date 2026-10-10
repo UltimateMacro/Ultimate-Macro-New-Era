@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="348" viewBox="0 0 1200 348" role="img" aria-labelledby="title desc">
+<title id="title">Ultimate Macro: The New Era</title>
+<desc id="desc">Official open-source Tower Defense Simulator automation project</desc>
+<rect x="1" y="1" width="1198" height="346" rx="24" fill="#10151d" stroke="#2c3949" stroke-width="2"/>
+<path d="M1020 40c-38 28-62 73-62 120 0 67 49 123 114 132-21 10-44 15-68 15-78 0-141-63-141-141s63-141 141-141c6 0 11 0 16 1z" fill="#293549" opacity=".48"/>
+<circle cx="1044" cy="93" r="56" fill="#dfe7f2"/>
+<circle cx="1075" cy="68" r="57" fill="#10151d"/>
+<path d="m1120 92 6.5 16.5L1143 115l-16.5 6.5L1120 138l-6.5-16.5L1097 115l16.5-6.5z" fill="#dfe7f2"/>
+<path d="m930 173 3 7.5 7.5 3-7.5 3-3 7.5-3-7.5-7.5-3 7.5-3z" fill="#9baec3"/>
+<path d="M68 76h35" stroke="#b1c5df" stroke-width="4" stroke-linecap="round"/>
+<text x="118" y="81" font-family="Arial, Helvetica, sans-serif" font-size="19" letter-spacing="4.5" font-weight="600" fill="#a5b8cd">THE NEW ERA</text>
+<text x="68" y="170" font-family="Arial, Helvetica, sans-serif" font-size="69" font-weight="750" letter-spacing="-2.5" fill="#f3f6fa">Ultimate Macro</text>
+<text x="70" y="221" font-family="Arial, Helvetica, sans-serif" font-size="27" fill="#b9c8d8">Automate TDS. Keep the strategy.</text>
+<path d="M68 263h568" stroke="#344255" stroke-width="1"/>
+<text x="70" y="299" font-family="Arial, Helvetica, sans-serif" font-size="17" letter-spacing="1.5" fill="#879db3">FREE  •  OPEN SOURCE  •  WINDOWS</text>
+</svg>
