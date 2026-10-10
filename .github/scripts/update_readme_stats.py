@@ -65,42 +65,30 @@ def read_state():
 
 def draw(stats):
     number = lambda n: f"{n:,}"
-    member_count = stats.get("discord_members")
-    member_fresh = stats.get("discord_members_fresh", False)
-    if member_count is None:
-        members_display = "Pending"
-        members_sub = "Discord count unavailable"
+    members = stats.get("discord_members")
+    if members is None:
+        members_display = "—"
+    elif stats.get("discord_members_fresh", False):
+        members_display = number(members)
     else:
-        members_display = number(member_count) if member_fresh else "~" + number(member_count)
-        members_sub = "Discord members (approx.)"
-    when = stats["updated_at"].replace("T", " ")[:16] + " UTC"
-    if member_fresh:
-        discord_note = "Discord invite API"
-    else:
-        last = stats.get("discord_members_checked_at", "unknown")[:10]
-        discord_note = f"member estimate last reported {last}"
-    # The artwork is deliberately static SVG: GitHub READMEs do not execute JS.
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
-<title id="title">Ultimate Macro community statistics</title>
-<desc id="desc">{number(stats['total_downloads'])} GitHub release downloads from Darksen and New Era, {html.escape(members_display)} Discord members, {number(stats['stars'])} GitHub stars. Updated {when}.</desc>
-<rect x="1" y="1" width="1198" height="298" rx="20" fill="#10151d" stroke="#2c3949" stroke-width="2"/>
-<path d="M400 40v190M800 40v190" stroke="#2c3949" stroke-width="2"/>
+        members_display = "~" + number(members)
+
+    when = stats["updated_at"]
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="215" viewBox="0 0 1200 215" role="img" aria-labelledby="title desc">
+<title id="title">Ultimate Macro community</title>
+<desc id="desc">{number(stats['total_downloads'])} GitHub release downloads across Darksen and The New Era, approximately {html.escape(members_display)} Discord members, {number(stats['stars'])} GitHub stars. Figures last changed {html.escape(when)}.</desc>
+<rect x="1" y="1" width="1198" height="213" rx="18" fill="#111821" stroke="#2f3a49" stroke-width="2"/>
+<path d="M400 35V178 M800 35V178" stroke="#324053" stroke-width="2"/>
 <g font-family="Arial, Helvetica, sans-serif">
-<text x="46" y="64" font-size="17" font-weight="700" letter-spacing="2" fill="#92a8bf">TRUSTED BY THE COMMUNITY</text>
-<text x="46" y="152" font-size="74" font-weight="700" fill="#f5f7fa">{number(stats['total_downloads'])}</text>
-<text x="47" y="195" font-size="21" fill="#c1cedd">GitHub release downloads</text>
-<text x="47" y="225" font-size="15" fill="#879cb2">Darksen + The New Era</text>
-<text x="446" y="64" font-size="17" font-weight="700" letter-spacing="2" fill="#92a8bf">COMMUNITY OF</text>
-<text x="446" y="152" font-size="74" font-weight="700" fill="#f5f7fa">{html.escape(members_display)}</text>
-<text x="447" y="195" font-size="21" fill="#c1cedd">{members_sub}</text>
-<text x="447" y="225" font-size="15" fill="#879cb2">{html.escape(discord_note)}</text>
-<text x="846" y="64" font-size="17" font-weight="700" letter-spacing="2" fill="#92a8bf">GITHUB STARS</text>
-<text x="846" y="152" font-size="74" font-weight="700" fill="#f5f7fa">{number(stats['stars'])}</text>
-<text x="847" y="195" font-size="21" fill="#c1cedd">On The New Era</text>
-<text x="847" y="225" font-size="15" fill="#879cb2">Public repository</text>
-<path d="M46 251h1108" stroke="#2c3949" stroke-width="1"/>
-<text x="46" y="278" font-size="14" fill="#879cb2">Download events, not unique users  ·  Counts refreshed about hourly</text>
-<text x="1154" y="278" text-anchor="end" font-size="13" fill="#879cb2">{html.escape(when)}</text>
+<text x="46" y="58" font-size="24" font-weight="600" fill="#b0c1d4">Trusted by the community</text>
+<text x="46" y="143" font-size="70" font-weight="700" fill="#f3f6fa">{number(stats['total_downloads'])}</text>
+<text x="47" y="182" font-size="23" fill="#b0c1d4">GitHub downloads</text>
+<text x="447" y="58" font-size="24" font-weight="600" fill="#b0c1d4">Community of</text>
+<text x="446" y="143" font-size="70" font-weight="700" fill="#f3f6fa">{html.escape(members_display)}</text>
+<text x="447" y="182" font-size="23" fill="#b0c1d4">Discord members</text>
+<text x="846" y="58" font-size="24" font-weight="600" fill="#b0c1d4">On GitHub</text>
+<text x="846" y="143" font-size="70" font-weight="700" fill="#f3f6fa">{number(stats['stars'])}</text>
+<text x="847" y="182" font-size="23" fill="#b0c1d4">Stars</text>
 </g>
 </svg>"""
     return svg + "\n"
@@ -137,6 +125,12 @@ def main():
         "discord_members_fresh": fresh,
         "updated_at": now,
     }
+    changed_fields = ("darksen_downloads", "new_era_downloads", "total_downloads",
+                      "counted_release_assets", "stars", "discord_members",
+                      "discord_members_fresh")
+    if IMAGE_PATH.exists() and all(old.get(key) == stats[key] for key in changed_fields):
+        print("Community counts unchanged; no commit needed")
+        return
     ASSETS.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(stats, indent=2) + "\n", encoding="utf-8")
     IMAGE_PATH.write_text(draw(stats), encoding="utf-8")
