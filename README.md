@@ -10,10 +10,10 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/community-stats.svg" width="100%" alt="Ultimate Macro GitHub release downloads, Discord members and GitHub stars">
+  <img src=".github/assets/community-stats.svg" width="760" alt="GitHub downloads from Darksen and The New Era, Discord community members, and GitHub stars">
 </p>
 
-<p align="center"><sub>GitHub download totals include <a href="https://github.com/DarksenDev/tds-macro/releases">Darksen's original releases</a> and <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">The New Era releases</a>. They represent downloads, not individual users.</sub></p>
+<p align="center"><strong><a href="LICENSE">Open source</a></strong> &nbsp;·&nbsp; <strong><a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">Official releases</a></strong> &nbsp;·&nbsp; <strong><a href="#the-team">Community-maintained</a></strong></p>
 
 ## What is Ultimate Macro?
 
@@ -23,13 +23,20 @@ The project was originally created by [Darksen](https://github.com/DarksenDev/td
 
 ### What can it do?
 
-| Feature | What it means for you |
-| --- | --- |
-| **Strategy playback** | Replay recorded tower placements, upgrades, sells, target changes, abilities and repositioning. |
-| **Repeated farming** | Run strategies with rotation, auto-skip, and re-entry after disconnects when supported. |
-| **Strategy tools** | Use community `.strat` files, manage profiles, and edit strategies in Strategy Lab. |
-| **Game setup** | Optional Auto Equip, Roblox settings configuration, party and VIP-server support. |
-| **Monitoring** | Optional Discord controls, webhooks, screenshots and diagnostic logs. |
+**Strategy playback**  
+Replay tower placements, upgrades, sells, abilities and repositioning.
+
+**Repeated farming**  
+Run strategies with rotation, auto-skip and reconnect support.
+
+**Strategy tools**  
+Find community `.strat` files, manage profiles, and edit strategies in Strategy Lab.
+
+**Game setup**  
+Optional Auto Equip, Roblox settings, party and VIP-server support.
+
+**Monitoring**  
+Optional Discord controls, screenshots, webhooks and logs.
 
 Features can vary by build and TDS update. Check the [release notes](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases) and [Wiki](https://ultmacro.xyz/wiki/) for the latest compatibility information.
 
@@ -37,13 +44,18 @@ Features can vary by build and TDS update. Check the [release notes](https://git
 
 ### 1. Check the requirements
 
-| Required | Recommended for best results |
-| --- | --- |
-| **Windows 10 or 11** | **1920 × 1080** display resolution |
-| **Roblox** with Tower Defense Simulator | **100%** Windows display scaling |
-| **[AutoHotkey v2](https://www.autohotkey.com/v2/)** (64-bit preferred) | **60 FPS** in Roblox |
-| The **complete, extracted** Ultimate Macro release | **Large** TDS UI Scale |
-| | **Screen Shake: Off** and **Prefer Vertical Upgrades: On** |
+**Required**
+
+- Windows 10 or 11 with Roblox and Tower Defense Simulator
+- [AutoHotkey v2](https://www.autohotkey.com/v2/) (64-bit preferred)
+- The complete, extracted Ultimate Macro ZIP
+
+**Recommended settings**
+
+- **1920 × 1080** resolution and **100%** Windows scaling
+- **60 FPS** in Roblox
+- **Large** TDS UI Scale
+- **Screen Shake: Off** and **Prefer Vertical Upgrades: On**
 
 The macro includes resolution-aware detection, but the recommended display and in-game settings are the most predictable starting point. A Mac, phone or browser cannot run the Windows macro directly.
 
@@ -97,41 +109,31 @@ Ultimate Macro performs gameplay automation on your Windows computer. Some **opt
 
 ## Troubleshooting
 
-| Problem | What to check first |
-| --- | --- |
-| **Nothing opens** | Confirm AutoHotkey **v2** is installed and you're opening the extracted `Main.ahk`. |
-| **Missing libraries or images** | Re-extract the **complete** official ZIP; don't move `Main.ahk` alone. |
-| **Wrong map or mode selected** | Check the current release's compatibility with the latest TDS update, plus UI Scale and screen settings. |
-| **Towers place or upgrade incorrectly** | Confirm the strategy's map and loadout, game settings, display scaling and any lag. |
-| **Roblox disconnected or macro stopped** | Check the macro logs, connection and release notes before restarting. |
-| **Windows blocks the download** | Follow the [security checks above](#what-should-i-do-if-i-see-a-security-warning) rather than disabling protection. |
+**Nothing opens?** Check that AutoHotkey v2 is installed and you're running the extracted `Main.ahk`.
+
+**Missing files?** Re-extract the complete official ZIP. Don't move `Main.ahk` by itself.
+
+**Wrong map, mode or tower actions?** Check that your strategy matches the latest TDS update, loadout, UI Scale and display settings.
+
+**Disconnects or crashes?** Check your connection, macro logs and the latest release notes.
+
+**Windows security warning?** Follow the [security checklist above](#what-should-i-do-if-i-see-a-security-warning) rather than disabling protection.
 
 For longer guides and known issues, visit the **[Ultimate Macro Wiki](https://ultmacro.xyz/wiki/)**. To get help, join **[our Discord](https://discord.gg/ultmacro)** and include the macro version, what happened, what you expected, and relevant logs or screenshots with private information removed.
 
 ## The team
 
-The people maintaining, building and testing Ultimate Macro.
+Behind every release is a team building, testing and improving Ultimate Macro.
 
-<table>
-  <tr>
-    <th align="left">Leads</th>
-    <td><strong>Aiden</strong> · <strong>Pizza</strong></td>
-  </tr>
-  <tr>
-    <th align="left">Developers</th>
-    <td>Sanjin · Shovel · o_zki · Yoshi</td>
-  </tr>
-  <tr>
-    <th align="left">Testers</th>
-    <td>ElementalbombX · ErrioT · Ka_Demon · menz.7 · Nytli<br>tantan_bts12 · Tfuemum_xd · vfxdraco · Yoshi101</td>
-  </tr>
-</table>
+<p align="center">
+  <img src=".github/assets/readme-team.svg" width="760" alt="Leadership: Aiden and Pizza. Development: Sanjin, Shovel, o_zki and Yoshi. Quality Assurance: ElementalbombX, ErrioT, Ka_Demon, menz.7, Nytli, tantan_bts12, Tfuemum_xd, vfxdraco and Yoshi101.">
+</p>
 
-We also appreciate everyone who reports bugs, shares strategies and helps other players.
+Thanks to everyone sharing strategies, reporting bugs and helping new members in our [Discord community](https://discord.gg/ultmacro).
 
 ### Original creator
 
-**[Darksen](https://github.com/DarksenDev/tds-macro)** created Ultimate Macro. The New Era continues his original project, and the download count above includes releases from both repositories.
+**[Darksen](https://github.com/DarksenDev/tds-macro)** created Ultimate Macro. The New Era continues his original project. The download total includes GitHub releases from both repositories.
 
 [Original repository](https://github.com/DarksenDev/tds-macro) · [Support Darksen](https://www.donationalerts.com/r/darksen1)
 
