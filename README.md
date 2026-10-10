@@ -93,7 +93,7 @@ A warning **is not proof of malware**, but it also **is not proof of a false pos
 
 ### What information does the macro use?
 
-Most automation runs on your Windows computer. Some **optional** features, including Discord integration, webhooks, screenshots and exported logs, can transmit or expose session information when configured. Review those settings before turning them on, and never post private webhook URLs, bot tokens or unredacted logs publicly.
+Ultimate Macro performs gameplay automation on your Windows computer. Some **optional** features, including Discord integration, webhooks, screenshots and exported logs, can transmit or expose session information when configured. Review those settings before turning them on, and never post private webhook URLs, bot tokens or unredacted logs publicly.
 
 ## Troubleshooting
 
@@ -133,7 +133,7 @@ We also appreciate everyone who reports bugs, shares strategies and helps other 
 
 **[Darksen](https://github.com/DarksenDev/tds-macro)** created Ultimate Macro. The New Era continues his original project, and the download count above includes releases from both repositories.
 
-[Original repository](https://github.com/DarksenDev/tds-macro) · [Support Darksen](https://www.donationalerts.com/donations/darksen1)
+[Original repository](https://github.com/DarksenDev/tds-macro) · [Support Darksen](https://www.donationalerts.com/r/darksen1)
 
 ## Open source & community
 
