@@ -1,6 +1,12 @@
 name: Update README stats
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - .github/scripts/update_readme_stats.py
+      - .github/workflows/readme-stats.yml
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
