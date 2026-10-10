@@ -1,88 +1,79 @@
-# Ultimate Macro: The New Era
+<p align="center">
+  <img src=".github/assets/readme-hero.svg" alt="Ultimate Macro — The New Era" width="100%">
+</p>
 
-> **Download the ready-to-use package from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).**
+<p align="center">
+  <a href="https://ultmacro.xyz/download"><strong>Download</strong></a>
+  &nbsp;·&nbsp; <a href="https://ultmacro.xyz/wiki/">Wiki</a>
+  &nbsp;·&nbsp; <a href="https://ultmacro.xyz/guide/">Setup guide</a>
+  &nbsp;·&nbsp; <a href="https://discord.gg/ultmacro">Discord</a>
+  &nbsp;·&nbsp; <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">Releases</a>
+</p>
 
-Ultimate Macro: The New Era is a free, open-source automation tool for Roblox Tower Defense Simulator. Originally created by Darksen, Ultimate Macro is now maintained by a new team focused on updates, fixes, and new features.
+<p align="center">
+  <img src=".github/assets/community-stats.svg" alt="Downloads across Darksen and New Era, Discord community size, and GitHub stars" width="100%">
+</p>
 
-## Features
+<p align="center"><sub>Figures refresh approximately hourly through GitHub Actions after deployment. Historical downloads include <a href="https://github.com/DarksenDev/tds-macro/releases">Darksen's original releases</a> and <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">The New Era releases</a>. Each count represents release-file downloads, <strong>not unique users</strong>. Discord membership is approximate; the graphic shows when its figure is stale.</sub></p>
 
-- Record and replay complete TDS strategies
-- Tower placement, upgrades, selling, abilities, repositioning, and target changes
-- Strategy Rotation and community `.strat` support
-- Auto Equip towers and Auto Skip recorded waves
-- Adjustable upgrade delay
-- Party and VIP server support
-- Cloning, Necromancer, Brawler repositioning, and split upgrade paths
-- Enforcer evolved tower support, including split paths, SWAT Van recording/replay, and Helicopter Reposition
-- Reconnection and automatic game re-entry
-- Automatic daily and playtime rewards
-- Resolution-aware image detection and OCR
-- Potato Mode and Legacy Mode
-- 1.5x and 2x TimeScale support
-- Discord webhooks with stats, screenshots, and logs
-- Official Discord Remote Control through EngineerBot
-- Profile Manager for importing and exporting settings, hotkeys, and strategies
-- Optional Auto Configure Settings for Roblox
-- Strategy Lab, a separate safe visual editor for `.strat` files with published placement footprints, attack ranges, map backgrounds, calibration persistence, and split-path range tracking, opened straight
-  from the Create tab (or by running `StrategyLab.exe`)
-- Every setting saves automatically the moment you change it
+---
 
-## Requirements
+## What is Ultimate Macro?
 
-- Windows 10 or 11
-- AutoHotkey v2.0
-- Recommended resolution: 1920×1080
-- Recommended Windows display scaling: 100%
-- Roblox FPS: 60
-- TDS UI Scale: Large
-- TDS Screen Shake: Disabled
-- TDS Prefer Vertical Upgrades: Enabled
+**Ultimate Macro** is a free, open-source macro for **Roblox Tower Defense Simulator**. It automates recorded strategies, including tower placements, upgrades, abilities and actions between matches.
 
-## Installation
+It started with **[Darksen](https://github.com/DarksenDev/tds-macro)**. **The New Era** continues that work with a community-maintained Windows application.
 
-1. Download `TDS_Macro.zip` from the [official releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
-2. Extract the entire ZIP file.
-3. Install [AutoHotkey v2.0](https://www.autohotkey.com/v2/).
-4. Run `Main.ahk`.
-5. Configure a strategy and start the macro.
+### What you can do
 
-## Development Team
+| | |
+| :-- | :-- |
+| **Record & replay** | Create and run `.strat` strategies with tower placement, upgrades, selling, abilities, targeting and repositioning. |
+| **Farm automatically** | Use strategy rotation, auto-skip, re-entry after disconnects, and automatic rewards. |
+| **Discover & manage strategies** | Browse community strategies, import profiles, and edit strategies with Strategy Lab. |
+| **Control & monitor** | Use Discord remote control, webhooks, session screenshots and exported logs. |
 
-**Lead Developer**
+Additional support includes parties and VIP servers, Auto Equip, TimeScale, Potato Mode and resolution-aware detection. See the [Wiki](https://ultmacro.xyz/wiki/) for explanations rather than a giant feature dump here.
 
-- [alpizars2005-oss](https://github.com/alpizars2005-oss)
+## Get started
 
-**Developers**
+1. **[Download Ultimate Macro](https://ultmacro.xyz/download)** from the official site or [GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
+2. **Extract the complete ZIP** into its own folder. Do not run it from inside the archive.
+3. **Install [AutoHotkey v2](https://www.autohotkey.com/v2/)** and run `Main.ahk`.
+4. **Choose a strategy** and follow the [setup guide](https://ultmacro.xyz/guide/) before starting a session.
 
-- aiden
-- banana.dev
-- itzshovel
-- kronoxxv
-- salkann
-- yoshi
-- ziadod
+**Requirements:** Windows 10 or 11, AutoHotkey v2. Recommended: 1920×1080 display, 100% Windows scaling, 60 FPS, TDS UI Scale on Large, screen shake disabled, and vertical upgrades enabled.
 
-**QA**
+> TDS updates can change its interface and affect macro compatibility. Check [Discord](https://discord.gg/ultmacro) and [release notes](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases) for the latest guidance before troubleshooting an older build.
 
-- frostzzz
-- menz.7
-- iammattthenpc
-- nytli
-- tristanm1ce
+## Help & community
 
-## Credits
+- **[Discord](https://discord.gg/ultmacro):** Help, announcements, testers and community strategies.
+- **[Wiki](https://ultmacro.xyz/wiki/):** Documentation and troubleshooting.
+- **[GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases):** Version history and downloadable builds.
+- **[Issues](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/issues):** Report reproducible bugs and include logs when possible.
 
-Ultimate Macro was originally created by Darksen.
+## The team
 
-The New Era continues the project and would not exist without his work.
+**Leads:** Aiden · Pizza
 
-- Original repository: [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
-- Support Darksen: [DonationAlerts](https://www.donationalerts.com/r/darksen1)
+**Developers:** Sanjin · Shovel · o_zki · Yoshi
 
-## License
+**Testers:** ElementalbombX · ErrioT · Ka_Demon · menz.7 · Nytli · tantan_bts12 · Tfuemum_xd · vfxdraco · Yoshi101
 
-Licensed under the [GNU General Public License v3.0](LICENSE).
+Big thanks to the community for testing, sharing strategies and helping other players.
 
-You may use, modify, fork, and redistribute Ultimate Macro under the license terms while preserving applicable copyright, license, and attribution notices.
+### Origin & credits
 
-# This is The New Era.
+Ultimate Macro was originally created by **[Darksen](https://github.com/DarksenDev/tds-macro)**. His original releases are included in the historical download total, and The New Era builds on his work.
+
+- [Original repository](https://github.com/DarksenDev/tds-macro)
+- [Support Darksen](https://www.donationalerts.com/r/darksen1)
+
+## Open source & disclaimer
+
+Ultimate Macro is licensed under the **[GNU General Public License v3.0](LICENSE)**.
+
+This is an independent community project, not affiliated with or endorsed by Roblox Corporation or Paradoxum Games. Using automation can carry risks; use it at your own discretion.
+
+<p align="center"><sub>Made for the TDS community. This is The New Era.</sub></p>
