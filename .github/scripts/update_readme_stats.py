@@ -78,7 +78,7 @@ def draw(stats):
         discord_note = "Discord invite API"
     else:
         last = stats.get("discord_members_checked_at", "unknown")[:10]
-        discord_note = f"member estimate last checked {last}"
+        discord_note = f"member estimate last reported {last}"
     # The artwork is deliberately static SVG: GitHub READMEs do not execute JS.
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
 <title id="title">Ultimate Macro community statistics</title>
