@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+<title id="title">Ultimate Macro community statistics</title>
+<desc id="desc">33,292 GitHub release downloads across Darksen and New Era, approximately 7,000 Discord members last reported October 6, and 13 GitHub stars, snapshot October 9, 2026.</desc>
+<rect x="1" y="1" width="1198" height="298" rx="20" fill="#10151d" stroke="#2c3949" stroke-width="2"/>
+<path d="M400 40v190M800 40v190" stroke="#2c3949" stroke-width="2"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="46" y="64" font-size="17" font-weight="700" letter-spacing="2" fill="#92a8bf">TRUSTED BY THE COMMUNITY</text>
+<text x="46" y="152" font-size="74" font-weight="700" fill="#f5f7fa">33,292</text>
+<text x="47" y="195" font-size="21" fill="#c1cedd">GitHub release downloads</text>
+<text x="47" y="225" font-size="15" fill="#879cb2">Darksen + The New Era</text>
+<text x="446" y="64" font-size="17" font-weight="700" letter-spacing="2" fill="#92a8bf">COMMUNITY OF</text>
+<text x="446" y="152" font-size="74" font-weight="700" fill="#f5f7fa">~7,000</text>
+<text x="447" y="195" font-size="21" fill="#c1cedd">Discord members (approx.)</text>
+<text x="447" y="225" font-size="15" fill="#879cb2">last reported 2026-10-06</text>
+<text x="846" y="64" font-size="17" font-weight="700" letter-spacing="2" fill="#92a8bf">GITHUB STARS</text>
+<text x="846" y="152" font-size="74" font-weight="700" fill="#f5f7fa">13</text>
+<text x="847" y="195" font-size="21" fill="#c1cedd">On The New Era</text>
+<text x="847" y="225" font-size="15" fill="#879cb2">Public repository</text>
+<path d="M46 251h1108" stroke="#2c3949" stroke-width="1"/>
+<text x="46" y="278" font-size="14" fill="#879cb2">Download events, not unique users  ·  Counts refreshed about hourly</text>
+<text x="1154" y="278" text-anchor="end" font-size="13" fill="#879cb2">2026-10-09 00:00 UTC</text>
+</g>
+</svg>
