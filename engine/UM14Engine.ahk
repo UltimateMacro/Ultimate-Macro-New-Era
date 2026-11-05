@@ -7,7 +7,7 @@
 ;
 ; Started on March 30, 2026. My friend bet me that I wouldn't make a macro for TDS, but I did.
 ;
-; Discord Server - https://discord.gg/DQnc2JDJtr
+; Discord Server - https://discord.gg/ultmacro
 
 #Requires AutoHotkey v2.0
 #SingleInstance Force
@@ -1934,7 +1934,7 @@ CloseWindow(ctrl, *) {
     ExitApp()
 }
 DiscordLink(ctrl, *) {
-    Run("https://discord.gg/DQnc2JDJtr")
+    Run("https://discord.gg/ultmacro")
 }
 githubLink(ctrl, *) {
     Run("https://github.com/DarksenDev/tds-macro")
