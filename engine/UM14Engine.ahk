@@ -1,4 +1,4 @@
-﻿; Ultimate Macro (macro for TDS) by Darksen
+; Ultimate Macro (macro for TDS) by Darksen
 ;   Free for anyone to use
 ;   Modifications are welcome, however stealing credit is not.
 ;   You can add your name, but my original credit must remain.
@@ -5966,11 +5966,18 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         }
 
         if !(e_pr.score >= 0.75) {
-            LogToConsole("The macro can't see the E prompt (" e_pr.score "), retrying again... ", true) 
-            UM14_LobbyFailure("map-selection interaction prompt")
-            return
+            promptIdentity := UM14_MapOverridePrompt()
+            if !IsObject(promptIdentity) {
+                UM14_LobbyFailure("map-selection interaction prompt")
+                return
+            }
+            UM14_RequireReadyFocus()
+            if !UM14_ConnectionSame(promptIdentity)
+                UM14_LobbyFailure("map-selection interaction prompt")
+            LogToConsole("Map selection: verified the Override Map label")
         }
 
+        UM14_RequireReadyFocus()
         SendEvent("{sc012 down}") 
         Sleep(1000)
         SendEvent("{sc012 up}")

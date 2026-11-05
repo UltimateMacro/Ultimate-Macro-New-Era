@@ -366,7 +366,7 @@ UM14_SquadCard(name) {
     ; The compact title can be read as a line even when the OCR result has
     ; no usable word boxes. Require the complete dialog title in that case.
     if (!IsObject(UM14_MenuWordPair(identity,title,"Squad",false,true))
-        && !UM14_SquadTextPair(identity,title,"Choose a Squad",true))
+        && !UM14_MenuTextPair(identity,title,"Choose a Squad",true))
         return false
     right := name = "Duo" || name = "Quad"
     bottom := name = "Trio" || name = "Quad"
@@ -376,7 +376,7 @@ UM14_SquadCard(name) {
     if (!IsObject(match)) {
         label := UM14_Region(Round(w*(right ? .50 : .22)),Round(h*(bottom ? .57 : .39)),
             Round(w*.19),Round(h*.13),w,h)
-        if (IsObject(label) && UM14_SquadTextPair(identity,label,name))
+        if (IsObject(label) && UM14_MenuTextPair(identity,label,name))
             match := {x:Round(label.x+label.w/2),y:Round(label.y+label.h/2)}
     }
     if (IsObject(match))
@@ -384,7 +384,7 @@ UM14_SquadCard(name) {
     return match
 }
 
-UM14_SquadTextPair(identity, region, expected, heading := false) {
+UM14_MenuTextPair(identity, region, expected, ellipsis := false) {
     Loop 2 {
         UM14_RequireReadyFocus()
         if !UM14_ConnectionSame(identity)
@@ -396,7 +396,7 @@ UM14_SquadTextPair(identity, region, expected, heading := false) {
         matches := 0
         for line in StrSplit(text,"`n","`r") {
             line := Trim(line)
-            if (heading)
+            if (ellipsis)
                 line := RegExReplace(line,"[.…]+$")
             if (StrLower(line) = StrLower(expected))
                 matches++
@@ -407,6 +407,21 @@ UM14_SquadTextPair(identity, region, expected, heading := false) {
             Sleep(100)
     }
     return true
+}
+
+UM14_MapOverridePrompt() {
+    UM14_RequireReadyFocus()
+    identity := UM14_ConnectionSnapshot()
+    if (!IsObject(identity))
+        return false
+    w := identity.w, h := identity.h
+    ready := UM14_Region(Round(w*.32),Round(h*.55),Round(w*.36),Round(h*.37),w,h)
+    if !IsObject(UM14_MenuImagePair(identity,ready,"Ready.png",.76))
+        return false
+    prompt := UM14_Region(Round(w*.39),Round(h*.43),Round(w*.22),Round(h*.29),w,h)
+    if (!IsObject(prompt) || !UM14_MenuTextPair(identity,prompt,"Override Map"))
+        return false
+    return UM14_ConnectionSame(identity) ? identity : false
 }
 
 UM14_ModifierName(value) {

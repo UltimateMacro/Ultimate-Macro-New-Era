@@ -28,6 +28,8 @@ UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, *) {
+    if (scenario = "map-prompt" && region.x = 390)
+        return "Override Map"
     if (scenario = "squad-compact") {
         if (region.y = 15)
             return "Choose a Squad...`nSelect the maximum..."
@@ -55,7 +57,7 @@ UM14_ConnectionOCR(identity, region, *) {
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
     global probes
-    if (path = "Resources/Ready.png" && scenario = "modifier")
+    if (path = "Resources/Ready.png" && (scenario = "modifier" || scenario = "map-prompt"))
         return {status:"success", score:.9, x:x+100, y:y+50}
     if (path = "Resources/Survival.png" && scenario = "sidebar")
         return {status:"success", score:.93, x:x+25, y:y+30}
@@ -105,6 +107,10 @@ try {
     solo := UM14_SquadCard("Solo")
     Need(IsObject(solo) && solo.x = 252 && solo.y = 273, "Compact squad uses exact text when word boxes are missing")
     Need(!UM14_SquadCard("Duo"), "Compact fallback rejects a different squad label")
+    scenario := "map-prompt"
+    Need(IsObject(UM14_MapOverridePrompt()), "Visible map-vote controls and exact Override Map label verify the prompt")
+    scenario := "no-vote"
+    Need(!UM14_MapOverridePrompt(), "No map override input outside the vote screen")
     scenario := "moved", activeDifficulty := "Fallen", seen := false, wheelCount := 0, clicks := []
     Need(!UM14_SelectCurrentMode("Fallen", &seen) && wheelCount = 0 && clicks.Length = 0, "No input when Roblox identity changed")
     scenario := "modifier", clicks := [], hover := [0, 0]
