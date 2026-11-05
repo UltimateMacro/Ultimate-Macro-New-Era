@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="772" viewBox="0 0 760 772" role="img" aria-labelledby="title desc">
+<title id="title">The Ultimate Macro team</title>
+<desc id="desc">Leads: Aiden and Pizza. Developers: Sanjin, Shovel, o_zki and Yoshi. Testers: ElementalbombX, ErrioT, Ka_Demon, menz.7, Nytli, tantan_bts12, Tfuemum_xd, vfxdraco, Yoshi101.</desc>
+<rect x="2" y="2" width="756" height="153" rx="20" fill="#152030" stroke="#365372" stroke-width="2"/>
+<rect x="2" y="171" width="756" height="202" rx="20" fill="#151C2B" stroke="#3A435C" stroke-width="2"/>
+<rect x="2" y="388" width="756" height="382" rx="20" fill="#161A25" stroke="#464457" stroke-width="2"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="39" y="53" font-size="29" font-weight="700" fill="#B9D7F6">Leadership</text>
+<text x="39" y="221" font-size="29" font-weight="700" fill="#C5C7FA">Development</text>
+<text x="39" y="431" font-size="29" font-weight="700" fill="#D4C8E8">Quality Assurance</text>
+<rect x="38" y="77" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="57" y="110" font-size="33" font-weight="600" fill="#EFF4FA">Aiden</text>
+<rect x="388" y="77" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="407" y="110" font-size="33" font-weight="600" fill="#EFF4FA">Pizza</text>
+<rect x="38" y="245" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="57" y="278" font-size="30" font-weight="600" fill="#EFF4FA">Sanjin</text>
+<rect x="388" y="245" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="407" y="278" font-size="30" font-weight="600" fill="#EFF4FA">Shovel</text>
+<rect x="38" y="306" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="57" y="339" font-size="30" font-weight="600" fill="#EFF4FA">o_zki</text>
+<rect x="388" y="306" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="407" y="339" font-size="30" font-weight="600" fill="#EFF4FA">Yoshi</text>
+<rect x="38" y="450" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="57" y="483" font-size="29" font-weight="600" fill="#EFF4FA">ElementalbombX</text>
+<rect x="388" y="450" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="407" y="483" font-size="29" font-weight="600" fill="#EFF4FA">ErrioT</text>
+<rect x="38" y="510" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="57" y="543" font-size="29" font-weight="600" fill="#EFF4FA">Ka_Demon</text>
+<rect x="388" y="510" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="407" y="543" font-size="29" font-weight="600" fill="#EFF4FA">menz.7</text>
+<rect x="38" y="570" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="57" y="603" font-size="29" font-weight="600" fill="#EFF4FA">Nytli</text>
+<rect x="388" y="570" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="407" y="603" font-size="29" font-weight="600" fill="#EFF4FA">tantan_bts12</text>
+<rect x="38" y="630" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="57" y="663" font-size="29" font-weight="600" fill="#EFF4FA">Tfuemum_xd</text>
+<rect x="388" y="630" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="407" y="663" font-size="29" font-weight="600" fill="#EFF4FA">vfxdraco</text>
+<rect x="38" y="690" width="334" height="48" rx="13" fill="#202B39" stroke="#344456"/><text x="57" y="723" font-size="29" font-weight="600" fill="#EFF4FA">Yoshi101</text>
+</g>
+</svg>
