@@ -35,8 +35,8 @@ UM14_ConnectionOCR(identity, region, *) {
             return [{text:"STORY",raw:"Story",x:348,y:45,w:28,h:10}]
     }
     if (scenario = "squad") {
-        if (region.y = Round(identity.h*.08))
-            return [{text:"SQUAD",raw:"Squad",x:500,y:135,w:49,h:16}]
+        if (region.y = Round(identity.h*.025))
+            return [{text:"SQUAD...",raw:"Squad...",x:500,y:49,w:49,h:16}]
         if (region.x = Round(identity.w*.19) && region.y = Round(identity.h*.34))
             return [{text:"SOLO",raw:"Solo",x:264,y:480,w:31,h:14}]
     }

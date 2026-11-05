@@ -178,13 +178,14 @@ UM14_ModeScroll() {
     Sleep(300)
 }
 
-UM14_MenuWord(identity, region, expected, caption := false) {
+UM14_MenuWord(identity, region, expected, caption := false, ellipsis := false) {
     factor := Min(region.w < identity.w*.12 ? 3.0 : 2.0,2500/Max(region.w,region.h))
     words := UM14_OCRWords(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
     match := ""
     for word in words {
         minimumHeight := region.w < identity.w*.12 ? Max(4,identity.h*.005) : Max(6,identity.h*.007)
-        if (word.text != StrUpper(expected) || word.h < minimumHeight)
+        label := ellipsis ? RegExReplace(word.text,"[.…]+$") : word.text
+        if (label != StrUpper(expected) || word.h < minimumHeight)
             continue
         ; Difficulty cards repeat the name in lowercase in their descriptions.
         if (caption && word.raw == StrLower(word.raw))
@@ -196,14 +197,14 @@ UM14_MenuWord(identity, region, expected, caption := false) {
     return UM14_ConnectionSame(identity) ? match : false
 }
 
-UM14_MenuWordPair(identity, region, expected, caption := false) {
+UM14_MenuWordPair(identity, region, expected, caption := false, ellipsis := false) {
     UM14_RequireReadyFocus()
-    first := UM14_MenuWord(identity,region,expected,caption)
+    first := UM14_MenuWord(identity,region,expected,caption,ellipsis)
     if (!IsObject(first))
         return false
     Sleep(100)
     UM14_RequireReadyFocus()
-    second := UM14_MenuWord(identity,region,expected,caption)
+    second := UM14_MenuWord(identity,region,expected,caption,ellipsis)
     if (!IsObject(second) || !UM14_ConnectionSame(identity)
         || Abs(first.x-second.x) > 4 || Abs(first.y-second.y) > 4)
         return false
@@ -359,8 +360,9 @@ UM14_SquadCard(name) {
     if (!IsObject(identity))
         return false
     w := identity.w, h := identity.h
-    title := UM14_Region(Round(w*.25),Round(h*.08),Round(w*.50),Round(h*.22),w,h)
-    if (!IsObject(title) || !IsObject(UM14_MenuWordPair(identity,title,"Squad")))
+    title := UM14_Region(Round(w*.25),Round(h*.025),Round(w*.50),Round(h*.275),w,h)
+    ; The compact dialog puts "Squad..." above the old title region.
+    if (!IsObject(title) || !IsObject(UM14_MenuWordPair(identity,title,"Squad",false,true)))
         return false
     right := name = "Duo" || name = "Quad"
     bottom := name = "Trio" || name = "Quad"
