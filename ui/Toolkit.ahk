@@ -96,25 +96,31 @@ class Surface {
     ; render. Used when a surface is resized or about to be shown, so Windows
     ; never presents a stale, black or half-arranged buffer in between.
     RenderNow() {
-        SetTimer(this.renderFn, 0)
-        this.pending := false
         if (!this.dc || this.rendering)
-            return
-        if this.layoutPending {
-            SetTimer(this.layoutFn, 0)
-            this.Relayout()
+            return false
+        previous := A_IsCritical
+        Critical("On")
+        try {
+            if this.layoutPending {
+                SetTimer(this.layoutFn, 0)
+                this.Relayout()
+            }
             SetTimer(this.renderFn, 0)
             this.pending := false
-        }
-        this.DoRender()
-        if !DllCall("IsWindowVisible", "Ptr", this.hwnd)
-            return
-        hdc := DllCall("GetDC", "Ptr", this.hwnd, "Ptr")
-        if hdc {
-            DllCall("BitBlt", "Ptr", hdc, "Int", 0, "Int", 0, "Int", this.pw, "Int", this.ph, "Ptr", this.dc, "Int", 0, "Int", 0, "UInt", 0x00CC0020)
-            DllCall("ReleaseDC", "Ptr", this.hwnd, "Ptr", hdc)
-            DllCall("ValidateRect", "Ptr", this.hwnd, "Ptr", 0)
-        }
+            frame := this.hbm, pw := this.pw, ph := this.ph
+            if (!this.DoRender() || this.hbm != frame || this.pw != pw || this.ph != ph)
+                return false
+            if !DllCall("IsWindowVisible", "Ptr", this.hwnd)
+                return true
+            hdc := DllCall("GetDC", "Ptr", this.hwnd, "Ptr")
+            if !hdc
+                return false
+            try ok := DllCall("BitBlt", "Ptr", hdc, "Int", 0, "Int", 0, "Int", pw, "Int", ph, "Ptr", this.dc, "Int", 0, "Int", 0, "UInt", 0x00CC0020)
+            finally DllCall("ReleaseDC", "Ptr", this.hwnd, "Ptr", hdc)
+            if ok
+                DllCall("ValidateRect", "Ptr", this.hwnd, "Ptr", 0)
+            return !!ok
+        } finally Critical(previous ? previous : "Off")
     }
 
     RequestLayout() {
@@ -216,6 +222,7 @@ class Surface {
             }
         }
         DllCall("InvalidateRect", "Ptr", this.hwnd, "Ptr", 0, "Int", 0)
+        return true
     }
 
     ScrollbarRect() {

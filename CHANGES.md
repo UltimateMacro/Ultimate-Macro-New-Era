@@ -1,6 +1,9 @@
 # AutoHotkey edition
 
-## Next release
+## 1.4.0.39
+
+- Reuse the scaled backdrop and drawing buffers so hovering, switching tabs
+  and resizing do less work. Paint a fresh frame before showing a page.
 
 - Add a private server invite field under Settings. Save a Roblox TDS invite
   and use Join private server before starting. New launches and disconnect

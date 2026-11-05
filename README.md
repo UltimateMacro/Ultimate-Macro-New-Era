@@ -85,7 +85,7 @@ The macro includes resolution-aware detection, but the recommended display and i
 
 Strategies are not universal. They can depend on a particular game update, loadout, difficulty, and map. A strategy failing does not automatically mean your installation is broken.
 
-### Join a private server
+### Join a private server (1.4.0.39 and later)
 
 In **Settings → Private server**, paste the invite you copied from your TDS
 private server and choose **Save link → Join private server**. Wait for the
