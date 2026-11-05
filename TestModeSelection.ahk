@@ -3,9 +3,14 @@
 #NoTrayIcon
 #Include engine\lib\UM14Features.ahk
 
-global scenario := "", wheelCount := 0, clicks := [], probes := 0, activeDifficulty := ""
+global scenario := "", wheelCount := 0, clicks := [], probes := 0, activeDifficulty := "", hover := [0, 0]
 Click(x, y) => clicks.Push([x, y])
-MouseMove(*) => 0
+MouseMove(x, y) {
+    global hover := [x, y]
+}
+MouseGetPos(&x, &y) {
+    x := hover[1], y := hover[2]
+}
 SendEvent(keys) {
     global wheelCount
     if (keys != "{WheelDown}")
@@ -14,17 +19,25 @@ SendEvent(keys) {
 }
 LogToConsole(*) => 0
 UM14_RequireReadyFocus() => 0
+UM14_Fatal(message) {
+    throw Error(message)
+}
 UM14_ConnectionSnapshot() => {w:1000, h:700}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => recognized
 UM14_ConnectionOCR(identity, region, *) {
+    if (scenario = "modifier" && hover[2] = Round(identity.h*.945))
+        return [{text:"ADD", x:32, y:615, w:18, h:9},
+            {text:"MODIFIER", x:54, y:615, w:43, h:9}]
     if (scenario = "heading" && region.x = 210 && region.w = 270)
         return [{text:"SURVIVAL", raw:"Survival", x:240, y:240, w:75, h:13}]
     return []
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
     global probes
+    if (path = "Resources/Ready.png" && scenario = "modifier")
+        return {status:"success", score:.9, x:x+100, y:y+50}
     if (path = "Resources/Survival.png" && scenario = "sidebar")
         return {status:"success", score:.93, x:x+25, y:y+30}
     if (path = "Resources/close.png" && scenario = "heading")
@@ -49,7 +62,18 @@ try {
     Need(wheelCount = 1 && clicks.Length = 1 && probes >= 3, "Frost heading path avoids a blind sidebar click")
     scenario := "moved", activeDifficulty := "Fallen", seen := false, wheelCount := 0, clicks := []
     Need(!UM14_SelectCurrentMode("Fallen", &seen) && wheelCount = 0 && clicks.Length = 0, "No input when Roblox identity changed")
-    FileAppend("PASS: Fallen sidebar, Frost below fold, and moved-window abort`n", "*")
+    scenario := "modifier", clicks := [], hover := [0, 0]
+    UM14_OpenModifierMenu()
+    Need(clicks.Length = 1 && clicks[1][1] = 29 && clicks[1][2] = Round(700*.945),
+        "Modifier tooltip verifies the icon position rather than clicking the label")
+    scenario := "no-vote", clicks := [], hover := [0, 0]
+    rejected := false
+    try UM14_OpenModifierMenu()
+    catch as e {
+        rejected := InStr(e.Message, "Map vote screen")
+    }
+    Need(rejected && !clicks.Length && hover[1] = 0, "No modifier input without the vote screen")
+    FileAppend("PASS: Fallen, Frost, moved-window abort, and guarded modifier hover`n", "*")
     ExitApp(0)
 } catch as e {
     FileAppend("FAIL: " e.Message "`n", "**")

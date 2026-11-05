@@ -6,6 +6,8 @@
   the confirmed mode menu to find cards below the first row.
 - Import older settings recognizes 1.3.6 `.ump` profiles. It imports supported
   preferences only, leaving strategies and private fields untouched.
+- Modifier setup checks the map-vote screen, then hovers over the Add Modifier
+  icon to verify its tooltip before clicking the icon.
 
 ## 1.4.0.35 release candidate
 

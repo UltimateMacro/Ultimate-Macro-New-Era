@@ -91,30 +91,48 @@ UM14_OpenModifierMenu() {
     identity := UM14_ConnectionSnapshot()
     if (!IsObject(identity))
         UM14_Fatal("Modifier setup lost its game client.")
-    region := UM14_Region(0,Round(identity.h*.82),Round(identity.w*.16),
-        Round(identity.h*.16),identity.w,identity.h)
+    region := UM14_Region(0,Round(identity.h*.77),Round(identity.w*.19),
+        identity.h-Round(identity.h*.77),identity.w,identity.h)
     if (!IsObject(region))
         UM14_Fatal("Modifier control region was not verified.")
+    vote := UM14_Region(Round(identity.w*.25),Round(identity.h*.66),
+        Round(identity.w*.5),Round(identity.h*.34),identity.w,identity.h)
+    if (!IsObject(UM14_MenuImagePair(identity,vote,"Ready.png",.7)))
+        UM14_Fatal("Map vote screen could not be verified. No modifier click was sent.")
     factor := Min(3.0,2500/Max(region.w,region.h))
-    started := A_TickCount, previous := false
-    Loop {
+    ; 1.3.3.10 starts at the bottom-left icon. Its label is a hover
+    ; tooltip, so click the confirmed hover point, not the tooltip text.
+    x := Round(Max(18,Min(56,identity.w*56/1920)))
+    for fraction in [930/1009,.945,.965,.98] {
+        UM14_RequireReadyFocus()
+        if (!UM14_ConnectionSame(identity))
+            UM14_Fatal("Modifier setup lost its game client.")
+        y := Min(identity.h-2,Round(identity.h*fraction))
+        MouseMove(x,y)
+        Sleep(260)
         UM14_RequireReadyFocus()
         if (!UM14_ConnectionSame(identity))
             UM14_Fatal("Modifier setup lost its game client.")
         button := UM14_ModifierButton(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
-        if (IsObject(button) && IsObject(previous)
-            && Abs(button.x-previous.x) <= 4 && Abs(button.y-previous.y) <= 4) {
-            UM14_RequireReadyFocus()
-            if (!UM14_ConnectionSame(identity))
-                UM14_Fatal("Modifier setup lost its game client.")
-            Click(button.x,button.y)
-            return
-        }
-        if (A_TickCount-started >= 4500)
-            UM14_Fatal("Add Modifier could not be verified. No modifier click was sent.")
-        previous := button
-        Sleep(120)
+        if (!IsObject(button) || button.y >= y || Abs(button.x-x) > identity.w*.07)
+            continue
+        Sleep(100)
+        UM14_RequireReadyFocus()
+        if (!UM14_ConnectionSame(identity))
+            UM14_Fatal("Modifier setup lost its game client.")
+        again := UM14_ModifierButton(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
+        if (!IsObject(again) || Abs(button.x-again.x) > 4 || Abs(button.y-again.y) > 4)
+            continue
+        UM14_RequireReadyFocus()
+        if (!UM14_ConnectionSame(identity))
+            UM14_Fatal("Modifier setup lost its game client.")
+        MouseGetPos(&hoverX,&hoverY)
+        if (Abs(hoverX-x) > 2 || Abs(hoverY-y) > 2)
+            UM14_Fatal("The mouse moved while verifying Add Modifier. No modifier click was sent.")
+        Click(x,y)
+        return
     }
+    UM14_Fatal("Add Modifier could not be verified. No modifier click was sent.")
 }
 
 UM14_WaitModifierSearch() {
