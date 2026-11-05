@@ -490,6 +490,14 @@ class MW {
         gp.Add(tr)
         gp.Add(MW.Caption("Applies when playback starts, not during a run. Availability depends on the game, mode and any required access or owned tickets. Selecting a speed does not purchase tickets."))
 
+        ps := root.Add(Card("PRIVATE SERVER"))
+        ps.Add(MW.Caption("Paste your TDS private server invite. New launches and reconnects use the saved link."))
+        MW.privateLink := ps.Add(Field("", "Roblox private server link", {password: true, maxLength: 513}))
+        MW.privateSave := ps.Add(Button(_T("Save link"), (*) => MW.SavePrivateServer()))
+        MW.privateJoin := ps.Add(Button(_T("Join private server"), (*) => MW.JoinPrivateServer()))
+        MW.privateForget := ps.Add(Button(_T("Forget link"), (*) => MW.ForgetPrivateServer()))
+        MW.privateStatus := ps.Add(MW.Caption(MW.PrivateServerStatus()))
+
         more := Button(_T("Advanced settings"), (button) => MW.ToggleSection(button, MW.moreFrame))
         more.checkable := true
         MW.moreButton := root.Add(more)
@@ -1317,6 +1325,11 @@ class MW {
         enabled := idle && !MW.LaunchBusy() && MW.engineReady && !MW.booting
         s := Store.settings
         MW.timescale.Enable(MW.RunSettingsEditable())
+        privateEditable := enabled && !Engine.ToolsRunning()
+        MW.privateLink.Enable(privateEditable)
+        MW.privateSave.Enable(privateEditable)
+        MW.privateJoin.Enable(privateEditable && PrivateServer.Enabled)
+        MW.privateForget.Enable(privateEditable && (PrivateServer.Enabled || PrivateServer.unreadable))
         for c in [MW.partyEnabled, MW.partyHost, MW.partyMembers, MW.partyRole, MW.partyLeave]
             c.Enable(enabled)
         MW.crateButton.Enable(enabled && !MW.rec.draft)
@@ -1328,6 +1341,8 @@ class MW {
             blocked := MW.RotationReason(s, MW.items)
         else if IsObject(MW.current)
             blocked := MW.Reason(MW.current)
+        if PrivateServer.unreadable
+            blocked := MW.PrivateServerStatus()
         MW.startBtn.Enable(enabled && IsObject(MW.current) && MW.page = 1 && blocked = "")
         MW.startBtn.tip := blocked != "" ? blocked : "Start the selected strategy; F1 in Roblox."
         MW.stopBtn.Enable((MW.Active || MW.busy || MW.stopPending || MW.launcherWaiting || Engine.ToolsRunning()) && !MW.closing)
@@ -1416,6 +1431,10 @@ class MW {
     static StartRun(shortcut := false) {
         if (MW.booting || !MW.engineReady || MW.LaunchBusy() || MW.Active || MW.busy || MW.stopPending || !IsObject(MW.current))
             return
+        if PrivateServer.unreadable {
+            MW.Log(MW.PrivateServerStatus())
+            return
+        }
         if MW.rec.draft {
             MW.Log("Save or discard the recording draft before starting playback.")
             return
@@ -1535,18 +1554,83 @@ class MW {
         MW.ShowLaunchStatus(Roblox.Launch())
     }
 
+    static PrivateServerEditable() => MW.RunSettingsEditable() && !MW.stopPending && !MW.LaunchBusy() && !Engine.ToolsRunning()
+
+    static PrivateServerStatus() {
+        if PrivateServer.unreadable
+            return "Saved private server link could not be read. In Settings, save it again or forget it."
+        if PrivateServer.Enabled
+            return "Link saved on this Windows account. Use Join private server before Start if Roblox is already open."
+        return "No link saved. Roblox opens public TDS."
+    }
+
+    static SavePrivateServer() {
+        if !MW.PrivateServerEditable()
+            return
+        try PrivateServer.Save(MW.privateLink.Text)
+        catch ValueError {
+            MW.privateStatus.SetText(_T("Paste a Roblox private server invite for TDS. The previous setting was not changed."))
+            return
+        } catch {
+            MW.privateStatus.SetText(_T("The link could not be saved. The previous setting was not changed."))
+            return
+        }
+        MW.privateLink.Clear()
+        MW.privateStatus.SetText(_T(MW.PrivateServerStatus()))
+        MW.UpdateControls()
+    }
+
+    static ForgetPrivateServer() {
+        if !MW.PrivateServerEditable()
+            return
+        try PrivateServer.Forget()
+        catch {
+            MW.privateStatus.SetText(_T("The saved link could not be removed. The previous setting was not changed."))
+            return
+        }
+        MW.privateLink.Clear()
+        MW.privateStatus.SetText(_T(MW.PrivateServerStatus()))
+        MW.UpdateControls()
+    }
+
+    static JoinPrivateServer() {
+        if !MW.PrivateServerEditable()
+            return
+        state := Roblox.Launch(true)
+        if (state = "invite-opened" || state = "waiting")
+            MW.privateStatus.SetText(_T("Join requested. Wait for the private TDS lobby before pressing Start."))
+        else if (state = "multiple")
+            MW.privateStatus.SetText(_T("Close extra Roblox windows before joining."))
+        else
+            MW.privateStatus.SetText(_T("Could not open the saved invite. Check the link and the Roblox installation."))
+        MW.ShowLaunchStatus(state)
+    }
+
     static ShowLaunchStatus(state) {
         if (state = "waiting") {
             if !MW.launcherWaiting {
                 MW.launcherWaiting := true
-                MW.Log("Opening Roblox; waiting for its window…")
+                MW.Log(PrivateServer.Enabled ? "Opening the saved private server invite in Roblox…" : "Opening Roblox; waiting for its window…")
             }
         } else {
             MW.launcherWaiting := false
             static msg := Map("ready", "Roblox window detected. If another game is open, switch to TDS first. Once TDS is in the lobby, press Start."
+                , "invite-opened", "Private server join requested. Wait for the private TDS lobby before pressing Start."
                 , "multiple", "Close extra Roblox windows before starting.", "unavailable", "Could not open Roblox. Check the installation and try again."
                 , "timed-out", "Roblox did not open in time. Open it manually and try again.")
-            MW.Log(msg.Has(state) ? msg[state] : "Roblox could not be opened.")
+            if (state = "invalid-private")
+                MW.Log(PrivateServer.unreadable ? MW.PrivateServerStatus() : "Save a private server link in Settings first.")
+            else if PrivateServer.Enabled {
+                if (state = "ready")
+                    MW.Log("Roblox window detected. Make sure your private TDS lobby is loaded before pressing Start.")
+                else if (state = "timed-out" || state = "unavailable") {
+                    MW.privateStatus.SetText(_T("Could not open the saved invite. Check the link and the Roblox installation."))
+                    MW.Log("Private server did not open. Check that the invite works in Roblox and try again.")
+                } else
+                    MW.Log(msg.Has(state) ? msg[state] : "Roblox could not be opened.")
+            }
+            else
+                MW.Log(msg.Has(state) ? msg[state] : "Roblox could not be opened.")
             if (state = "ready")
                 SetTimer(() => MW.ApplySavedDocking(), -500)
         }
@@ -2009,7 +2093,8 @@ class MW {
             return
         try {
             GameRecovery.Begin(g)
-            MW.Log("Restarting the selected Roblox client outside the automation process.")
+            MW.Log(PrivateServer.Enabled ? "Restarting Roblox using the saved private server invite."
+                : "Restarting the selected Roblox client outside the automation process.")
             SetTimer(MW.RecoveryFn(), 100)
         } catch {
             Engine.AckGameLaunch(false)

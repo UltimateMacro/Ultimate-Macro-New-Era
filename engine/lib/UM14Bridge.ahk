@@ -321,13 +321,13 @@ UM14_DoStart() {
         UM14_State("idle")
 }
 
-; Fixed public-game relaunch request. No URI/path/command is sent to the host.
-; The outside-job Qt launcher validates and closes only the selected client,
+; No URI/path/command is sent to the host. The launcher selects the join target.
+; The outside-job launcher validates and closes only the selected client,
 ; uses its existing trusted opener, then sends the session-authenticated ack.
 UM14_RequestGameLaunch() {
     global UM14, UseVipServer, RunningStrategy
     if (UseVipServer = "1" || UseVipServer = 1)
-        UM14_Fatal("Private-server relaunch is not supported by this verified launcher. Disable VIP server mode before retrying; Roblox was not closed.")
+        UM14_Fatal("Set private server links in the launcher, not the legacy engine settings. Roblox was not closed.")
     UM14_RequireReadyFocus()
     hwnd := GetRobloxHWND()
     if (!hwnd || !RunningStrategy || !UM14_LauncherAlive() || !UM14_SessionCurrent()
@@ -353,7 +353,7 @@ UM14_RequestGameLaunch() {
                 }
                 if (UM14.launchResult != "") {
                     result := UM14.launchResult
-                    reason := "The trusted game launcher refused or could not complete the public-game relaunch."
+                    reason := "The trusted game launcher refused or could not complete the Roblox relaunch."
                     break
                 }
                 if (A_TickCount-started >= 90000)

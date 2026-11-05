@@ -85,6 +85,19 @@ The macro includes resolution-aware detection, but the recommended display and i
 
 Strategies are not universal. They can depend on a particular game update, loadout, difficulty, and map. A strategy failing does not automatically mean your installation is broken.
 
+### Join a private server
+
+In **Settings → Private server**, paste the invite you copied from your TDS
+private server and choose **Save link → Join private server**. Wait for the
+private TDS lobby before pressing **Start**. Saving the link alone doesn't
+move a Roblox client that's already open.
+
+New launches and reconnects use the saved invite. If joining fails, check
+that the invite still works for your Roblox account; the macro does not
+switch to public TDS to compensate. Choose **Forget link** to return to
+public launches. Windows protects the saved link on this account, and
+Ultimate Macro does not include it in profiles or Output exports.
+
 ## Is Ultimate Macro safe?
 
 **We want users to be able to check, not just take our word for it.**
