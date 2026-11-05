@@ -243,6 +243,7 @@ class Roblox {
 class GameRecovery {
     static state := "idle", request := "", deadline := 0, pid := 0, stamp := 0
     static candidateKey := "", candidateSince := 0
+    static originalMode := "", originalBounds := [], replacement := 0, replacementToken := ""
 
     static Busy => GameRecovery.state != "idle"
 
@@ -260,6 +261,9 @@ class GameRecovery {
         if (w.Length != 1 || w[1] != request.hwnd || !Roblox.IsForeground(request.hwnd))
             throw ValueError("The selected game must remain foreground")
         GameRecovery.CandidateStable("", A_TickCount)
+        GameRecovery.originalMode := Docking.active ? "" : WinGetMinMax("ahk_id " request.hwnd)
+        WinGetPos(&x,&y,&w,&h,"ahk_id " request.hwnd)
+        GameRecovery.originalBounds := [x,y,w,h]
         GameRecovery.pid := WinGetPID("ahk_id " request.hwnd)
         GameRecovery.request := request, GameRecovery.stamp := GameRecovery.InputStamp()
         ; WM_CLOSE can spawn a Roblox Home client; end only the verified game process.
@@ -290,11 +294,25 @@ class GameRecovery {
             return GameRecovery.Finish(false)
         if (A_TickCount >= GameRecovery.deadline)
             return GameRecovery.Finish(false)
+        if (GameRecovery.state = "restoring") {
+            if (w.Length != 1 || w[1] != GameRecovery.replacement
+                || Roblox.Identity(w[1]) != GameRecovery.replacementToken)
+                return GameRecovery.Finish(false)
+            WinGetPos(&x,&y,&width,&height,"ahk_id " w[1])
+            mode := WinGetMinMax("ahk_id " w[1])
+            if !GameRecovery.LayoutMatches(GameRecovery.originalMode,GameRecovery.originalBounds,mode,[x,y,width,height])
+                return ""
+            key := GameRecovery.replacementToken "|" mode "|" x "|" y "|" width "|" height
+            return GameRecovery.CandidateStable(key,A_TickCount) ? GameRecovery.Finish(true) : ""
+        }
         if (w.Length = 1) {
             ; The first visible Roblox HWND can still be a boot/loading window.
             ; It may overwrite an early docking move with its saved bounds.
-            if GameRecovery.ReplacementReady(w[1])
-                return GameRecovery.Finish(true)
+            if GameRecovery.ReplacementReady(w[1]) {
+                if (GameRecovery.originalMode = "")
+                    return GameRecovery.Finish(true)
+                return GameRecovery.RestoreReplacement(w[1]) ? "" : GameRecovery.Finish(false)
+            }
         } else
             GameRecovery.CandidateStable("", A_TickCount)
         return ""
@@ -310,7 +328,8 @@ class GameRecovery {
 
     static ReplacementReady(hwnd) {
         try {
-            if (WinGetClass("ahk_id " hwnd) != "WINDOWSCLIENT" || !Roblox.IsWindowed(hwnd)
+            if (WinGetClass("ahk_id " hwnd) != "WINDOWSCLIENT" || WinGetMinMax("ahk_id " hwnd) = -1
+                || !(WinGetStyle("ahk_id " hwnd) & 0x00C00000)
                 || DllCall("IsHungAppWindow", "Ptr", hwnd))
                 return GameRecovery.CandidateStable("", A_TickCount)
             token := Roblox.Identity(hwnd)
@@ -322,9 +341,36 @@ class GameRecovery {
         return GameRecovery.CandidateStable("", A_TickCount)
     }
 
+    static LayoutMatches(mode, target, currentMode, current) => mode = 1 ? currentMode = 1
+        : mode = 0 && currentMode = 0 && Docking.Near(target,current)
+
+    static RestoreReplacement(hwnd) {
+        token := Roblox.Identity(hwnd)
+        if (!token || Roblox.Game() != hwnd || !InArray([0,1],GameRecovery.originalMode))
+            return false
+        try {
+            if (GameRecovery.originalMode = 1)
+                WinMaximize("ahk_id " hwnd)
+            else {
+                if (WinGetMinMax("ahk_id " hwnd) != 0)
+                    WinRestore("ahk_id " hwnd)
+                b := GameRecovery.originalBounds
+                if !DllCall("SetWindowPos","Ptr",hwnd,"Ptr",0,"Int",b[1],"Int",b[2],"Int",b[3],"Int",b[4],"UInt",0x4014)
+                    return false
+            }
+            GameRecovery.replacement := hwnd, GameRecovery.replacementToken := token
+            GameRecovery.CandidateStable("",A_TickCount)
+            GameRecovery.state := "restoring", GameRecovery.deadline := A_TickCount+5000
+            return true
+        }
+        return false
+    }
+
     static Finish(ok) {
         GameRecovery.state := "idle", GameRecovery.request := "", GameRecovery.pid := 0
         GameRecovery.CandidateStable("", A_TickCount)
+        GameRecovery.originalMode := "", GameRecovery.originalBounds := []
+        GameRecovery.replacement := 0, GameRecovery.replacementToken := ""
         return ok
     }
 

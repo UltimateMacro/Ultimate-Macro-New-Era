@@ -163,7 +163,7 @@ class Docking {
         if !token
             return false
         old := Docking.entries[1]
-        fresh := {hwnd:game, token:token, orig:Docking.Bounds(game), target:old.target, moved:false, restoreSent:false}
+        fresh := {hwnd:game, token:token, orig:old.orig.Clone(), target:old.target, moved:false, restoreSent:false}
         if !Docking.Place(fresh,fresh.target)
             return false
         fresh.moved := true

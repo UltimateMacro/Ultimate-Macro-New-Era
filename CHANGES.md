@@ -19,6 +19,8 @@
   directly to auto-equip. Relaunch keeps the launcher's docked bounds.
 - Wait for a responsive replacement game window with stable geometry before
   docking it. A newly visible boot window is no longer treated as ready.
+- Undocked relaunch retains maximized mode or the previous windowed bounds.
+  Undocking after a relaunch still restores the original pre-dock layout.
 - Compact clients retain the full Override Map caption and Add Modifier tooltip.
 - Auto-equip focuses inside the search field, uses the modified reference's
   literal text entry, then checks the selected tower and owned action.

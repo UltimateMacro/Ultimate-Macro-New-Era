@@ -23,6 +23,11 @@ try {
         && !GameRecovery.CandidateStable("window-b|1076x993",5100)
         && !GameRecovery.CandidateStable("",7100),
         "A resize, replacement window or missing client resets readiness")
+    Need(GameRecovery.LayoutMatches(1,[10,20,800,600],1,[0,0,1920,1040])
+        && GameRecovery.LayoutMatches(0,[10,20,800,600],0,[11,20,800,600])
+        && !GameRecovery.LayoutMatches(0,[10,20,800,600],0,[10,20,1078,995])
+        && !GameRecovery.LayoutMatches(1,[10,20,800,600],0,[10,20,800,600]),
+        "Undocked relaunch preserves maximized mode or the confirmed windowed bounds")
     for row in Engine.Schema() {
         if (row[1] = "Options" && row[2] = "MouseDelay")
             Need(row[3] = "10", "mouse timing matches the modified reference")
