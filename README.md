@@ -1,77 +1,149 @@
-# Ultimate Macro 1.4 — AutoHotkey edition
+<p align="center">
+  <img src=".github/assets/readme-hero.svg" width="100%" alt="Ultimate Macro — automation for Roblox Tower Defense Simulator">
+</p>
 
-Ultimate Macro for Tower Defense Simulator, with the 1.4 Python/Qt window rebuilt
-in **AutoHotkey v2**. Launch the macro with `Main.ahk`; it does not require
-Python or a compiled macro EXE. A distribution ZIP can include a separate
-optional updater binary. The macro also runs without that helper.
+<p align="center">
+  <a href="https://ultmacro.xyz/download"><strong>Download</strong></a>
+  &nbsp;&nbsp;·&nbsp;&nbsp; <a href="#getting-started">Get started</a>
+  &nbsp;&nbsp;·&nbsp;&nbsp; <a href="https://ultmacro.xyz/wiki/">Wiki</a>
+  &nbsp;&nbsp;·&nbsp;&nbsp; <a href="https://discord.gg/ultmacro">Discord</a>
+</p>
 
-## Run it
+<p align="center">
+  <img src=".github/assets/community-stats.svg" width="760" alt="GitHub downloads from Darksen and The New Era, Discord community members, and GitHub stars">
+</p>
 
-1. Extract the whole folder (do not run it from inside the ZIP).
-2. Double-click **`Main.ahk`** (needs AutoHotkey v2, 64-bit). Without AutoHotkey
-   installed, run it with the bundled interpreter:
-   `engine\submacros\AutoHotkey64.exe Main.ahk`
-3. Accept the terms, pick a language, choose a strategy and press **Start**
-   (F1 in Roblox). **F2** stops, **F8** is the emergency stop from anywhere.
+<p align="center"><strong>Version 1.4</strong> &nbsp;·&nbsp; <strong><a href="LICENSE-1.4.txt">Source available</a></strong> &nbsp;·&nbsp; <strong><a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">Official releases</a></strong> &nbsp;·&nbsp; <strong><a href="#the-team">Community-maintained</a></strong></p>
 
-Requirements are the same as the macro has always had: Windows 10/11, 100 %
-display scaling, Roblox in windowed mode, TDS UI scale *Large*, camera shake off,
-*Prefer Vertical Upgrades* on, and the English (US) Windows language pack for OCR.
+## What is Ultimate Macro?
 
-## What is in the folder
+**Ultimate Macro** is a free-to-use, source-available Windows tool for automating **Roblox Tower Defense Simulator (TDS)**. You can record or import a strategy, then let the macro handle repeatable gameplay actions such as tower placement, upgrades, abilities, and movement between matches.
 
-| Path | What it is |
-| --- | --- |
-| `Main.ahk` | The app: window, settings, library, recorder and engine host. |
-| `ui\` | Painted UI toolkit (GDI+), main window, dialogs. |
-| `app\` | Settings store, strategy parser, engine host (WM_COPYDATA), Roblox/docking, Discord, input capture. |
-| `engine\` | The 1.4 patched gameplay engine (`UM14Engine.ahk`) + images, native image search and the AutoHotkey interpreter. |
-| `assets\` | Background, logo, startup sounds, translations, bundled strategies. |
+The project was originally created by [Darksen](https://github.com/DarksenDev/tds-macro) and is now community-maintained. We focus on making TDS farming more convenient while keeping the software accessible and open to inspection.
 
-Your settings, strategies and recordings live in
-`%LOCALAPPDATA%\UltimateMacro14AHK`. On first start the app copies your profile,
-strategies and recordings from the Python 1.4 app (`UltimateMacro14Python`) if it
-finds one. Updates use the same AppData profile, so extracting a new app folder
-does not replace your settings, strategies or recordings.
+### What can it do?
 
-## Updates
+**Strategy playback**  
+Replay tower placements, upgrades, sells, abilities and repositioning.
 
-The optional helper checks a dedicated AHK channel and downloads verified ZIPs
-quietly when **Check and download on launch** is enabled. **Review update** shows
-the signed SHA-256 and size and asks before installing. An accepted update is
-extracted to a new folder under `%LOCALAPPDATA%\UltimateMacro14AHK\VerifiedUpdates`.
-The helper never replaces, closes, or restarts the running copy. Use **Open update
-folder**, close the old copy, and run the new `Main.ahk` when you’re ready. The
-AHK update channel is separate from the existing 1.4 EXE updater.
+**Repeated farming**  
+Run strategies with rotation, auto-skip and reconnect support.
 
-In local test builds, the helper may report that the AHK channel is unavailable.
-That does not prevent the macro from running. This ZIP can be extracted and run
-manually without enabling update checks.
+**Strategy tools**  
+Find community `.strat` files, manage profiles, and edit strategies in Strategy Lab.
 
-The macro sources and their notices are in this repository. The optional
-updater is distributed separately as a binary; it is not required to build,
-modify, or run the macro. See [1.3.3.10 comparison and release checks](COMPATIBILITY.md).
+**Game setup**  
+Optional Auto Equip, Roblox settings, party and VIP-server support.
 
-## How it fits together
+**Monitoring**  
+Optional Discord controls, screenshots, webhooks and logs.
 
-`Main.ahk` is the launcher. When you press Start it writes a fresh, secret-free
-`Settings.tds` and a validated copy of the strategy, starts
-`engine\UM14Engine.ahk` with a one-time session id, and talks to it over
-WM_COPYDATA with a fixed command allowlist — the same protocol the C# host used.
-Stop asks the engine to stop and terminates it after 8 s; F8 terminates at once.
-Only processes started from this folder's interpreter are ever closed.
+Features can vary by build and TDS update. Check the [release notes](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases) and [Wiki](https://ultmacro.xyz/wiki/) for the latest compatibility information.
 
-Recording uses the engine's own recorder, driven from the Record page: Ctrl+1–5
-picks the hotbar slot, your placement key places with an automatic tower ID,
-and F2/F8/Stop keep a draft you can edit (remove towers) and then save.
-"Record as you play" captures allowlisted game input in the launcher and is
-replayed by the engine's input playback.
+## Getting started
 
-## Support
+### 1. Check the requirements
 
-* Output → **Export log** saves the visible log.
-* Script errors are written to `%LOCALAPPDATA%\UltimateMacro14AHK\error.log`.
-* Create an empty `debug.flag` file in that folder to mirror Output into `debug.log`.
+**Required**
 
-Original macro by Darksen — https://discord.gg/DQnc2JDJtr. Licensed GNU GPLv3
-(see `LICENSE`, `licenses\` and `engine\ENGINE-NOTICE.md`).
+- Windows 10 or 11 with Roblox and Tower Defense Simulator
+- [AutoHotkey v2](https://www.autohotkey.com/v2/) (64-bit preferred)
+- The complete, extracted Ultimate Macro ZIP
+
+**Recommended settings**
+
+- **1920 × 1080** resolution and **100%** Windows scaling
+- **60 FPS** in Roblox
+- **Large** TDS UI Scale
+- **Screen Shake: Off** and **Prefer Vertical Upgrades: On**
+
+The macro includes resolution-aware detection, but the recommended display and in-game settings are the most predictable starting point. A Mac, phone or browser cannot run the Windows macro directly.
+
+### 2. Download and install
+
+1. Download from **[ultmacro.xyz/download](https://ultmacro.xyz/download)** or the official **[GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases)** page. Avoid reuploads from strangers.
+2. Extract the entire ZIP to a normal folder, such as **Documents\Ultimate Macro**. Keep its `app`, `ui`, `engine` and `assets` folders alongside `Main.ahk`.
+3. Install **[AutoHotkey v2](https://www.autohotkey.com/v2/)** if needed. The macro's source requires version 2, not version 1.
+4. Open the extracted folder and run **`Main.ahk`**. If Windows asks which program to use, select your AutoHotkey v2 installation.
+
+**Important:** don't run `Main.ahk` from inside the ZIP. The macro needs its bundled files to work.
+
+### 3. Prepare your first session
+
+1. Start Roblox and join **Tower Defense Simulator**.
+2. Match the recommended in-game settings above. Keep the Roblox window available to the macro.
+3. Open Ultimate Macro, choose a compatible strategy from your files or the community browser, and check its required towers, map and mode.
+4. Equip the required loadout yourself, or use Auto Equip if supported by the strategy and build.
+5. Start playback using the macro's controls. Watch the first run to make sure map selection, tower placement and upgrades behave as expected.
+
+Strategies are not universal. They can depend on a particular game update, loadout, difficulty and map. A strategy failing does not automatically mean your installation is broken.
+
+## Is Ultimate Macro safe?
+
+**We want users to be able to check, not just take our word for it.**
+
+Ultimate Macro's current source is **available for inspection and private modification under a restricted license**. You can inspect the [main script](Main.ahk), the [supporting code](app/), the [interface](ui/), the [engine](engine/), and the [original project](https://github.com/DarksenDev/tds-macro). Historical GPL releases and third-party components retain their licenses. It is built with AutoHotkey, a Windows scripting language often used for legitimate keyboard, mouse and interface automation.
+
+**Open source does not guarantee that every downloaded file is harmless.** There is no meaningful way to promise that any software is “100% virus-free” simply from its README. Download official builds, keep Windows security protections enabled, and check a file if a security product flags it.
+
+### Why might Windows or antivirus software flag it?
+
+- **Input automation:** The macro sends mouse clicks and key presses and inspects the game's interface. Security tools can regard automation behavior as suspicious.
+- **AutoHotkey-based files:** Some scanners flag AutoHotkey programs or compiled scripts, including legitimate ones. The [AutoHotkey documentation](https://docs.autohotkey.com/download/safe.htm) discusses false positives.
+- **New or unsigned builds:** Microsoft Defender SmartScreen may warn about downloads without an established publisher or file reputation, particularly after updates. [Microsoft explains how this works.](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)
+
+A warning **is not proof of malware**, but it also **is not proof of a false positive**. Treat the exact warning and file as something to investigate.
+
+### What should I do if I see a security warning?
+
+1. **Check the source:** Confirm you downloaded from our official website or this repository's [releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
+2. **Check the file:** Scan it with Windows Security. If a release includes a SHA-256 checksum, compare it with the file you downloaded.
+3. **Read the detection:** An “unrecognized app” SmartScreen warning is different from an antivirus detection naming specific malware.
+4. **Ask before proceeding:** If anything seems wrong, stop and report the filename, version and exact warning in our [Discord](https://discord.gg/ultmacro) or [issues](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/issues).
+
+**Do not disable Microsoft Defender, turn off SmartScreen globally, or blindly whitelist the whole macro folder.** If a detection is suspected to be incorrect, have the file reviewed by the security vendor.
+
+### What information does the macro use?
+
+Ultimate Macro performs gameplay automation on your Windows computer. Some **optional** features, including Discord integration, webhooks, screenshots and exported logs, can transmit or expose session information when configured. Review those settings before turning them on, and never post private webhook URLs, bot tokens or unredacted logs publicly.
+
+## Troubleshooting
+
+**Nothing opens?** Check that AutoHotkey v2 is installed and you're running the extracted `Main.ahk`.
+
+**Missing files?** Re-extract the complete official ZIP. Don't move `Main.ahk` by itself.
+
+**Wrong map, mode or tower actions?** Check that your strategy matches the latest TDS update, loadout, UI Scale and display settings.
+
+**Disconnects or crashes?** Check your connection, macro logs and the latest release notes.
+
+**Windows security warning?** Follow the [security checklist above](#what-should-i-do-if-i-see-a-security-warning) rather than disabling protection.
+
+For longer guides and known issues, visit the **[Ultimate Macro Wiki](https://ultmacro.xyz/wiki/)**. To get help, join **[our Discord](https://discord.gg/ultmacro)** and include the macro version, what happened, what you expected, and relevant logs or screenshots with private information removed.
+
+## The team
+
+Behind every release is a team building, testing and improving Ultimate Macro.
+
+<p align="center">
+  <img src=".github/assets/readme-team.svg" width="760" alt="Leadership: Aiden and Pizza. Development: Sanjin, Shovel, o_zki and Yoshi. Quality Assurance: ElementalbombX, ErrioT, Ka_Demon, menz.7, Nytli, tantan_bts12, Tfuemum_xd, vfxdraco and Yoshi101.">
+</p>
+
+Thanks to everyone sharing strategies, reporting bugs and helping new members in our [Discord community](https://discord.gg/ultmacro).
+
+### Original creator
+
+**[Darksen](https://github.com/DarksenDev/tds-macro)** created Ultimate Macro. The New Era continues his original project. The download total includes GitHub releases from both repositories.
+
+[Original repository](https://github.com/DarksenDev/tds-macro) · [Support Darksen](https://www.donationalerts.com/r/darksen1)
+
+## Source availability & community
+
+- **Current first-party license:** [Ultimate Macro Personal-Use Source-Available License](LICENSE-1.4.txt): personal use, inspection and private edits/forks allowed; resale and public redistribution restricted, subject to the GitHub platform exception. Not an OSI open-source license.
+- **Earlier releases and dependencies:** existing licenses remain in force; [historical GPL text](LICENSE). This change does not revoke previous GPL permissions or relicense third-party components.
+- **Source code:** [This repository](https://github.com/UltimateMacro/Ultimate-Macro-New-Era).
+- **Updates:** [GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
+- **Documentation:** [Wiki](https://ultmacro.xyz/wiki/).
+- **Help:** [Discord](https://discord.gg/ultmacro) · [Report an issue](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/issues).
+
+**Disclaimer:** Ultimate Macro is an independent community project, not affiliated with or endorsed by Roblox Corporation or Paradoxum Games. Automation may violate game or platform rules and can carry account-related risks. Use it responsibly.
