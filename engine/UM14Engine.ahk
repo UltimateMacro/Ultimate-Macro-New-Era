@@ -4541,7 +4541,12 @@ EquipTowers(towers) {
                 item := {x:resItems.x,y:resItems.y+ScaleY(7)}
             else {
                 itemsOcrTried := true
-                item := UM14_MenuWordPair(inventoryContext,left,"ITEMS")
+                item := false
+                for itemScale in [3.0,2.0,1.5] {
+                    item := UM14_MenuWordPair(inventoryContext,left,"ITEMS",false,false,itemScale)
+                    if IsObject(item)
+                        break
+                }
             }
             if IsObject(item) {
                 UM14_RequireReadyFocus()

@@ -26,6 +26,8 @@
   leading letters on two observations. Different names and roles do not pass.
 - Compact inventory recognition pairs the current close glyph with the search
   anchor on two stable frames instead of rejecting the menu on the old glyph alone.
+- Items entry retries its exact label at fixed OCR scales when the retired icon
+  or a single raster size does not match after a relaunch.
 - Clearing follows the current action row, tolerates wrapped descriptions and
   covers the first and fifth slots in tall docked clients. The current button
   row anchors the strip; fixed OCR scales handle different caption rasterization.

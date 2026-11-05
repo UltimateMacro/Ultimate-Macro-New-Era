@@ -27,7 +27,9 @@ UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" ? {w:1078
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
-UM14_ConnectionOCR(identity, region, *) {
+UM14_ConnectionOCR(identity, region, factor := 0, *) {
+    if (scenario = "items" && factor = 3.0)
+        return [{text:"ITEMS",raw:"Items",x:85,y:320,w:40,h:14}]
     if (scenario = "lobby" && region.x = 250 && region.y = 462)
         return [{text:"PLAY",raw:"PLAY",x:450,y:640,w:50,h:16}]
     if (scenario = "easy" && region.x = 210 && region.w = 620)
@@ -101,6 +103,10 @@ try {
         "Lobby Play recognition falls back to a verified live label without clicking or relaunching")
     scenario := "moved"
     Need(!UM14_LobbyPlay(), "Lobby recognition rejects a changed client")
+    scenario := "items"
+    item := UM14_MenuWordPair({w:1000,h:700},{x:0,y:250,w:168,h:130},"ITEMS",false,false,3.0)
+    Need(IsObject(item) && item.x = 105 && !clicks.Length,
+        "A current Items label uses two exact observations at the requested scale")
     scenario := "easy", activeDifficulty := "Easy"
     Need(UM14_SelectCurrentMode("Easy", &seen) && clicks.Length = 2 && clicks[2][1] = 320,
         "Easy never aliases to Casual")

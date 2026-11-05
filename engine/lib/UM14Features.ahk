@@ -192,8 +192,10 @@ UM14_ModeScroll() {
     Sleep(300)
 }
 
-UM14_MenuWord(identity, region, expected, caption := false, ellipsis := false) {
-    factor := Min(region.w < identity.w*.12 ? 3.0 : 2.0,2500/Max(region.w,region.h))
+UM14_MenuWord(identity, region, expected, caption := false, ellipsis := false, requestedScale := 0) {
+    if (requestedScale != 0 && (!IsNumber(requestedScale) || requestedScale < .125 || requestedScale > 4))
+        return false
+    factor := Min(requestedScale ? requestedScale : (region.w < identity.w*.12 ? 3.0 : 2.0),2500/Max(region.w,region.h))
     words := UM14_OCRWords(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
     match := ""
     for word in words {
@@ -211,14 +213,14 @@ UM14_MenuWord(identity, region, expected, caption := false, ellipsis := false) {
     return UM14_ConnectionSame(identity) ? match : false
 }
 
-UM14_MenuWordPair(identity, region, expected, caption := false, ellipsis := false) {
+UM14_MenuWordPair(identity, region, expected, caption := false, ellipsis := false, requestedScale := 0) {
     UM14_RequireReadyFocus()
-    first := UM14_MenuWord(identity,region,expected,caption,ellipsis)
+    first := UM14_MenuWord(identity,region,expected,caption,ellipsis,requestedScale)
     if (!IsObject(first))
         return false
     Sleep(100)
     UM14_RequireReadyFocus()
-    second := UM14_MenuWord(identity,region,expected,caption,ellipsis)
+    second := UM14_MenuWord(identity,region,expected,caption,ellipsis,requestedScale)
     if (!IsObject(second) || !UM14_ConnectionSame(identity)
         || Abs(first.x-second.x) > 4 || Abs(first.y-second.y) > 4)
         return false
