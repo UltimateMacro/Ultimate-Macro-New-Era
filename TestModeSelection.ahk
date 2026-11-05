@@ -22,12 +22,14 @@ UM14_RequireReadyFocus() => 0
 UM14_Fatal(message) {
     throw Error(message)
 }
-UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" ? {w:1078, h:995}
+UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenario = "hardcore" ? {w:1078, h:995}
     : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" ? {w:800, h:600} : {w:1000, h:700}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, factor := 0, *) {
+    if (scenario = "hardcore" && region.x = Floor(identity.w*.3307))
+        return "Wretched`nFront"
     if (scenario = "items" && factor = 3.0)
         return [{text:"ITEMS",raw:"Items",x:85,y:320,w:40,h:14}]
     if (scenario = "lobby" && region.x = 250 && region.y = 462)
@@ -95,6 +97,18 @@ Need(ok, text) {
         throw Error(text)
 }
 try {
+    Need(UM14_MapCaption("Wretched`nFront", "Wretched Front")
+        && !UM14_MapCaption("Wrecked Battlefield", "Wretched Front")
+        && !UM14_MapCaption("Wretched Frontier", "Wretched Front"), "Exact map words do not match a different map")
+    scenario := "hardcore"
+    Need(UM14_HardcoreMapSlot("Wretched Front") = 2 && !UM14_HardcoreMapSlot("Wrecked Battlefield"),
+        "Hardcore captions come from the stable game client, including a wrapped docked caption")
+    scenario := "moved"
+    Need(!UM14_HardcoreMapSlot("Wretched Front"), "No map choice from a moved or inactive game")
+    Need(!UM14_MapImageVerified({status:"success",score:.7},"Hardcore")
+        && !UM14_MapImageVerified({status:"error",score:.99},"Hardcore")
+        && UM14_MapImageVerified({status:"success",score:.9},"Hardcore"),
+        "A weak unrelated terrain match cannot confirm a Hardcore map")
     Need(UM14_InputRootMatches(123,123) && !UM14_InputRootMatches(124,123)
         && !UM14_InputRootMatches(0,0), "Only the selected game root may receive pointer input")
     scenario := "lobby"

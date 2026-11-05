@@ -1393,9 +1393,11 @@ class SelectPopup {
         surf := Surface(g, root)
         surf.background := (sf) => (Gfx.Rect(0, 0, sf.lw + 1, sf.lh + 1, Theme.C("field")), Gfx.Border(0, 0, sf.lw, sf.lh, 0, Theme.C("edge")))
         SelectPopup.gui := g, SelectPopup.surface := surf, SelectPopup.list := list
-        list.Scroll(Max(0, sel.index - 1 - visibleRows // 2))
         g.Show("x" sx " y" sy " w" pw " h" ph " NA")
         surf.Resize(pw, ph)
+        ; Rows() needs the arranged height. Before Resize it reports one row,
+        ; which can hide OFF/the first items even when the entire list fits.
+        list.Scroll(Max(0, sel.index - 1 - visibleRows // 2))
         DllCall("SetForegroundWindow", "Ptr", g.Hwnd)
         g.Show()
         if !SelectPopup.watchFn

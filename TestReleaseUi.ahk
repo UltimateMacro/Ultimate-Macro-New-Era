@@ -15,6 +15,15 @@ class UiProbe {
 }
 try {
     Store.settings := Store.Defaults()
+    popup := PopupList({labels:["OFF","1.5x","2x"],index:3},28)
+    popup.h := 84
+    popup.Scroll(1)
+    Need(popup.Rows() = 3 && popup.top = 0,
+        "A fully visible three-choice popup cannot hide its first option")
+    toolkitSource := FileRead(A_ScriptDir "\ui\Toolkit.ahk", "UTF-8")
+    popupSource := SubStr(toolkitSource, InStr(toolkitSource,"class SelectPopup"))
+    Need(InStr(popupSource,"surf.Resize(pw, ph)") < InStr(popupSource,"list.Scroll(Max(0, sel.index"),
+        "Dropdown scroll is clamped only after its real height is arranged")
     Need(!GameRecovery.CandidateStable("",1000) && !GameRecovery.CandidateStable("window-a|800x599",1000)
         && !GameRecovery.CandidateStable("window-a|800x599",2999)
         && GameRecovery.CandidateStable("window-a|800x599",3000),
@@ -56,7 +65,7 @@ try {
         "slot captions and library rows retain explicit slot indices")
     UI_Install()
     UI_Uninstall()
-    FileAppend("PASS: strategy rotation stays bounded to two slots`n","*")
+    FileAppend("PASS: dropdown bounds, strategy rotation and release UI`n","*")
     ExitApp(0)
 } catch as e {
     FileAppend("FAIL: " e.Message "`n","**")

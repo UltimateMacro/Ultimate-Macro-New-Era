@@ -457,6 +457,45 @@ UM14_MapOverridePrompt() {
     return UM14_ConnectionSame(identity) ? identity : false
 }
 
+UM14_MapCaption(text, expected) {
+    if (Type(text) != "String" || StrLen(text) > 16384)
+        return false
+    clean := " " Trim(RegExReplace(StrLower(text), "[^a-z0-9']+", " ")) " "
+    name := " " Trim(RegExReplace(StrLower(expected), "[^a-z0-9']+", " ")) " "
+    return StrLen(name) > 2 && InStr(clean, name)
+}
+
+UM14_HardcoreMapSlot(expected) {
+    UM14_RequireReadyFocus()
+    identity := UM14_ConnectionSnapshot()
+    if !IsObject(identity)
+        return 0
+    boundaries := [0, Floor(identity.w*.3307), Floor(identity.w*.5036), Floor(identity.w*.6765), identity.w]
+    Loop 4 {
+        slot := A_Index
+        region := UM14_Region(boundaries[slot], 0, boundaries[slot+1]-boundaries[slot],
+            Floor(identity.h*.6), identity.w, identity.h)
+        good := true
+        Loop 2 {
+            if (!UM14_ConnectionSame(identity)
+                || !UM14_MapCaption(UM14_ConnectionOCR(identity,region,1.5), expected)) {
+                good := false
+                break
+            }
+            if (A_Index = 1)
+                Sleep(100)
+        }
+        if (good && UM14_ConnectionSame(identity))
+            return slot
+    }
+    return 0
+}
+
+UM14_MapImageVerified(result, mode) {
+    return IsObject(result) && result.status = "success"
+        && result.score >= (mode = "Hardcore" || mode = "Voidcore" ? .82 : .62)
+}
+
 UM14_ModifierName(value) {
     ; Exact aliases only; never the fork's arbitrary prefix/substring matches.
     static names := ["Broke","Exploding","Flying","Foggy","Glass","Healthy","Hidden",

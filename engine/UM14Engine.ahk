@@ -537,7 +537,8 @@ sX(baseX, Width := 1920) {
         Width := 1920 
     }
     
-    return UM14_Scale(baseX, currentWidth, Width)
+    sourceHeight := StrategyHeight = 1090 ? 1009 : StrategyHeight
+    return UM14_WorldX(baseX, currentWidth, currentHeight, Width, sourceHeight)
 }
 
 sY(baseY, Height := 1090) {
@@ -5861,30 +5862,9 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             LogToConsole("Trying to find: " gamemap ". Please wait..")
 
             getRobloxPos(,,&w,&h)
-            FoundSlot := 0
-            regions := [[0, 0, Floor(w * 0.3307), Floor(h * 0.6)],
-            [Floor(w * 0.3307), 0, Floor(w * 0.1729), Floor(h * 0.6)],
-            [Floor(w * 0.5036), 0, Floor(w * 0.1729), Floor(h * 0.6)],
-            [Floor(w * 0.6765), 0, w - Floor(w * 0.6765), Floor(h * 0.6)]]
-
-            langCode := "en-US"
-            for availableLang in StrSplit(OCR.GetAvailableLanguages(), "`n", "`r") {
-                if (availableLang != "" && SubStr(availableLang, 1, 2) = "en") {
-                    langCode := availableLang
-                    break
-                }
-            }
-
-            Loop 4 {
-                r := regions[A_Index]
-                pBmp := Gdip_BitmapFromScreen(r[1] "|" r[2] "|" r[3] "|" r[4])
-                result := OCR.FromBitmap(pBmp, {lang:langCode, scale:1.5, grayscale: 1}).Text
-                Gdip_DisposeImage(pBmp)
-                if RegExMatch(result, "i)\b" . gamemap . "\b") {
-                    FoundSlot := A_Index
-                    break
-                }
-            }
+            ; The old screen-origin crops could read the launcher's own map
+            ; title beside a docked game. Only the selected game may supply it.
+            FoundSlot := UM14_HardcoreMapSlot(gamemap)
             
             if (attempts >= 5) {
                 UM14_LobbyFailure("hardcore map selection after five attempts")
@@ -6133,7 +6113,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
 }
 
 CheckTheMapF() {
-    global gamemap, CheckTheMap, modifiers
+    global gamemap, difficulty, CheckTheMap, modifiers
 
     modifiers_str := (modifiers is Array) ? Join(modifiers) : String(modifiers)
 
@@ -6146,10 +6126,12 @@ CheckTheMapF() {
 
         getRobloxPos(,,&w,&h)
         FoundMap := false
-        Loop 2 {
+        confirmations := 0
+        Loop 3 {
             res := AdvancedImageSearch("Resources\Maps\" gamemap ".png", 0, 0, w, h)
-
-            if (res.score > 0.62) {
+            LogToConsole("Map verification: expected=" gamemap " score=" res.score " mode=" difficulty)
+            confirmations := UM14_MapImageVerified(res,difficulty) ? confirmations+1 : 0
+            if (confirmations >= 2) {
                 FoundMap := true
                 break
             }
@@ -6158,9 +6140,7 @@ CheckTheMapF() {
         }
 
         if (!FoundMap) {
-            LogToConsole("Can't detect the map! Reloading script...", true)
-            Sleep 300
-            SafeReload()
+            UM14_LobbyFailure("map verification for " gamemap "; the expected map was not confirmed, so no strategy placements were started")
         }
     }
 
@@ -6368,6 +6348,9 @@ SpawnTower(X, Y, slotNumber, towerID) {
 
     X := sX(X, StrategyWidth)
     Y := sY(Y, StrategyHeight)
+    getRobloxPos(,,&w,&h)
+    if (X < 0 || X >= w || Y < 0 || Y >= h)
+        UM14_Fatal("This strategy's placement is outside the current Roblox view. Widen Roblox or turn docking off, then retry. No placement click was sent.")
     
     getRobloxPos(,,,&h)
     TowerY := Y
@@ -6391,6 +6374,9 @@ SpawnTower(X, Y, slotNumber, towerID) {
 
         ActivateRoblox()
         UM14_ClearPlacementPanel()
+        identity := UM14_ConnectionSnapshot()
+        if !IsObject(identity)
+            UM14_Fatal("Roblox changed before tower placement.")
         
         if UseNumbersForHotbar {
             Send("{" slotNumber "}")
@@ -6402,6 +6388,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
         
         MouseMove(X, Y, A_DefaultMouseSpeed)
         Sleep((PotatoMode = 1) ? 100 : 40)
+        UM14_RequireInputPoint(identity, X, Y)
         MouseClick()
         Sleep(100)
         SendEvent("{" CancelPlacementKey "}")
@@ -6425,6 +6412,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
             x2 := Round(w * 0.7)
             y2 := Round(h * 0.3)
             if (ImageSearch(&fx,&fy,x1,y1,x2,y2, "*Trans000000 *50 " A_WorkingDir "/Resources/cannot_place_here.png") || ReadMessage(["cannot", "here", "hereg", "herd", "her", "here!", "cann", "cannd", "he", "h", "hed"],,["need", "more", "to"],"\$|\d")) {
+                UM14_RequireInputPoint(identity, X, Y)
                 MouseClick()
 
                 placedSuccessfully := waitForTowerUI(&resV2)
@@ -6435,7 +6423,8 @@ SpawnTower(X, Y, slotNumber, towerID) {
                     break
                 }
 
-                offsets := [[0, -5 * attemptMultiplier], [5 * attemptMultiplier, 0], [0, 5 * attemptMultiplier], [-5 * attemptMultiplier, 0]]
+                radius := UM14_PlacementRadius(attemptMultiplier, h)
+                offsets := [[0, -radius], [radius, 0], [0, radius], [-radius, 0]]
                 placedSuccessfully := false
 
                 ActivateRoblox()
@@ -6454,9 +6443,12 @@ SpawnTower(X, Y, slotNumber, towerID) {
 
                     newX := X + offset[1]
                     newY := Y + offset[2]
+                    if (newX < 0 || newX >= identity.w || newY < 0 || newY >= identity.h)
+                        continue
                     
                     MouseMove(newX, newY, A_DefaultMouseSpeed)
                     Sleep((PotatoMode = 1) ? 100 : 40)
+                    UM14_RequireInputPoint(identity, newX, newY)
                     MouseClick()
                     Sleep(100)
 
@@ -6471,7 +6463,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
                 
                 if (!placedSuccessfully) {
                     SendEvent("{" CancelPlacementKey "}")
-                    attemptMultiplier := attemptMultiplier * 2
+                    attemptMultiplier := Min(4, attemptMultiplier * 2)
                 }
             } 
         }
@@ -6490,6 +6482,7 @@ SellTower(towerID) {
     LogToConsole("Selling tower " towerID "...")
     targetX := Towers[towerID].x
     targetY := Towers[towerID].y
+    UM14_ClearPlacementPanel()
     Click(targetX, targetY)
     Sleep(400)
 
@@ -6521,7 +6514,7 @@ SellTower(towerID) {
         }
 
         LogToConsole("Tower " towerID " sold successfully")
-        if (Towers[towerID].hwnd) {
+        if (Towers[towerID].HasOwnProp("hwnd") && Towers[towerID].hwnd) {
             WinClose("ahk_id " Towers[towerID].hwnd)
         }
         Towers.Delete(towerID)
@@ -6549,6 +6542,7 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 
     if (!skipOpen && LastOpenedTowerID != towerID) {
         canUseAbility := false
+        UM14_ClearPlacementPanel()
         Click(targetX, targetY)
         Sleep 250
         canUseAbility := true

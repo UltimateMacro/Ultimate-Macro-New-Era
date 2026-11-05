@@ -17,6 +17,20 @@ UM14_Scale(value, extent, source) {
     return (extent > 0 && source > 0 && value >= 0 && value < source) ? Min(extent-1, result) : result
 }
 
+UM14_WorldX(value, width, height, sourceWidth, sourceHeight) {
+    if (!UM14_Viewport(width, height) || !IsNumber(value) || sourceWidth < 0 || sourceHeight < 0)
+        throw ValueError("Invalid world-coordinate dimensions.")
+    if !sourceWidth
+        return value
+    if !sourceHeight
+        return UM14_Scale(value, width, sourceWidth)
+    ; Roblox keeps vertical field of view when a window becomes tall/narrow.
+    ; World points scale about the view centre with HEIGHT, unlike HUD pixels.
+    return Round(width/2 + (value-sourceWidth/2)*height/sourceHeight)
+}
+
+UM14_PlacementRadius(multiplier, height) => Max(1, Round(5*Min(4, Max(1,multiplier))*height/1009))
+
 UM14_Region(x, y, width, height, clientWidth, clientHeight) {
     if (!UM14_Viewport(clientWidth, clientHeight) || width < 0 || height < 0)
         return false
