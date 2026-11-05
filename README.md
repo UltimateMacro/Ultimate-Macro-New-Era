@@ -126,7 +126,7 @@ For longer guides and known issues, visit the **[Ultimate Macro Wiki](https://ul
 Behind every release is a team building, testing, and improving Ultimate Macro.
 
 <p align="center">
-  <img src=".github/assets/readme-team.svg" width="760" alt="Leadership: Aiden and Pizza. Development: Sanjin, Shovel, o_zki and Yoshi. Quality Assurance: ElementalbombX, ErrioT, Ka_Demon, menz.7, Nytli, tantan_bts12, Tfuemum_xd, vfxdraco and Yoshi101.">
+  <img src=".github/assets/readme-team.svg" width="760" alt="Leadership: thermyn and pizzaroles24. Development: jackappleteam, banana.dev, itzshovel and hesgly.">
 </p>
 
 Thanks to everyone sharing strategies, reporting bugs, and helping new members in our [Discord community](https://discord.gg/ultmacro).
