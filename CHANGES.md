@@ -1,5 +1,16 @@
 # AutoHotkey edition
 
+## 1.4.0.38
+
+- If timescale tickets run out, cancel the identified ticket dialog and keep
+  playing at normal speed. Do not retry tickets in subsequent matches of the
+  same Start; a new Start retries the user's saved preference.
+- An unavailable or delayed optional timescale confirmation no longer restarts
+  the macro. Count ticket usage only after its confirmation closes. Never click
+  Get More or guess a missing Cancel button.
+- Rebuild the workspace layout from the actual client size when startup ends,
+  including when animations are disabled.
+
 ## 1.4.0.37
 
 - Strategy rotation checks only its two assigned slots, even in a large library.

@@ -28,6 +28,7 @@ SetTitleMatchMode(1)
 #Include lib\UM14Connection.ahk
 #Include lib\UM14WindowOCR.ahk
 #Include lib\UM14Loadout.ahk
+#Include lib\UM14Timescale.ahk
 UM14_Init()
 
 if (RegExMatch(A_ScriptDir, "i)\.(zip|rar)")) {
@@ -6269,69 +6270,7 @@ waitReady() {
 }
 
 activateTimescale() {
-    global UseTimeScale, TimeScaleMode, TimeScaleMultiplier, difficulty, SettingsFile, AutorunStartTime, MultiplayerEnabled, TimescaleActive
-    if (MultiplayerEnabled) {
-        return
-    }
-
-    getRobloxPos(&x, &y, &w, &h)
-    if (UseTimeScale && difficulty != "Pizza Party" && difficulty != "Badlands II" && difficulty != "Polluted Wasteland II") { 
-        LogToConsole("Applying timescale: " TimeScaleMode ". Please, enable UI Navigation Toggle.")
-        Click(Round(w*0.5), Round(h*0.5))
-
-        Send("#")
-        Send("{sc02B}")
-        Sleep 50
-        Loop 10 {
-            Send("{Down}")
-            Sleep 10
-        }
-        Loop 20 {
-            Send("{Left}")
-            Sleep 10
-        }
-        Send("{Right}")
-        Sleep 10
-        Send("{Enter}")
-
-        Sleep(250)
-
-        res := AdvancedImageSearch("Resources/GetMore.png", Round(w * 0.25), Round(h * 0.45), Round(w * 0.50), Round(h * 0.55))
-        if (res.status = "success" && res.score >= 0.67) {
-            Click(res.x, res.y+55)
-            LogToConsole("Failed to activate timescale! You are out of tickets.", true, false)
-
-        } else {
-            res := AdvancedImageSearch("Resources/confirm.png", Round(w * 0.25), Round(h * 0.45), Round(w * 0.50), Round(h * 0.55))
-            if (res.status = "success" && res.score >= 0.67) {
-                Click(res.x, res.y)
-            } else {
-                LogToConsole("failed to activate timescale. the macro can't see the confirm/get more button... (" res.score ")", true)
-                SafeReload()
-            }
-
-            timescales := IniRead(StateFile, "State", "Timescale", 0)
-            timescales := timescales+1
-            LogToConsole("-1 Timescale ticket. Total Timescale Tickets Used: " timescales)
-            SendToWebhookInstant("[" runtime := FormatRuntime(AutorunStartTime) "] -1 Timescale ticket. `n-# Total Timescale Tickets Used: " . timescales, 12370112, false)
-            IniWrite(timescales, StateFile, "State", "Timescale")
-            TimescaleActive := true
-
-            Sleep(250)
-            if (TimeScaleMode = "2x") {
-                Loop 2 {
-                    Sleep(20)
-                    Send("{Enter}")
-                }
-            } else if (TimeScaleMode = "1.5x") {
-                Sleep(20)
-                Send("{Enter}")
-            }
-        }
-
-        Send("{sc02B}")
-        Send("#")
-    }
+    return UM14_ActivateTimescale()
 }
 
 AlignCamera(move := true, skipZoom := false, log := true) {
