@@ -242,6 +242,7 @@ class Roblox {
 ; process is closed; the fixed TDS protocol URI is the only thing opened.
 class GameRecovery {
     static state := "idle", request := "", deadline := 0, pid := 0, stamp := 0
+    static candidateKey := "", candidateSince := 0
 
     static Busy => GameRecovery.state != "idle"
 
@@ -258,6 +259,7 @@ class GameRecovery {
         w := Roblox.Windows()
         if (w.Length != 1 || w[1] != request.hwnd || !Roblox.IsForeground(request.hwnd))
             throw ValueError("The selected game must remain foreground")
+        GameRecovery.CandidateStable("", A_TickCount)
         GameRecovery.pid := WinGetPID("ahk_id " request.hwnd)
         GameRecovery.request := request, GameRecovery.stamp := GameRecovery.InputStamp()
         ; WM_CLOSE can spawn a Roblox Home client; end only the verified game process.
@@ -286,15 +288,43 @@ class GameRecovery {
         }
         if (w.Length > 1)
             return GameRecovery.Finish(false)
-        if (w.Length = 1)
-            return GameRecovery.Finish(true)
         if (A_TickCount >= GameRecovery.deadline)
             return GameRecovery.Finish(false)
+        if (w.Length = 1) {
+            ; The first visible Roblox HWND can still be a boot/loading window.
+            ; It may overwrite an early docking move with its saved bounds.
+            if GameRecovery.ReplacementReady(w[1])
+                return GameRecovery.Finish(true)
+        } else
+            GameRecovery.CandidateStable("", A_TickCount)
         return ""
+    }
+
+    static CandidateStable(key, now) {
+        if (key = "" || key != GameRecovery.candidateKey) {
+            GameRecovery.candidateKey := key, GameRecovery.candidateSince := now
+            return false
+        }
+        return now-GameRecovery.candidateSince >= 2000
+    }
+
+    static ReplacementReady(hwnd) {
+        try {
+            if (WinGetClass("ahk_id " hwnd) != "WINDOWSCLIENT" || !Roblox.IsWindowed(hwnd)
+                || DllCall("IsHungAppWindow", "Ptr", hwnd))
+                return GameRecovery.CandidateStable("", A_TickCount)
+            token := Roblox.Identity(hwnd)
+            WinGetClientPos(&x,&y,&w,&h,"ahk_id " hwnd)
+            if (!token || w < 640 || h < 480)
+                return GameRecovery.CandidateStable("", A_TickCount)
+            return GameRecovery.CandidateStable(token "|" x "|" y "|" w "|" h, A_TickCount)
+        }
+        return GameRecovery.CandidateStable("", A_TickCount)
     }
 
     static Finish(ok) {
         GameRecovery.state := "idle", GameRecovery.request := "", GameRecovery.pid := 0
+        GameRecovery.CandidateStable("", A_TickCount)
         return ok
     }
 

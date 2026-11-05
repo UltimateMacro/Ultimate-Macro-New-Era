@@ -23,12 +23,17 @@ UM14_Fatal(message) {
     throw Error(message)
 }
 UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" ? {w:1078, h:995}
-    : scenario = "horizontal" || scenario = "squad-compact" ? {w:800, h:600} : {w:1000, h:700}
+    : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" ? {w:800, h:600} : {w:1000, h:700}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, *) {
-    if (scenario = "map-prompt" && region.x = 390)
+    if (scenario = "lobby" && region.x = 250 && region.y = 462)
+        return [{text:"PLAY",raw:"PLAY",x:450,y:640,w:50,h:16}]
+    if (scenario = "easy" && region.x = 210 && region.w = 620)
+        return [{text:"EASY",raw:"Easy",x:300,y:200,w:40,h:14},
+            {text:"CASUAL",raw:"Casual",x:500,y:200,w:50,h:14}]
+    if (scenario = "map-prompt" && region.x = 270 && region.w = 460)
         return "Override Map"
     if (scenario = "squad-compact") {
         if (region.y = 15)
@@ -51,21 +56,24 @@ UM14_ConnectionOCR(identity, region, *) {
     if (scenario = "modifier" && hover[2] = Round(identity.h*.945))
         return [{text:"ADD", x:32, y:615, w:18, h:9},
             {text:"MODIFIER", x:54, y:615, w:43, h:9}]
+    if (scenario = "modifier-compact" && region.w >= 220 && hover[2] = Round(identity.h*.98))
+        return [{text:"ADD",x:43,y:550,w:22,h:10},
+            {text:"MODIFIER",x:70,y:550,w:68,h:10}]
     if (scenario = "heading" && region.x = 210 && region.w = 270)
         return [{text:"SURVIVAL", raw:"Survival", x:240, y:240, w:75, h:13}]
     return []
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
     global probes
-    if (path = "Resources/Ready.png" && (scenario = "modifier" || scenario = "map-prompt"))
+    if (path = "Resources/Ready.png" && (scenario = "modifier" || scenario = "modifier-compact" || scenario = "map-prompt"))
         return {status:"success", score:.9, x:x+100, y:y+50}
-    if (path = "Resources/Survival.png" && scenario = "sidebar")
+    if (path = "Resources/Survival.png" && (scenario = "sidebar" || scenario = "easy"))
         return {status:"success", score:.93, x:x+25, y:y+30}
     if (path = "Resources/Survival.png" && scenario = "docked" && x <= 58 && x+w > 58)
         return {status:"success", score:.93, x:58, y:295}
     if (path = "Resources/close.png" && scenario = "heading")
         return {status:"success", score:.95, x:x+30, y:y+30}
-    if (path = "Resources/" activeDifficulty ".png") {
+    if (path = "Resources/" activeDifficulty ".png" && scenario != "easy") {
         probes++
         if (scenario = "docked")
             return wheelCount && x <= 899 && x+w > 899
@@ -85,6 +93,21 @@ Need(ok, text) {
         throw Error(text)
 }
 try {
+    Need(UM14_InputRootMatches(123,123) && !UM14_InputRootMatches(124,123)
+        && !UM14_InputRootMatches(0,0), "Only the selected game root may receive pointer input")
+    scenario := "lobby"
+    play := UM14_LobbyPlay()
+    Need(IsObject(play) && play.x = 475 && play.y = 648 && !clicks.Length,
+        "Lobby Play recognition falls back to a verified live label without clicking or relaunching")
+    scenario := "moved"
+    Need(!UM14_LobbyPlay(), "Lobby recognition rejects a changed client")
+    scenario := "easy", activeDifficulty := "Easy"
+    Need(UM14_SelectCurrentMode("Easy", &seen) && clicks.Length = 2 && clicks[2][1] = 320,
+        "Easy never aliases to Casual")
+    clicks := [], activeDifficulty := "Casual"
+    Need(UM14_SelectCurrentMode("Casual", &seen) && clicks.Length = 2 && clicks[2][1] = 525,
+        "Casual retains its own card")
+    clicks := [], wheelCount := 0, probes := 0
     scenario := "sidebar", activeDifficulty := "Fallen"
     Need(UM14_SelectCurrentMode("Fallen", &seen) && seen, "Fallen selected after seeing sidebar icon")
     Need(wheelCount = 1 && clicks.Length = 2 && probes >= 3, "Fallen uses bounded scroll and two sightings")
@@ -117,6 +140,10 @@ try {
     UM14_OpenModifierMenu()
     Need(clicks.Length = 1 && clicks[1][1] = 29 && clicks[1][2] = Round(700*.945),
         "Modifier tooltip verifies the icon position rather than clicking the label")
+    scenario := "modifier-compact", clicks := [], hover := [0,0]
+    UM14_OpenModifierMenu()
+    Need(clicks.Length = 1 && clicks[1][1] = 23 && clicks[1][2] = 588,
+        "Compact modifier tooltip keeps the whole caption and still clicks only its verified hover point")
     scenario := "no-vote", clicks := [], hover := [0, 0]
     rejected := false
     try UM14_OpenModifierMenu()

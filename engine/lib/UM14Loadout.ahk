@@ -1,5 +1,45 @@
 ﻿; Owned-loadout confirmation guards. Part of the GPLv3 legacy engine bridge.
 ; Only existing EQUIP/UNEQUIP controls are accepted. No purchase action exists.
+UM14_InventoryMenuControls(close, search, identity) {
+    return IsObject(close) && IsObject(search) && IsObject(identity)
+        && close.status = "success" && close.score >= .75
+        && search.status = "success" && search.score > .67
+        && close.x >= Round(identity.w*.2) && close.x < identity.w
+        && close.y >= 0 && close.y < Round(identity.h*.4)
+        && search.x >= 0 && search.x < Round(identity.w*.5)
+        && search.y >= 0 && search.y < Round(identity.h*.5)
+}
+
+UM14_InventoryPair(identity) {
+    previousClose := "", previousSearch := ""
+    Loop 2 {
+        if !UM14_ConnectionSame(identity)
+            return false
+        close := AdvancedImageSearch("Resources\close_items.png",Round(identity.w*.2),0,
+            Round(identity.w*.8),Round(identity.h*.4))
+        search := AdvancedImageSearch("Resources\searchbar_items.png",0,0,
+            Round(identity.w*.5),Round(identity.h*.5))
+        if (!UM14_InventoryMenuControls(close,search,identity) || !UM14_ConnectionSame(identity))
+            return false
+        if (A_Index = 2 && (Abs(close.x-previousClose.x) > 4 || Abs(close.y-previousClose.y) > 4
+            || Abs(search.x-previousSearch.x) > 4 || Abs(search.y-previousSearch.y) > 4))
+            return false
+        previousClose := close, previousSearch := search
+        Sleep(100)
+    }
+    return identity
+}
+
+UM14_LobbyOrInventory() {
+    global AutoEquip
+    if IsObject(UM14_LobbyPlay())
+        return true
+    identity := UM14_ConnectionSnapshot()
+    ; EquipTowers already handles a verified open inventory. Do not restart the
+    ; whole client merely because that panel covers the lobby's Play button.
+    return AutoEquip && IsObject(identity) && IsObject(UM14_InventoryPair(identity))
+}
+
 UM14_LoadoutOCR(x, y, width, height, scale := 0, band := "") {
     UM14_LoadoutOCRState("context")
     UM14_RequireReadyFocus()
@@ -31,7 +71,13 @@ UM14_LoadoutOCRState(value := "") {
     return stage
 }
 
-UM14_LoadoutTitle(tower, &observation := "") {
+UM14_TitleMatches(text, tower, compact := false) {
+    candidate := UM14_LoadoutName(text), expected := UM14_LoadoutName(tower)
+    return candidate = expected || (compact && StrLen(candidate) >= 6 && StrLen(candidate) < StrLen(expected)
+        && SubStr(expected,1,StrLen(candidate)) = candidate)
+}
+
+UM14_LoadoutTitle(tower, &observation := "", compact := false) {
     observation := {length:0, stage:"context", overlap:"none"}
     getRobloxPos(,, &width, &height)
     if (!UM14_Viewport(width,height))
@@ -51,7 +97,7 @@ UM14_LoadoutTitle(tower, &observation := "") {
             overlap:UM14_LoadoutOverlap(UM14_ConnectionOCROverlap())}
         matches := 0
         for line in StrSplit(text,"`n","`r")
-            if (UM14_LoadoutName(line) = UM14_LoadoutName(tower))
+            if UM14_TitleMatches(line,tower,compact && width < height*1.5)
                 matches += 1
         if (matches = 1)
             return true
@@ -59,6 +105,96 @@ UM14_LoadoutTitle(tower, &observation := "") {
             break ; Re-scaling cannot fix a blocked/failed capture.
     }
     return false
+}
+
+UM14_ReferenceSelectionText(identity, region, expected) {
+    for factor in [3.0,2.0,1.5] {
+        confirmed := true
+        Loop 2 {
+            if !UM14_ConnectionSame(identity)
+                return false
+            result := UM14_ConnectionOCR(identity,region,factor,"",true)
+            if (!IsObject(result) || UM14_ConnectionOCRStage() != "success")
+                return false
+            if (!UM14_ConnectionSame(identity))
+                return false
+            if !UM14_ReferenceSelectionMatches(result,region,factor,expected) {
+                confirmed := false
+                break
+            }
+            Sleep(90)
+        }
+        if confirmed
+            return true
+    }
+    return false
+}
+
+UM14_ReferenceSelectionMatches(result, region, factor, expected) {
+    rows := []
+    ; WinRT's plain Text can flatten a card caption and the next category
+    ; heading into one string. Keep their actual word rows separate.
+    for word in UM14_OCRWords(result,region,factor) {
+        row := false, center := word.y+word.h/2
+        for candidate in rows
+            if (Abs(candidate.center-center) <= Max(candidate.height,word.h)*.5) {
+                row := candidate
+                break
+            }
+        if !IsObject(row)
+            rows.Push(row := {center:center,height:word.h,words:[]})
+        position := 1
+        while (position <= row.words.Length && row.words[position].x < word.x)
+            position++
+        row.words.InsertAt(position,word)
+        row.height := Max(row.height,word.h)
+    }
+    matches := 0, wanted := UM14_SearchQuery(expected)
+    for row in rows {
+        caption := ""
+        for word in row.words
+            caption .= (caption = "" ? "" : " ") word.raw
+        caption := UM14_SearchQuery(caption)
+        if (caption = wanted || (wanted = "DJ" && caption = "DJBOOTH"))
+            matches++
+    }
+    return matches = 1
+}
+
+UM14_ReferenceTitle(tower, bar := "", expected := "") {
+    identity := UM14_ConnectionSnapshot()
+    if !IsObject(identity)
+        return false
+    ; Compact TDS keeps a minimum title font, underneath its currency HUD.
+    ; Accept only an exact leading title fragment of at least six letters,
+    ; on two pinned observations. Roles and different tower names never pass.
+    titleConfirmed := true
+    Loop 2 {
+        if (!UM14_ConnectionSame(identity) || !UM14_LoadoutTitle(tower,,true))
+            titleConfirmed := false
+        if !titleConfirmed
+            break
+        Sleep(90)
+    }
+    if titleConfirmed
+        return UM14_ConnectionSame(identity)
+    if (identity.w >= identity.h*1.5 || !IsObject(bar) || !IsObject(expected) || !UM14_ConnectionSame(expected))
+        return false
+    query := UM14_InventorySearchRegion(bar,identity)
+    caption := UM14_Region(Round(identity.w*.015),Round(identity.h*.35),
+        Round(identity.w*.44),Round(identity.h*.21),identity.w,identity.h)
+    if (!IsObject(query) || !IsObject(caption))
+        return false
+    queryOk := UM14_ReferenceSelectionText(identity,query,tower)
+    captionOk := queryOk && UM14_ReferenceSelectionText(identity,caption,tower)
+    LogToConsole("Inventory compact selection: query=" (queryOk ? 1 : 0) " caption=" (captionOk ? 1 : 0))
+    if (!queryOk || !captionOk)
+        return false
+    action := UM14_ReadLoadoutAction("")
+    if (!IsObject(action) || !UM14_ConnectionSame(identity))
+        return false
+    LogToConsole("Inventory selection: compact query and full card caption confirmed")
+    return true
 }
 
 UM14_LoadoutTextFacts(text) {
@@ -215,32 +351,31 @@ UM14_LoadoutButton(result, region, factor, clientHeight, research := false) {
     for word in words {
         ; Do not match EQUIP inside UNEQUIP, descriptions, prices or locks.
         if ((word.text != "EQUIP" && word.text != "UNEQUIP")
-            || word.h < 7*scale || word.h > 26*scale)
+            || word.h < Max(5,7*scale) || word.h > Max(28,26*scale))
             continue
-        neighbors := 0
+        neighbors := 0, lastCenter := 0
         for neighbor in words {
             if (neighbor.text = "SKINS" && neighbor.x > word.x+word.w
-                && neighbor.x-word.x < 200*scale
+                && neighbor.x-word.x < Max(180,200*scale)
                 && Abs((neighbor.y+neighbor.h/2)-(word.y+word.h/2)) <= Max(word.h,neighbor.h)*.65)
-                neighbors += 1
+                neighbors += 1, lastCenter := neighbor.x+neighbor.w/2
         }
         if (neighbors != 1)
             continue
-        if (research) {
-            labels := 0
-            for neighbor in words {
-                if (neighbor.text = "RESEARCH" && neighbor.x-word.x > 80*scale
-                    && neighbor.x-word.x < 320*scale
-                    && Abs((neighbor.y+neighbor.h/2)-(word.y+word.h/2)) <= Max(word.h,neighbor.h)*.65)
-                    labels += 1
-            }
-            if (labels != 1)
-                continue
+        labels := 0
+        for neighbor in words {
+            if (neighbor.text = "RESEARCH" && neighbor.x > lastCenter
+                && neighbor.x-word.x > 80*scale && neighbor.x-word.x < 320*scale
+                && Abs((neighbor.y+neighbor.h/2)-(word.y+word.h/2)) <= Max(word.h,neighbor.h)*.65)
+                labels += 1, lastCenter := neighbor.x+neighbor.w/2
         }
+        if (labels > 1 || (research && labels != 1))
+            continue
         if (IsObject(found))
             return false ; Ambiguous duplicate action rows fail closed.
         found := {x:Round(word.x+word.w/2),y:Round(word.y+word.h/2),
-            w:Round(word.w),h:Round(word.h),action:word.text,status:"success",score:1.0}
+            w:Round(word.w),h:Round(word.h),action:word.text,status:"success",score:1.0,
+            stripX:Round((word.x+word.w/2+lastCenter)/2)}
     }
     return found
 }
@@ -254,15 +389,23 @@ UM14_ReadLoadoutAction(tower, &capture := "") {
     ; Read the complete button row with context. Legacy image matches could
     ; crop the prefix or border of UNEQUIP, or find EQUIP inside that word.
     ; Whole-word geometry plus its independent SKINS neighbor locate it now.
-    region := UM14_Region(Round(identity.w*.54),Round(identity.h*.60),
-        Round(identity.w*.30),Round(identity.h*.19),identity.w,identity.h)
+    region := UM14_Region(Round(identity.w*.52),Round(identity.h*.55),
+        Round(identity.w*.46),Round(identity.h*.40),identity.w,identity.h)
     if (!IsObject(region))
         return false
-    factor := Min(2.0,2500/Max(region.w,region.h))
-    result := UM14_ConnectionOCR(identity,region,factor,"",true)
+    button := false
+    ; Prefer the actual action strip above the legacy output console. A broad
+    ; lower-panel crop otherwise needs a target-window capture even when none
+    ; of the button captions themselves are covered.
+    narrow := identity.w < identity.h*1.5
+    strip := UM14_Region(Round(identity.w*.55),Round(identity.h*.59),
+        Round(identity.w*(narrow ? .38 : .25)),Round(identity.h*(narrow ? .33 : .20)),identity.w,identity.h)
+    button := UM14_ReadActionRow(identity,strip)
+    if !IsObject(button) {
+        button := UM14_ReadActionRow(identity,region)
+    }
     stage := UM14_ConnectionOCRStage()
     capture := {kind:stage = "overlap" ? "overlap" : "other",key:identity.key}
-    button := UM14_LoadoutButton(result,region,factor,identity.h)
     if (!IsObject(button) && stage = "success" && tower = "Juggernaut" && UM14_ConnectionSame(identity)) {
         ; The evolved tower's three-button strip benefits from a tighter OCR crop.
         strip := UM14_Region(Round(identity.w*.58),Round(identity.h*.665),
@@ -277,6 +420,23 @@ UM14_ReadLoadoutAction(tower, &capture := "") {
         return false
     button.identity := identity
     return button
+}
+
+UM14_ReadActionRow(identity, region) {
+    if !IsObject(region)
+        return false
+    ; The same DJ captions rasterize differently in tall docked clients.
+    ; Retry only the read at fixed scales; whole labels and SKINS still gate it.
+    for requested in [2.0,1.5,3.0] {
+        factor := Min(requested,2500/Max(region.w,region.h))
+        result := UM14_ConnectionOCR(identity,region,factor,"",true)
+        if (UM14_ConnectionOCRStage() != "success" || !UM14_ConnectionSame(identity))
+            return false
+        button := UM14_LoadoutButton(result,region,factor,identity.h)
+        if IsObject(button)
+            return button
+    }
+    return false
 }
 
 UM14_WaitLoadoutAction(tower, action, timeout := 5000, fatal := true) {
@@ -389,32 +549,54 @@ UM14_SelectLoadoutSlot(x,y) {
 
 ; The 1.3.3.10 path selects the first filtered card and finds the action
 ; by image and button color. It does not read the tower name or button label.
-UM14_ReferenceInventoryClick(identity, x, y) {
+UM14_ReferenceInventoryClick(identity, x, y, useInput := false) {
     UM14_RequireReadyFocus()
     if (!UM14_ConnectionSame(identity) || x < 0 || y < 0 || x >= identity.w || y >= identity.h)
         UM14_Fatal("Roblox moved or lost focus during inventory setup.")
-    ; Roblox can dispatch a click against the previous hovered control.
-    MouseMove(x,y,0)
-    Sleep(75)
-    if !UM14_ConnectionSame(identity)
-        UM14_Fatal("Roblox moved or lost focus during inventory setup.")
-    Click(x,y)
+    previousCoords := A_CoordModeMouse, previousMode := A_SendMode
+    try {
+        ; The capture snapshot is physical. Map through that same client
+        ; origin instead of asking a second API to translate client input.
+        CoordMode("Mouse","Screen")
+        SendMode(useInput ? "Input" : "Event")
+        ; Roblox can dispatch a click against the previous hovered control.
+        MouseMove(identity.x+x,identity.y+y)
+        Sleep(400)
+        if !UM14_ConnectionSame(identity)
+            UM14_Fatal("Roblox moved or lost focus during inventory setup.")
+        UM14_RequireInputPoint(identity,x,y)
+        Click("Down")
+        try Sleep(100)
+        finally Click("Up")
+    } finally {
+        CoordMode("Mouse",previousCoords)
+        SendMode(previousMode)
+    }
 }
 
 UM14_ReferenceInventorySearch(value, bar, identity, retry := false) {
     if !RegExMatch(value,"^[A-Za-z][A-Za-z0-9 ]{0,47}$")
         UM14_Fatal("Invalid inventory search query.")
+    region := UM14_InventorySearchRegion(bar,identity)
+    if !IsObject(region)
+        UM14_Fatal("Inventory search geometry was not verified. No equipment action was sent.")
     x := Round(bar.x+30*identity.h/1009), y := bar.y
-    ; Keep the reference offset first; on retry focus further into the field.
-    textbox := retry ? Round(bar.x+95*identity.h/1009) : x
-    UM14_ReferenceInventoryClick(identity,textbox,y)
-    Sleep(150)
+    ; Use the reference's literal text entry and first filtered card. Selection
+    ; is checked by its title and owned action afterward, not a blinking caret.
+    textbox := Round(region.x+region.w*.65)
+    LogToConsole("Inventory search: retry=" (retry ? 1 : 0) " x=" textbox " y=" y
+        " anchor=" bar.x "," bar.y "," bar.w "," bar.h " client=" identity.w "x" identity.h)
+    UM14_ReferenceInventoryClick(identity,textbox,y,retry)
+    Sleep(180)
+    ; Focus can consume the first click after a panel transition. The second
+    ; click remains inside the text field and cannot change the loadout.
+    UM14_ReferenceInventoryClick(identity,textbox,y,retry)
+    Sleep(180)
     UM14_RequireReadyFocus()
     if !UM14_ConnectionSame(identity)
         UM14_Fatal("Roblox moved during inventory search.")
-    ; Some clients lose letters from a single SendText burst (Militant → Miltan).
-    UM14_SearchText(value,retry ? 100 : 70)
-    Sleep(500)
+    UM14_SearchText(value,retry ? 100 : 80,!retry)
+    Sleep(400)
     UM14_ReferenceInventoryClick(identity,x+10,Round(identity.h*409/1009))
     Sleep(500)
 }
@@ -433,7 +615,7 @@ UM14_ReferenceVisibleTower(identity, tower) {
         return false
     UM14_ReferenceInventoryClick(identity,card.x,card.y)
     Sleep(300)
-    return UM14_ConnectionSame(identity) && UM14_LoadoutTitle(tower)
+    return UM14_ConnectionSame(identity) && UM14_ReferenceTitle(tower)
 }
 
 UM14_ReferenceInventoryAction(identity, action, prior := 0) {
@@ -452,6 +634,12 @@ UM14_ReferenceInventoryAction(identity, action, prior := 0) {
     }
     if (x1 <= x0 || y1 <= y0)
         return false
+    current := UM14_ReadLoadoutAction("")
+    if IsObject(current) {
+        if (current.action != action || current.x < x0 || current.x >= x1 || current.y < y0 || current.y >= y1)
+            return false
+        return current
+    }
     result := AdvancedImageSearch(equip ? "Resources\equip.png" : "Resources\unequip.png"
         , x0,y0,x1-x0,y1-y0,(equip ? .5 : .3)*scale,1.4,.025)
     if (result.status != "success" || result.score <= (equip ? .4 : .63)
@@ -478,28 +666,37 @@ UM14_ReferenceWaitAction(identity, action, milliseconds) {
 }
 
 UM14_ReferenceChangeAction(identity, button, fromAction, toAction) {
-    UM14_ReferenceInventoryClick(identity,button.x,button.y)
-    if !UM14_ConnectionSame(identity)
-        UM14_Fatal("Roblox moved before confirming the equipment action.")
-    ; Hover changes the button color, so verify it after moving off the control.
-    MouseMove(button.x,Max(0,button.y-Round(identity.h*.13)),0)
-    Sleep(300)
-    ; A different match elsewhere in the panel is not a receipt.
-    started := A_TickCount
-    Loop {
-        if IsObject(UM14_ReferenceInventoryAction(identity,toAction,button))
-            && !UM14_ReferenceInventoryAction(identity,fromAction,button)
-            return true
-        if (A_TickCount-started >= 1700) {
-            ; The opposite label must be stable in the same button row.
-            ; This is a receipt only, never a second click or a wider search.
-            dx := Round(90*identity.h/1009), dy := Round(34*identity.h/1009)
-            region := UM14_Region(button.x-dx,button.y-dy,2*dx+1,2*dy+1,identity.w,identity.h)
-            return IsObject(region) && IsObject(UM14_MenuWordPair(identity,region,toAction))
-                && !IsObject(UM14_MenuWordPair(identity,region,fromAction))
+    Loop 2 {
+        attempt := A_Index
+        ; The description can wrap after a card is selected. Re-read the action
+        ; after title checks instead of clicking its earlier, now-stale position.
+        ; A retry still requires the old action, never just a missing receipt.
+        fresh := UM14_ReferenceInventoryAction(identity,fromAction,button)
+        if !IsObject(fresh)
+            return attempt = 2 && IsObject(UM14_ReferenceInventoryAction(identity,toAction,button))
+        Sleep(180)
+        again := UM14_ReferenceInventoryAction(identity,fromAction,button)
+        if (!IsObject(again) || Abs(fresh.x-again.x) > 3 || Abs(fresh.y-again.y) > 3
+            || IsObject(UM14_ReferenceInventoryAction(identity,toAction,button)))
+            return false
+        button := again
+        LogToConsole("Loadout change: action=" fromAction " attempt=" attempt " x=" button.x " y=" button.y)
+        UM14_ReferenceInventoryClick(identity,button.x,button.y,attempt = 2)
+        if !UM14_ConnectionSame(identity)
+            UM14_Fatal("Roblox moved before confirming the equipment action.")
+        MouseMove(button.x,Max(0,button.y-Round(identity.h*.13)),0)
+        Sleep(300)
+        started := A_TickCount
+        Loop {
+            if IsObject(UM14_ReferenceInventoryAction(identity,toAction,button))
+                && !UM14_ReferenceInventoryAction(identity,fromAction,button)
+                return true
+            if (A_TickCount-started >= 2500)
+                break
+            Sleep(150)
         }
-        Sleep(150)
     }
+    return false
 }
 
 UM14_ReferenceUnequip(identity, button) {
@@ -508,42 +705,49 @@ UM14_ReferenceUnequip(identity, button) {
     Sleep(100)
 }
 
-UM14_ReferenceClear(identity, anchor) {
+UM14_ReferenceFooter(identity, anchor) {
     scale := identity.h/1009
-    wide := identity.w >= identity.h*1.3
-    ; 1.3.3.10 probes vertically at 61% width and aligns off the action.
-    ; Docking compresses that column, so narrow windows use the card strip.
-    center := wide ? identity.w*.61 : anchor.x+64*scale
-    y := Round(anchor.y+(wide ? 110 : 100)*scale)
-    if (y < identity.h*.67 || y >= identity.h*.98)
+    ; The current two/three-button row tracks the detail panel when TDS
+    ; shrinks it for docking. The wide reference offset alone misses slot 1.
+    center := anchor.HasOwnProp("stripX") ? anchor.stripX : identity.w/2+370*scale
+    y := anchor.y+110*scale
+    if (center < identity.w*.48 || center >= identity.w*.96 || y < identity.h*.67 || y >= identity.h*.98)
         UM14_Fatal("Inventory cards were outside the loadout strip.")
+    return {x:center,y:y,step:42.5*scale,scale:scale}
+}
+
+UM14_ReferenceClear(identity, anchor) {
+    removedCount := 0
     Loop 5 {
         removed := false
-        if wide {
-            x := Round(center)
-            Loop 13 {
-                row := y+Round((5*(A_Index-1)-30)*scale)
-                if (row >= identity.h*.67 && row < identity.h*.98) {
-                    UM14_ReferenceInventoryClick(identity,x,row)
-                    Sleep(5)
-                }
-            }
-            Sleep(600)
-            button := UM14_ReferenceInventoryAction(identity,"UNEQUIP")
-            if IsObject(button) {
-                UM14_ReferenceUnequip(identity,button)
-                continue
-            }
+        button := UM14_ReferenceInventoryAction(identity,"UNEQUIP")
+        if IsObject(button) {
+            UM14_ReferenceUnequip(identity,button)
+            removedCount++
+            LogToConsole("Loadout clearing: removed=" removedCount " confirmed=1")
+            continue
         }
-        for slot in [-4,-3,-2,-1,0,1,2,3,4] {
-            x := Round(center+slot*37*scale)
-            if (x < identity.w*.48 || x >= identity.w*.96 || y < identity.h*.72)
+        current := UM14_ReferenceInventoryAction(identity,"EQUIP")
+        if !IsObject(current)
+            UM14_Fatal("The current inventory action row could not be read while clearing the loadout.")
+        footer := UM14_ReferenceFooter(identity,current)
+        ; Selection is non-mutating. Half-card spacing covers centered strips
+        ; with one through five cards; vertical probes tolerate wrapped text.
+        for slot in [0,-1,1,-2,2,-3,3,-4,4] {
+            x := Round(footer.x+slot*footer.step)
+            if (x < identity.w*.48 || x >= identity.w*.96)
                 continue
-            UM14_ReferenceInventoryClick(identity,x,y)
+            for shift in [-18,0,18] {
+                y := Round(footer.y+shift*footer.scale)
+                if (y >= identity.h*.67 && y < identity.h*.98)
+                    UM14_ReferenceInventoryClick(identity,x,y)
+            }
             Sleep(150)
             button := UM14_ReferenceInventoryAction(identity,"UNEQUIP")
             if IsObject(button) {
                 UM14_ReferenceUnequip(identity,button)
+                removedCount++
+                LogToConsole("Loadout clearing: removed=" removedCount " confirmed=1")
                 removed := true
                 break
             }
@@ -573,8 +777,8 @@ UM14_InventorySearchRegion(bar, identity) {
         return false
     ; The 49x29 template is the magnifier, not the full textbox. Capture only
     ; the adjacent query viewport, excluding the filters/loadout buttons.
-    x := Floor(bar.x+bar.w*.35), y := Floor(bar.y-bar.h*.8)
-    w := Ceil(bar.w*6), h := Ceil(bar.h*1.6)
+    x := Floor(bar.x+bar.w*.35), y := Floor(bar.y-Max(bar.h*.8,identity.h*.022))
+    w := Ceil(Max(bar.w*6,identity.h*.32)), h := Ceil(Max(bar.h*1.6,identity.h*.045))
     region := UM14_Region(x,y,w,h,identity.w,identity.h)
     return IsObject(region) && region.x = x && region.y = y && region.w = w && region.h = h ? region : false
 }

@@ -1,13 +1,27 @@
 ; Reviewed compatibility additions from IlMlN's modified 1.3.3a source.
 ; Original GPLv3/contributor notices continue to apply. No fork updater is used.
+UM14_InputRootMatches(actual, expected) => IsInteger(actual) && actual != 0 && actual = expected
+
+UM14_RequireInputPoint(identity, x, y) {
+    if !UM14_ConnectionSame(identity)
+        UM14_Fatal("Roblox changed before inventory input.")
+    point := (identity.x+x) & 0xFFFFFFFF | ((identity.y+y) << 32)
+    under := DllCall("WindowFromPoint","Int64",point,"Ptr")
+    root := under ? DllCall("GetAncestor","Ptr",under,"UInt",2,"Ptr") : 0
+    if !UM14_InputRootMatches(root ? root : under,identity.root)
+        UM14_Fatal("Inventory input is covered by another window or pinned overlay. Move or close that overlay, or resize Roblox, then retry. No click was sent.")
+}
+
 UM14_ApplyGameInput() {
     global DefaultMouseSpeed, MouseDelay, KeyDelay
     ; Launcher starts execute on a timer thread, not the old GUI's click thread.
     ; Explicitly keep legacy Event mouse movement and the user's original values.
     SendMode("Event")
+    CoordMode("Mouse","Client")
+    CoordMode("Pixel","Client")
     SetDefaultMouseSpeed(Integer(DefaultMouseSpeed))
-    SetMouseDelay(Integer(MouseDelay))
-    SetKeyDelay(Integer(KeyDelay))
+    SetMouseDelay(Max(10,Integer(MouseDelay)))
+    SetKeyDelay(Max(20,Integer(KeyDelay)))
 }
 
 UM14_SearchText(value, minimumDelay := 60, direct := false) {
@@ -91,7 +105,7 @@ UM14_OpenModifierMenu() {
     identity := UM14_ConnectionSnapshot()
     if (!IsObject(identity))
         UM14_Fatal("Modifier setup lost its game client.")
-    region := UM14_Region(0,Round(identity.h*.77),Round(identity.w*.19),
+    region := UM14_Region(0,Round(identity.h*.77),Max(Round(identity.w*.19),Round(identity.h*.38)),
         identity.h-Round(identity.h*.77),identity.w,identity.h)
     if (!IsObject(region))
         UM14_Fatal("Modifier control region was not verified.")
@@ -114,7 +128,7 @@ UM14_OpenModifierMenu() {
         if (!UM14_ConnectionSame(identity))
             UM14_Fatal("Modifier setup lost its game client.")
         button := UM14_ModifierButton(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
-        if (!IsObject(button) || button.y >= y || Abs(button.x-x) > identity.w*.07)
+        if (!IsObject(button) || button.y >= y || Abs(button.x-x) > Max(identity.w*.07,identity.h*.14))
             continue
         Sleep(100)
         UM14_RequireReadyFocus()
@@ -233,6 +247,21 @@ UM14_MenuImagePair(identity, region, filename, score := .78) {
     return previous
 }
 
+UM14_LobbyPlay() {
+    UM14_RequireReadyFocus()
+    identity := UM14_ConnectionSnapshot()
+    if !IsObject(identity)
+        return false
+    region := UM14_Region(Round(identity.w*.25), Round(identity.h*.66),
+        Round(identity.w*.5), identity.h-Round(identity.h*.66), identity.w, identity.h)
+    if !IsObject(region)
+        return false
+    play := UM14_MenuImagePair(identity, region, "Play.png", .65)
+    if !IsObject(play)
+        play := UM14_MenuWordPair(identity, region, "PLAY", true)
+    return UM14_ConnectionSame(identity) ? play : false
+}
+
 UM14_ReferenceVoteModifiers(identity) {
     UM14_RequireReadyFocus()
     if !UM14_ConnectionSame(identity)
@@ -248,7 +277,7 @@ UM14_ReferenceVoteModifiers(identity) {
 UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
     ; Current TDS menu is a scrollable card list with a persistent sidebar.
     ; Old builds searched only the first screen for a retired font template.
-    static modes := Map("Easy","Casual","Casual","Casual","Intermediate","Intermediate",
+    static modes := Map("Easy","Easy","Casual","Casual","Intermediate","Intermediate",
         "Molten","Molten","Fallen","Fallen","Hardcore","Hardcore","Voidcore","Voidcore","Frost","Frost")
     if (!modes.Has(difficulty))
         return false ; Preserve existing special-mode compatibility.
@@ -418,7 +447,9 @@ UM14_MapOverridePrompt() {
     ready := UM14_Region(Round(w*.32),Round(h*.55),Round(w*.36),Round(h*.37),w,h)
     if !IsObject(UM14_MenuImagePair(identity,ready,"Ready.png",.76))
         return false
-    prompt := UM14_Region(Round(w*.39),Round(h*.43),Round(w*.22),Round(h*.29),w,h)
+    ; Roblox keeps a near-fixed caption size on compact clients. The old
+    ; percentage crop cut both ends off "Override Map" at 800 pixels wide.
+    prompt := UM14_Region(Round(w*.27),Round(h*.38),Round(w*.46),Round(h*.34),w,h)
     if (!IsObject(prompt) || !UM14_MenuTextPair(identity,prompt,"Override Map"))
         return false
     return UM14_ConnectionSame(identity) ? identity : false

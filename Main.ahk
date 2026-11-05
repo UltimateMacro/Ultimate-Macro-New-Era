@@ -38,8 +38,8 @@ A_MaxHotkeysPerInterval := 9999
 #Include app\Passive.ahk
 
 class App {
-    static VERSION := "1.4.0.36-ahk"
-    static UPDATE_VERSION := "1.4.0.36"
+    static VERSION := "1.4.0.37-ahk"
+    static UPDATE_VERSION := "1.4.0.37"
     static RELEASE := "1.4.0.23"   ; protocol version string for the official relay
     static SHORT_VERSION := "1.4"
     static assets := A_ScriptDir "\assets"
@@ -98,6 +98,12 @@ class App {
     }
 
     static Cleanup(reason, code) {
+        ; No queued paint may touch fonts, brushes or buffers after shutdown.
+        try UI_Uninstall()
+        try {
+            for hwnd, surface in Surface.all.Clone()
+                surface.Destroy()
+        }
         try {
             if (Engine.phase != "offline" || Engine.ToolsRunning()) {
                 Engine.KillOwned(true)

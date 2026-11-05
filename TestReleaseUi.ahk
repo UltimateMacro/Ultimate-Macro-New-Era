@@ -1,0 +1,59 @@
+#Requires AutoHotkey v2.0
+#Warn All, Off
+#NoTrayIcon
+#Include Main.ahk
+
+Need(ok, message) {
+    if !ok
+        throw Error(message)
+}
+class UiProbe {
+    text := "", rows := []
+    SetText(value) => this.text := value
+    SetRows(value, *) => this.rows := value
+    EnsureVisible(*) => 0
+}
+try {
+    Store.settings := Store.Defaults()
+    Need(!GameRecovery.CandidateStable("",1000) && !GameRecovery.CandidateStable("window-a|800x599",1000)
+        && !GameRecovery.CandidateStable("window-a|800x599",2999)
+        && GameRecovery.CandidateStable("window-a|800x599",3000),
+        "Replacement game geometry must settle before docking")
+    Need(!GameRecovery.CandidateStable("window-a|1076x993",3100)
+        && !GameRecovery.CandidateStable("window-b|1076x993",5100)
+        && !GameRecovery.CandidateStable("",7100),
+        "A resize, replacement window or missing client resets readiness")
+    for row in Engine.Schema() {
+        if (row[1] = "Options" && row[2] = "MouseDelay")
+            Need(row[3] = "10", "mouse timing matches the modified reference")
+        if (row[1] = "Options" && row[2] = "KeyDelay")
+            Need(row[3] = "20", "key timing matches the modified reference")
+    }
+    items := [{path:"first",title:"First"},{path:"second",title:"Second"},
+        {path:"third",title:"Third"},{path:"fourth",title:"Fourth"}]
+    MW.reasonCache := Map("first","","second","","third","","fourth","")
+    s := Map("slot1","first","slot2","fourth")
+    Need(MW.RotationReason(s,items) = "", "two valid slots in a library with more than two items")
+    s["slot2"] := "missing"
+    Need(MW.RotationReason(s,items) != "", "missing slot disables Start without throwing")
+    s.Delete("slot2")
+    Need(MW.RotationReason(s,items) != "", "a missing key cannot read slot3")
+    s["slot2"] := "fourth"
+    MW.reasonCache["fourth"] := "unsupported test strategy"
+    Need(MW.RotationReason(s,items) = "unsupported test strategy", "the second slot retains its validation")
+    Store.settings["slot1"] := "first", Store.settings["slot2"] := "fourth"
+    MW.items := items, MW.visibleItems := items, MW.current := items[1]
+    MW.loadoutCache := Map("first","one","fourth","four")
+    MW.slotNames := [UiProbe(),UiProbe()], MW.slotLoadouts := [UiProbe(),UiProbe()]
+    MW.slotButtons := [UiProbe(),UiProbe()], MW.list := UiProbe()
+    MW.RefreshSlots()
+    Need(MW.slotNames[1].text = "First" && MW.slotNames[2].text = "Fourth" && MW.list.rows.Length = 4,
+        "slot captions and library rows retain explicit slot indices")
+    UI_Install()
+    UI_Uninstall()
+    FileAppend("PASS: strategy rotation stays bounded to two slots`n","*")
+    ExitApp(0)
+} catch as e {
+    FileAppend("FAIL: " e.Message "`n","**")
+    ExitApp(1)
+}

@@ -20,6 +20,16 @@ UI_Install() {
     OnMessage(0x0133, UI_CtlColorStatic)
 }
 
+UI_Uninstall() {
+    for binding in [[0x000F,UI_Paint], [0x0014,UI_EraseBkgnd], [0x0200,UI_MouseMove],
+        [0x0201,UI_LButtonDown], [0x0203,UI_LButtonDblClk], [0x0202,UI_LButtonUp],
+        [0x020A,UI_MouseWheel], [0x02A3,UI_MouseLeave], [0x0020,UI_SetCursor],
+        [0x0100,UI_KeyDown], [0x0104,UI_SysKeyDown], [0x0102,UI_Char],
+        [0x0083,UI_NcCalcSize], [0x0084,UI_NcHitTest], [0x0024,UI_GetMinMaxInfo],
+        [0x0138,UI_CtlColorStatic], [0x0133,UI_CtlColorStatic]]
+        OnMessage(binding[1], binding[2], 0)
+}
+
 UI_Logical(lParam, &x, &y) {
     x := ((lParam & 0xFFFF) << 48 >> 48) / Gfx.S
     y := ((lParam >> 16 & 0xFFFF) << 48 >> 48) / Gfx.S

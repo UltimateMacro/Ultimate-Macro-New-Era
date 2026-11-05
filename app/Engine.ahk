@@ -73,7 +73,7 @@ class Engine {
             , ["Options", "CheckTheMap", "1"], ["Options", "UseNumbers", "1"], ["Options", "UseHotkeyForUpgrade", "1"], ["Options", "CollectPlaytimeRewards", "1"]
             , ["Options", "AutoCloseChat", "1"], ["Options", "DebugConsole", "1"], ["Options", "PotatoMode", "0"], ["Options", "AlwaysOnTop", "1"]
             , ["Options", "LegacyMode", "0"], ["Options", "UseVipServer", "0"], ["Options", "VipLink", ""], ["Options", "TimeScaleMode", "OFF"]
-            , ["Options", "UpgradeDelay", "200"], ["Options", "DefaultMouseSpeed", "2"], ["Options", "MouseDelay", "-1"], ["Options", "KeyDelay", "-1"]
+            , ["Options", "UpgradeDelay", "200"], ["Options", "DefaultMouseSpeed", "2"], ["Options", "MouseDelay", "10"], ["Options", "KeyDelay", "20"]
             , ["Hotkeys", "Chain", "C"], ["Hotkeys", "Beat", "B"], ["Hotkeys", "Caravan", "J"], ["Hotkeys", "RaiseTheDead", "V"], ["Hotkeys", "Hologram", "K"]
             , ["Hotkeys", "Repo", "L"], ["Hotkeys", "CancelPlacement", "Q"], ["Hotkeys", "UpgradeTower", "E"], ["Hotkeys", "UpgradeBottom", "Z"]
             , ["RecordingHotkeys", "PlaceTowerKey", "f"], ["RecordingHotkeys", "UpgradeTowerKey", "^u"], ["RecordingHotkeys", "AlignCameraKey", "^t"]

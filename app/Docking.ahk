@@ -169,7 +169,7 @@ class Docking {
         fresh.moved := true
         Docking.entries[1] := fresh
         Docking.settling := true
-        Docking.deadline := A_TickCount + 2500
+        Docking.deadline := A_TickCount + 5000
         return true
     }
 }

@@ -1,5 +1,44 @@
 # AutoHotkey edition
 
+## 1.4.0.37
+
+- Strategy rotation checks only its two assigned slots, even in a large library.
+- Restore the modified reference's 10 ms mouse / 20 ms key timing. Inventory
+  clicks use the configured movement speed, settle before pressing, map through
+  the captured client's physical origin and hold for 100 ms.
+  A missed action gets one retry only while the same owned button still offers
+  that action on two fresh observations. Covered controls receive no click.
+- Easy and Casual keep their separate cards in the Survival menu.
+- Advanced settings and Match options scroll their newly opened section into view.
+- Offscreen edit controls stay hidden, and repeated layout passes no longer move
+  unchanged native fields or scroll a field while arranging the page.
+- Valid recording shortcuts save when leaving a field. Invalid or conflicting
+  shortcuts keep the last working bindings and show the reason in Settings.
+- Lobby detection accepts the current Play label instead of restarting solely
+  because the old image does not match. A verified open inventory can proceed
+  directly to auto-equip. Relaunch keeps the launcher's docked bounds.
+- Wait for a responsive replacement game window with stable geometry before
+  docking it. A newly visible boot window is no longer treated as ready.
+- Compact clients retain the full Override Map caption and Add Modifier tooltip.
+- Auto-equip focuses inside the search field, uses the modified reference's
+  literal text entry, then checks the selected tower and owned action.
+- Compact title checks tolerate a HUD-obscured ending only after six exact
+  leading letters on two observations. Different names and roles do not pass.
+- Compact inventory recognition pairs the current close glyph with the search
+  anchor on two stable frames instead of rejecting the menu on the old glyph alone.
+- Clearing follows the current action row, tolerates wrapped descriptions and
+  covers the first and fifth slots in tall docked clients. The current button
+  row anchors the strip; fixed OCR scales handle different caption rasterization.
+  The exact DJ Booth card caption is accepted for a strategy's DJ requirement.
+- Remove the retired white-pixel/topbar chat click, which could select unrelated
+  Roblox controls. Close chat manually before starting if it covers the game.
+- Closing the app disconnects paint handlers and queued drawing timers before
+  freeing the graphics resources.
+
+The Windows capture indicator may appear during target-window OCR. It is not
+suppressed by changing Windows security or capture permissions. These changes
+do not make old strategies compatible with every TDS tower or balance update.
+
 ## 1.4.0.36
 
 - The lobby selector checks the Survival icon as well as its label and scrolls
