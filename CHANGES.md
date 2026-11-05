@@ -1,5 +1,12 @@
 # AutoHotkey edition
 
+## 1.4.0.36
+
+- The lobby selector checks the Survival icon as well as its label and scrolls
+  the confirmed mode menu to find cards below the first row.
+- Import older settings recognizes 1.3.6 `.ump` profiles. It imports supported
+  preferences only, leaving strategies and private fields untouched.
+
 ## 1.4.0.35 release candidate
 
 - Docking reports whether Windows applied the layout. A rejected or stalled

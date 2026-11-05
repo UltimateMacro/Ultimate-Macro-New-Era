@@ -192,6 +192,28 @@ UM14_MenuWordPair(identity, region, expected, caption := false) {
     return second
 }
 
+UM14_MenuImagePair(identity, region, filename, score := .78) {
+    if (!IsObject(region))
+        return false
+    previous := false
+    Loop 2 {
+        UM14_RequireReadyFocus()
+        if (!UM14_ConnectionSame(identity))
+            return false
+        found := AdvancedImageSearch("Resources/" filename, region.x, region.y, region.w, region.h, .45, 1.7)
+        if (found.status != "success" || found.score < score || !UM14_ConnectionSame(identity)
+            || found.x < region.x || found.x >= region.x+region.w
+            || found.y < region.y || found.y >= region.y+region.h)
+            return false
+        if (IsObject(previous) && (Abs(previous.x-found.x) > 5 || Abs(previous.y-found.y) > 5))
+            return false
+        previous := found
+        if (A_Index = 1)
+            Sleep(100)
+    }
+    return previous
+}
+
 UM14_ReferenceVoteModifiers(identity) {
     UM14_RequireReadyFocus()
     if !UM14_ConnectionSame(identity)
@@ -215,11 +237,13 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
     identity := UM14_ConnectionSnapshot()
     if (!IsObject(identity))
         return false
-    sidebar := UM14_Region(Round(identity.w*.14),Round(identity.h*.09),
-        Round(identity.w*.07),Round(identity.h*.54),identity.w,identity.h)
+    sidebar := UM14_Region(Round(identity.w*.12),Round(identity.h*.09),
+        Round(identity.w*.09),Round(identity.h*.69),identity.w,identity.h)
     if (!IsObject(sidebar))
         return false
-    navigation := UM14_MenuWordPair(identity,sidebar,"Survival")
+    navigation := UM14_MenuImagePair(identity,sidebar,"Survival.png")
+    if (!IsObject(navigation))
+        navigation := UM14_MenuWordPair(identity,sidebar,"Survival")
     if (!IsObject(navigation)) {
         ; Current TDS also puts the category tabs in a horizontal strip.
         ; Require the neighboring Story tab, not the Survival section title.
@@ -232,40 +256,39 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
                 navigation := survival
         }
     }
+    menuClose := UM14_Region(Round(identity.w*.68),0,Round(identity.w*.20),
+        Round(identity.h*.15),identity.w,identity.h)
+    heading := false
     if (!IsObject(navigation)) {
-        ; The sidebar caption can be too small to read. If the Survival
-        ; heading and requested card are already visible, skip navigation.
+        ; The first row may be visible with Fallen and Frost below the fold.
+        ; Keep searching after a confirmed heading, even without sidebar OCR.
         headingRegion := UM14_Region(Round(identity.w*.21),Round(identity.h*.10),
             Round(identity.w*.27),Round(identity.h*.80),identity.w,identity.h)
         heading := UM14_MenuWordPair(identity,headingRegion,"Survival")
         if (!IsObject(heading) || heading.y >= identity.h*.86)
             return false
-        seenMenu := true
-        cardRegion := UM14_Region(Round(identity.w*.21),heading.y+1,
-            Round(identity.w*.62),Floor(identity.h*.94)-heading.y-1,identity.w,identity.h)
-        card := UM14_MenuWordPair(identity,cardRegion,modes[difficulty],true)
-        if (!IsObject(card))
-            return false
+    }
+    seenMenu := true
+    if (IsObject(navigation)) {
         UM14_RequireReadyFocus()
         if (!UM14_ConnectionSame(identity))
             return false
-        Click(card.x,card.y)
-        LogToConsole("Mode selection: visible Survival card confirmed=1")
-        return true
+        Click(navigation.x,navigation.y)
+        Sleep(300)
     }
-    seenMenu := true
-    UM14_RequireReadyFocus()
-    if (!UM14_ConnectionSame(identity))
-        return false
-    Click(navigation.x,navigation.y)
-    Sleep(250)
     region := UM14_Region(Round(identity.w*.21),Round(identity.h*.10),
         Round(identity.w*.62),Round(identity.h*.80),identity.w,identity.h)
     started := A_TickCount
     Loop 9 {
         if (!UM14_ConnectionSame(identity) || A_TickCount-started >= 16000)
             return false
-        card := UM14_MenuWordPair(identity,region,modes[difficulty],true)
+        cardRegion := A_Index = 1 && IsObject(heading) ? UM14_Region(Round(identity.w*.21),
+            heading.y+1,Round(identity.w*.62),Floor(identity.h*.94)-heading.y-1,identity.w,identity.h) : region
+        if (!IsObject(cardRegion))
+            return false
+        card := UM14_MenuImagePair(identity,cardRegion,difficulty ".png")
+        if (!IsObject(card))
+            card := UM14_MenuWordPair(identity,cardRegion,modes[difficulty],true)
         if (IsObject(card)) {
             UM14_RequireReadyFocus()
             if (!UM14_ConnectionSame(identity))
@@ -276,7 +299,9 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         }
         ; Re-prove the navigation before every bounded scroll. Capture failure
         ; or an unexpected menu never becomes permission to send wheel input.
-        if (A_Index = 9 || (!IsObject(UM14_MenuWordPair(identity,sidebar,"Survival"))
+        if (A_Index = 9 || (!IsObject(UM14_MenuImagePair(identity,sidebar,"Survival.png"))
+            && !IsObject(UM14_MenuImagePair(identity,menuClose,"close.png",.86))
+            && !IsObject(UM14_MenuWordPair(identity,sidebar,"Survival"))
             && (!IsSet(tabs) || !IsObject(tabs) || !IsObject(UM14_MenuWordPair(identity,tabs,"Survival")))))
             return false
         UM14_RequireReadyFocus()

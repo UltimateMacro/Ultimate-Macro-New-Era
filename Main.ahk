@@ -38,8 +38,8 @@ A_MaxHotkeysPerInterval := 9999
 #Include app\Passive.ahk
 
 class App {
-    static VERSION := "1.4.0.35-ahk"
-    static UPDATE_VERSION := "1.4.0.35"
+    static VERSION := "1.4.0.36-ahk"
+    static UPDATE_VERSION := "1.4.0.36"
     static RELEASE := "1.4.0.23"   ; protocol version string for the official relay
     static SHORT_VERSION := "1.4"
     static assets := A_ScriptDir "\assets"

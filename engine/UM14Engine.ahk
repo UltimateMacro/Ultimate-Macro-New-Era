@@ -5439,13 +5439,18 @@ JoinGame() {
             break
         getRobloxPos(,, &w, &h)
         if (A_TickCount - startTime >= 60000)
-            UM14_LobbyFailure("difficulty selection")
+            UM14_LobbyFailure("difficulty selection: " difficulty)
         if (A_TickCount - startTime > 20000 && A_TickCount-lastPlayRetry >= 2000) {
             lastPlayRetry := A_TickCount
             res := AdvancedImageSearch("Resources\Play.png", Round(w*.25), Round(h*.66), Round(w*.5), Round(h*.34))
             if (res.status == "success" && res.score > 0.7) {
                 Click(res.x, res.y)
                 Sleep(1000)
+                    currentMenuSeen := false
+                    if (UM14_SelectCurrentMode(difficulty, &currentMenuSeen))
+                        break
+                    if (!currentMenuSeen)
+                        UM14_ModeScroll()
             }
         }
         res := AdvancedImageSearch("Resources/" difficulty ".png", 0, 0, w, h)

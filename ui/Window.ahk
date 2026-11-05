@@ -1092,7 +1092,7 @@ class MW {
             MW.Log("Undock Roblox and stop the macro before importing settings.")
             return
         }
-        path := FileSelect(1, , _T("Import older settings"), "Macro profiles (*.json; *.tds)")
+        path := FileSelect(1, , _T("Import older settings"), "Macro profiles (*.ump; *.json; *.tds)")
         if (path = "")
             return
         try result := LegacyProfile.Read(path, Store.settings)
@@ -1105,7 +1105,7 @@ class MW {
             return
         }
         if (Dialog.Ask(_T("Import older settings"), "Apply " result.imported " supported settings? " result.skipped " entries were skipped. "
-            . "Delays below 20 ms are adjusted to 20 ms. Secrets and strategy paths are not imported. Your original file remains unchanged.", ["Yes", "No"], 2) != "Yes")
+            . "Delays below 20 ms are adjusted to 20 ms. Secrets and strategies are not imported. Your original file remains unchanged.", ["Yes", "No"], 2) != "Yes")
             return
         prev := Store.settings
         Store.settings := result.candidate
