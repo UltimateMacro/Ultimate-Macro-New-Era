@@ -560,9 +560,12 @@ class MW {
         MW.compact := (w / Gfx.S) < 740
         MW.ultra := (w / Gfx.S) < 480
         MW.ApplyResponsive()
-        MW.surface.Resize(w, h)
-        MW.PlacePages()
         MW.maxBtn.icon := (minmax = 1) ? "restore" : "max"
+        MW.surface.Resize(w, h)
+        ; Resize already arranged the main surface; place the page from that
+        ; layout and paint both now so a resize never shows black or stale frames.
+        MW.PlacePages(false)
+        MW.surface.RenderNow()
     }
 
     static ApplyResponsive() {
@@ -586,26 +589,33 @@ class MW {
         return lh < 480 ? Min(130, Max(40, Floor((lh - 100) / 4))) : 130
     }
 
-    static PlacePages() {
+    static PlacePages(relayout := true) {
         if (!MW.layout || !MW.pages.Length)
             return
-        MW.surface.Relayout()
+        if relayout
+            MW.surface.Relayout()
         r := MW.layout.pageRect, s := Gfx.S
         x := Round(r[1] * s), y := Round(r[2] * s), w := Max(1, Round(r[3] * s)), h := Max(1, Round(r[4] * s))
-        for i, p in MW.pages {
-            if (i = MW.page && !MW.booting) {
-                p.surface.offX := x, p.surface.offY := y
-                DllCall("SetWindowPos", "Ptr", p.gui.Hwnd, "Ptr", 0, "Int", x, "Int", y, "Int", w, "Int", h, "UInt", 0x14)
-                p.surface.Resize(w, h)
-                if !p.shown {
-                    p.gui.Show("NA x" x " y" y " w" w " h" h)
-                    p.shown := true
-                }
-            } else if p.shown {
+        target := MW.booting ? 0 : MW.page
+        ; Paint the incoming page completely before it becomes visible, and only
+        ; then hide the outgoing one, so a tab switch never flashes the bare
+        ; backdrop or native fields over an unpainted page.
+        if (target && target <= MW.pages.Length) {
+            p := MW.pages[target]
+            p.surface.offX := x, p.surface.offY := y
+            DllCall("SetWindowPos", "Ptr", p.gui.Hwnd, "Ptr", 0, "Int", x, "Int", y, "Int", w, "Int", h, "UInt", 0x14)
+            p.surface.Resize(w, h)
+            p.surface.RenderNow()
+            if !p.shown {
+                p.gui.Show("NA x" x " y" y " w" w " h" h)
+                p.shown := true
+            }
+        }
+        for i, p in MW.pages
+            if (i != target && p.shown) {
                 p.gui.Hide()
                 p.shown := false
             }
-        }
         o := MW.layout.outputRect
         if MW.outputVisible && !MW.booting {
             MW.outputEdit.Move(Round(14 * s), Round((o[2] + 6) * s), Round((o[3] - 20) * s), Round((o[4] - 10) * s))
@@ -1244,6 +1254,7 @@ class MW {
     static ToggleOutput() {
         MW.outputVisible := !MW.outputVisible
         MW.PlacePages()
+        MW.surface.RenderNow()
     }
 
     static ExportOutput() {
