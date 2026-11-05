@@ -15,7 +15,7 @@ class Surface {
         this.dc := 0, this.hbm := 0, this.obm := 0
         this.hover := "", this.pressed := "", this.capture := "", this.focusWidget := ""
         this.natives := [], this.pending := false, this.layoutPending := false
-        this.rendering := false, this.deferredSize := ""
+        this.rendering := false, this.deferredSize := "", this.layouting := false
         this.background := "", this.overlay := "", this.originX := 0, this.originY := 0
         this.dragScroll := false, this.dragStart := 0, this.dragScroll0 := 0
         this.tipWidget := "", this.tipShown := false
@@ -27,6 +27,10 @@ class Surface {
     }
 
     Destroy() {
+        SetTimer(this.renderFn, 0)
+        SetTimer(this.layoutFn, 0)
+        SetTimer(this.tipFn, 0)
+        this.pending := this.layoutPending := false
         if Surface.all.Has(this.hwnd)
             Surface.all.Delete(this.hwnd)
         this.FreeBuffer()
@@ -92,35 +96,47 @@ class Surface {
     }
 
     Relayout(*) {
+        if this.layouting {
+            this.RequestLayout()
+            return
+        }
         this.layoutPending := false
         if (!this.pw)
             return
-        width := this.lw
-        h := this.root.Measure(width)
-        if (this.scrollable && h > this.lh + 0.5) {
-            width := Max(1, this.lw - 12)
+        this.layouting := true
+        try {
+            width := this.lw
             h := this.root.Measure(width)
-        }
-        this.contentW := width, this.contentH := Max(h, this.lh)
-        this.scrollY := Max(0, Min(this.scrollY, this.contentH - this.lh))
-        for n in this.natives
-            n._placed := false
-        this.root.Arrange(0, -this.scrollY, width, this.scrollable ? this.contentH : this.lh)
-        for n in this.natives
-            n.ApplyNative()
+            if (this.scrollable && h > this.lh + 0.5) {
+                width := Max(1, this.lw - 12)
+                h := this.root.Measure(width)
+            }
+            this.contentW := width, this.contentH := Max(h, this.lh)
+            this.scrollY := Max(0, Min(this.scrollY, this.contentH - this.lh))
+            for n in this.natives
+                n._placed := false
+            this.root.Arrange(0, -this.scrollY, width, this.scrollable ? this.contentH : this.lh)
+            for n in this.natives
+                n.ApplyNative()
+        } finally this.layouting := false
         this.Invalidate()
     }
 
     ScrollTo(y) {
+        if this.layouting
+            return false
         y := Max(0, Min(y, this.contentH - this.lh))
         if (Abs(y - this.scrollY) < 0.5)
             return false
-        this.scrollY := y
-        for n in this.natives
-            n._placed := false
-        this.root.Arrange(0, -this.scrollY, this.contentW, this.contentH)
-        for n in this.natives
-            n.ApplyNative()
+        this.layouting := true
+        try {
+            this.scrollY := y
+            for n in this.natives
+                n._placed := false
+            this.root.Arrange(0, -this.scrollY, this.contentW, this.contentH)
+            for n in this.natives
+                n.ApplyNative()
+        } finally this.layouting := false
         this.Invalidate()
         return true
     }
@@ -1074,8 +1090,8 @@ class Field extends W {
     SetFocused(v) {
         this.focused := v
         this.Invalidate()
-        if (v && this.surface)
-            this.surface.EnsureVisible(this)
+        ; Tab navigation scrolls explicitly. Native focus notifications can also
+        ; arrive while controls are being hidden and must not move the page.
         if (!v && this.onCommit)
             this.onCommit.Call(this)
     }
@@ -1130,15 +1146,25 @@ class Field extends W {
         if !this.ctrl
             return
         show := this._placed && this.Effective() && this.w > 20
+            && this.y + this.h > 0 && this.y < this.surface.lh
         if (show) {
             s := Gfx.S, lh := Gfx.LineH(Gfx.Font(13)) + 2
             right := this.innerRight + (this.suffix != "" ? Gfx.Measure(this.suffix, Gfx.Font(13))[1] + 4 : 0)
             ix := Round((this.x + 10) * s), iy := Round((this.y + (this.h - lh) / 2) * s)
             iw := Round((this.w - 10 - right) * s), ih := Round(lh * s)
-            DllCall("SetWindowPos", "Ptr", this.ctrl.Hwnd, "Ptr", 0, "Int", ix, "Int", iy, "Int", Max(4, iw), "Int", ih, "UInt", 0x14)
+            bounds := ix "|" iy "|" Max(4, iw) "|" ih
+            if (!this.HasOwnProp("nativeBounds") || this.nativeBounds != bounds) {
+                DllCall("SetWindowPos", "Ptr", this.ctrl.Hwnd, "Ptr", 0, "Int", ix, "Int", iy, "Int", Max(4, iw), "Int", ih, "UInt", 0x14)
+                this.nativeBounds := bounds
+            }
         }
-        this.ctrl.Enabled := this.IsEnabled()
-        this.ctrl.Visible := show
+        enabled := this.IsEnabled()
+        if (this.ctrl.Enabled != enabled)
+            this.ctrl.Enabled := enabled
+        if (!show && DllCall("GetFocus", "Ptr") = this.ctrl.Hwnd)
+            DllCall("SetFocus", "Ptr", this.surface.hwnd)
+        if (this.ctrl.Visible != show)
+            this.ctrl.Visible := show
     }
     Paint() {
         en := this.IsEnabled()

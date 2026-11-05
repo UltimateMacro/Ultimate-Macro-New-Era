@@ -1,13 +1,27 @@
-﻿; Reviewed compatibility additions from IlMlN's modified 1.3.3a source.
+; Reviewed compatibility additions from IlMlN's modified 1.3.3a source.
 ; Original GPLv3/contributor notices continue to apply. No fork updater is used.
+UM14_InputRootMatches(actual, expected) => IsInteger(actual) && actual != 0 && actual = expected
+
+UM14_RequireInputPoint(identity, x, y) {
+    if !UM14_ConnectionSame(identity)
+        UM14_Fatal("Roblox changed before inventory input.")
+    point := (identity.x+x) & 0xFFFFFFFF | ((identity.y+y) << 32)
+    under := DllCall("WindowFromPoint","Int64",point,"Ptr")
+    root := under ? DllCall("GetAncestor","Ptr",under,"UInt",2,"Ptr") : 0
+    if !UM14_InputRootMatches(root ? root : under,identity.root)
+        UM14_Fatal("Inventory input is covered by another window or pinned overlay. Move or close that overlay, or resize Roblox, then retry. No click was sent.")
+}
+
 UM14_ApplyGameInput() {
     global DefaultMouseSpeed, MouseDelay, KeyDelay
     ; Launcher starts execute on a timer thread, not the old GUI's click thread.
     ; Explicitly keep legacy Event mouse movement and the user's original values.
     SendMode("Event")
+    CoordMode("Mouse","Client")
+    CoordMode("Pixel","Client")
     SetDefaultMouseSpeed(Integer(DefaultMouseSpeed))
-    SetMouseDelay(Integer(MouseDelay))
-    SetKeyDelay(Integer(KeyDelay))
+    SetMouseDelay(Max(10,Integer(MouseDelay)))
+    SetKeyDelay(Max(20,Integer(KeyDelay)))
 }
 
 UM14_SearchText(value, minimumDelay := 60, direct := false) {
@@ -91,30 +105,48 @@ UM14_OpenModifierMenu() {
     identity := UM14_ConnectionSnapshot()
     if (!IsObject(identity))
         UM14_Fatal("Modifier setup lost its game client.")
-    region := UM14_Region(0,Round(identity.h*.82),Round(identity.w*.16),
-        Round(identity.h*.16),identity.w,identity.h)
+    region := UM14_Region(0,Round(identity.h*.77),Max(Round(identity.w*.19),Round(identity.h*.38)),
+        identity.h-Round(identity.h*.77),identity.w,identity.h)
     if (!IsObject(region))
         UM14_Fatal("Modifier control region was not verified.")
+    vote := UM14_Region(Round(identity.w*.25),Round(identity.h*.66),
+        Round(identity.w*.5),Round(identity.h*.34),identity.w,identity.h)
+    if (!IsObject(UM14_MenuImagePair(identity,vote,"Ready.png",.7)))
+        UM14_Fatal("Map vote screen could not be verified. No modifier click was sent.")
     factor := Min(3.0,2500/Max(region.w,region.h))
-    started := A_TickCount, previous := false
-    Loop {
+    ; 1.3.3.10 starts at the bottom-left icon. Its label is a hover
+    ; tooltip, so click the confirmed hover point, not the tooltip text.
+    x := Round(Max(18,Min(56,identity.w*56/1920)))
+    for fraction in [930/1009,.945,.965,.98] {
+        UM14_RequireReadyFocus()
+        if (!UM14_ConnectionSame(identity))
+            UM14_Fatal("Modifier setup lost its game client.")
+        y := Min(identity.h-2,Round(identity.h*fraction))
+        MouseMove(x,y)
+        Sleep(260)
         UM14_RequireReadyFocus()
         if (!UM14_ConnectionSame(identity))
             UM14_Fatal("Modifier setup lost its game client.")
         button := UM14_ModifierButton(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
-        if (IsObject(button) && IsObject(previous)
-            && Abs(button.x-previous.x) <= 4 && Abs(button.y-previous.y) <= 4) {
-            UM14_RequireReadyFocus()
-            if (!UM14_ConnectionSame(identity))
-                UM14_Fatal("Modifier setup lost its game client.")
-            Click(button.x,button.y)
-            return
-        }
-        if (A_TickCount-started >= 4500)
-            UM14_Fatal("Add Modifier could not be verified. No modifier click was sent.")
-        previous := button
-        Sleep(120)
+        if (!IsObject(button) || button.y >= y || Abs(button.x-x) > Max(identity.w*.07,identity.h*.14))
+            continue
+        Sleep(100)
+        UM14_RequireReadyFocus()
+        if (!UM14_ConnectionSame(identity))
+            UM14_Fatal("Modifier setup lost its game client.")
+        again := UM14_ModifierButton(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
+        if (!IsObject(again) || Abs(button.x-again.x) > 4 || Abs(button.y-again.y) > 4)
+            continue
+        UM14_RequireReadyFocus()
+        if (!UM14_ConnectionSame(identity))
+            UM14_Fatal("Modifier setup lost its game client.")
+        MouseGetPos(&hoverX,&hoverY)
+        if (Abs(hoverX-x) > 2 || Abs(hoverY-y) > 2)
+            UM14_Fatal("The mouse moved while verifying Add Modifier. No modifier click was sent.")
+        Click(x,y)
+        return
     }
+    UM14_Fatal("Add Modifier could not be verified. No modifier click was sent.")
 }
 
 UM14_WaitModifierSearch() {
@@ -160,13 +192,16 @@ UM14_ModeScroll() {
     Sleep(300)
 }
 
-UM14_MenuWord(identity, region, expected, caption := false) {
-    factor := Min(region.w < identity.w*.12 ? 3.0 : 2.0,2500/Max(region.w,region.h))
+UM14_MenuWord(identity, region, expected, caption := false, ellipsis := false, requestedScale := 0) {
+    if (requestedScale != 0 && (!IsNumber(requestedScale) || requestedScale < .125 || requestedScale > 4))
+        return false
+    factor := Min(requestedScale ? requestedScale : (region.w < identity.w*.12 ? 3.0 : 2.0),2500/Max(region.w,region.h))
     words := UM14_OCRWords(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
     match := ""
     for word in words {
         minimumHeight := region.w < identity.w*.12 ? Max(4,identity.h*.005) : Max(6,identity.h*.007)
-        if (word.text != StrUpper(expected) || word.h < minimumHeight)
+        label := ellipsis ? RegExReplace(word.text,"[.…]+$") : word.text
+        if (label != StrUpper(expected) || word.h < minimumHeight)
             continue
         ; Difficulty cards repeat the name in lowercase in their descriptions.
         if (caption && word.raw == StrLower(word.raw))
@@ -178,18 +213,55 @@ UM14_MenuWord(identity, region, expected, caption := false) {
     return UM14_ConnectionSame(identity) ? match : false
 }
 
-UM14_MenuWordPair(identity, region, expected, caption := false) {
+UM14_MenuWordPair(identity, region, expected, caption := false, ellipsis := false, requestedScale := 0) {
     UM14_RequireReadyFocus()
-    first := UM14_MenuWord(identity,region,expected,caption)
+    first := UM14_MenuWord(identity,region,expected,caption,ellipsis,requestedScale)
     if (!IsObject(first))
         return false
     Sleep(100)
     UM14_RequireReadyFocus()
-    second := UM14_MenuWord(identity,region,expected,caption)
+    second := UM14_MenuWord(identity,region,expected,caption,ellipsis,requestedScale)
     if (!IsObject(second) || !UM14_ConnectionSame(identity)
         || Abs(first.x-second.x) > 4 || Abs(first.y-second.y) > 4)
         return false
     return second
+}
+
+UM14_MenuImagePair(identity, region, filename, score := .78) {
+    if (!IsObject(region))
+        return false
+    previous := false
+    Loop 2 {
+        UM14_RequireReadyFocus()
+        if (!UM14_ConnectionSame(identity))
+            return false
+        found := AdvancedImageSearch("Resources/" filename, region.x, region.y, region.w, region.h, .45, 1.7)
+        if (found.status != "success" || found.score < score || !UM14_ConnectionSame(identity)
+            || found.x < region.x || found.x >= region.x+region.w
+            || found.y < region.y || found.y >= region.y+region.h)
+            return false
+        if (IsObject(previous) && (Abs(previous.x-found.x) > 5 || Abs(previous.y-found.y) > 5))
+            return false
+        previous := found
+        if (A_Index = 1)
+            Sleep(100)
+    }
+    return previous
+}
+
+UM14_LobbyPlay() {
+    UM14_RequireReadyFocus()
+    identity := UM14_ConnectionSnapshot()
+    if !IsObject(identity)
+        return false
+    region := UM14_Region(Round(identity.w*.25), Round(identity.h*.66),
+        Round(identity.w*.5), identity.h-Round(identity.h*.66), identity.w, identity.h)
+    if !IsObject(region)
+        return false
+    play := UM14_MenuImagePair(identity, region, "Play.png", .65)
+    if !IsObject(play)
+        play := UM14_MenuWordPair(identity, region, "PLAY", true)
+    return UM14_ConnectionSame(identity) ? play : false
 }
 
 UM14_ReferenceVoteModifiers(identity) {
@@ -207,7 +279,7 @@ UM14_ReferenceVoteModifiers(identity) {
 UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
     ; Current TDS menu is a scrollable card list with a persistent sidebar.
     ; Old builds searched only the first screen for a retired font template.
-    static modes := Map("Easy","Casual","Casual","Casual","Intermediate","Intermediate",
+    static modes := Map("Easy","Easy","Casual","Casual","Intermediate","Intermediate",
         "Molten","Molten","Fallen","Fallen","Hardcore","Hardcore","Voidcore","Voidcore","Frost","Frost")
     if (!modes.Has(difficulty))
         return false ; Preserve existing special-mode compatibility.
@@ -215,11 +287,17 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
     identity := UM14_ConnectionSnapshot()
     if (!IsObject(identity))
         return false
-    sidebar := UM14_Region(Round(identity.w*.14),Round(identity.h*.09),
-        Round(identity.w*.07),Round(identity.h*.54),identity.w,identity.h)
+    ; In a docked/narrow client the menu fills the viewport and moves the
+    ; sidebar against the left edge instead of centering it with the cards.
+    verticalEdge := identity.w < identity.h*1.3
+    fullWidth := identity.w <= identity.h*1.4
+    sidebar := UM14_Region(Round(identity.w*(verticalEdge ? .01 : .12)),Round(identity.h*.09),
+        Round(identity.w*.09),Round(identity.h*.69),identity.w,identity.h)
     if (!IsObject(sidebar))
         return false
-    navigation := UM14_MenuWordPair(identity,sidebar,"Survival")
+    navigation := UM14_MenuImagePair(identity,sidebar,"Survival.png")
+    if (!IsObject(navigation))
+        navigation := UM14_MenuWordPair(identity,sidebar,"Survival")
     if (!IsObject(navigation)) {
         ; Current TDS also puts the category tabs in a horizontal strip.
         ; Require the neighboring Story tab, not the Survival section title.
@@ -228,44 +306,57 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         if (IsObject(tabs)) {
             survival := UM14_MenuWordPair(identity,tabs,"Survival")
             story := IsObject(survival) ? UM14_MenuWordPair(identity,tabs,"Story") : false
+            if (fullWidth && !IsObject(story)) {
+                ; At 800x600, the tiny labels blend into the tab art. Crop and
+                ; upscale each one independently before trusting either tab.
+                tabY := Round(identity.h*.055), tabH := Round(identity.h*.075)
+                survivalTab := UM14_Region(Round(identity.w*.33),tabY,Round(identity.w*.085),tabH,identity.w,identity.h)
+                storyTab := UM14_Region(Round(identity.w*.415),tabY,Round(identity.w*.085),tabH,identity.w,identity.h)
+                if (IsObject(survivalTab) && IsObject(storyTab)) {
+                    survival := UM14_MenuWordPair(identity,survivalTab,"Survival")
+                    story := IsObject(survival) ? UM14_MenuWordPair(identity,storyTab,"Story") : false
+                }
+            }
             if (IsObject(story) && story.x > survival.x && Abs(story.y-survival.y) <= 5)
                 navigation := survival
         }
     }
+    menuClose := UM14_Region(Round(identity.w*(fullWidth ? .91 : .68)),0,
+        Round(identity.w*(fullWidth ? .09 : .20)),Round(identity.h*(fullWidth ? .26 : .15)),identity.w,identity.h)
+    cardX := Round(identity.w*(fullWidth ? .10 : .21))
+    cardWidth := Round(identity.w*(fullWidth ? .875 : .62))
+    cardBottom := Floor(identity.h*(fullWidth ? .98 : .94))
+    heading := false
     if (!IsObject(navigation)) {
-        ; The sidebar caption can be too small to read. If the Survival
-        ; heading and requested card are already visible, skip navigation.
-        headingRegion := UM14_Region(Round(identity.w*.21),Round(identity.h*.10),
-            Round(identity.w*.27),Round(identity.h*.80),identity.w,identity.h)
+        ; The first row may be visible with Fallen and Frost below the fold.
+        ; Keep searching after a confirmed heading, even without sidebar OCR.
+        headingRegion := UM14_Region(Round(identity.w*(fullWidth ? .095 : .21)),Round(identity.h*.10),
+            Round(identity.w*(fullWidth ? .40 : .27)),Round(identity.h*.80),identity.w,identity.h)
         heading := UM14_MenuWordPair(identity,headingRegion,"Survival")
         if (!IsObject(heading) || heading.y >= identity.h*.86)
             return false
-        seenMenu := true
-        cardRegion := UM14_Region(Round(identity.w*.21),heading.y+1,
-            Round(identity.w*.62),Floor(identity.h*.94)-heading.y-1,identity.w,identity.h)
-        card := UM14_MenuWordPair(identity,cardRegion,modes[difficulty],true)
-        if (!IsObject(card))
-            return false
+    }
+    seenMenu := true
+    if (IsObject(navigation)) {
         UM14_RequireReadyFocus()
         if (!UM14_ConnectionSame(identity))
             return false
-        Click(card.x,card.y)
-        LogToConsole("Mode selection: visible Survival card confirmed=1")
-        return true
+        Click(navigation.x,navigation.y)
+        Sleep(300)
     }
-    seenMenu := true
-    UM14_RequireReadyFocus()
-    if (!UM14_ConnectionSame(identity))
-        return false
-    Click(navigation.x,navigation.y)
-    Sleep(250)
-    region := UM14_Region(Round(identity.w*.21),Round(identity.h*.10),
-        Round(identity.w*.62),Round(identity.h*.80),identity.w,identity.h)
+    region := UM14_Region(cardX,Round(identity.h*.10),
+        cardWidth,cardBottom-Round(identity.h*.10),identity.w,identity.h)
     started := A_TickCount
     Loop 9 {
         if (!UM14_ConnectionSame(identity) || A_TickCount-started >= 16000)
             return false
-        card := UM14_MenuWordPair(identity,region,modes[difficulty],true)
+        cardRegion := A_Index = 1 && IsObject(heading) ? UM14_Region(cardX,
+            heading.y+1,cardWidth,cardBottom-heading.y-1,identity.w,identity.h) : region
+        if (!IsObject(cardRegion))
+            return false
+        card := UM14_MenuImagePair(identity,cardRegion,difficulty ".png")
+        if (!IsObject(card))
+            card := UM14_MenuWordPair(identity,cardRegion,modes[difficulty],true)
         if (IsObject(card)) {
             UM14_RequireReadyFocus()
             if (!UM14_ConnectionSame(identity))
@@ -276,8 +367,12 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         }
         ; Re-prove the navigation before every bounded scroll. Capture failure
         ; or an unexpected menu never becomes permission to send wheel input.
-        if (A_Index = 9 || (!IsObject(UM14_MenuWordPair(identity,sidebar,"Survival"))
-            && (!IsSet(tabs) || !IsObject(tabs) || !IsObject(UM14_MenuWordPair(identity,tabs,"Survival")))))
+        if (A_Index = 9 || (!IsObject(UM14_MenuImagePair(identity,sidebar,"Survival.png"))
+            && !IsObject(UM14_MenuImagePair(identity,menuClose,"close.png",.86))
+            && !IsObject(UM14_MenuWordPair(identity,sidebar,"Survival"))
+            && (!IsSet(tabs) || !IsObject(tabs) || !IsObject(UM14_MenuWordPair(identity,tabs,"Survival")))
+            && (!IsSet(survivalTab) || !IsObject(survivalTab)
+                || !IsObject(UM14_MenuWordPair(identity,survivalTab,"Survival")))))
             return false
         UM14_RequireReadyFocus()
         MouseMove(Round(identity.w*.5),Round(identity.h*.5))
@@ -288,6 +383,78 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         Sleep(200)
     }
     return false
+}
+
+UM14_SquadCard(name) {
+    UM14_RequireReadyFocus()
+    identity := UM14_ConnectionSnapshot()
+    if (!IsObject(identity))
+        return false
+    w := identity.w, h := identity.h
+    title := UM14_Region(Round(w*.28),Round(h*.025),Round(w*.44),Round(h*.205),w,h)
+    if (!IsObject(title))
+        return false
+    ; The compact title can be read as a line even when the OCR result has
+    ; no usable word boxes. Require the complete dialog title in that case.
+    if (!IsObject(UM14_MenuWordPair(identity,title,"Squad",false,true))
+        && !UM14_MenuTextPair(identity,title,"Choose a Squad",true))
+        return false
+    right := name = "Duo" || name = "Quad"
+    bottom := name = "Trio" || name = "Quad"
+    card := UM14_Region(Round(w*(right ? .49 : .19)),Round(h*(bottom ? .53 : .34)),
+        Round(w*.32),Round(h*.23),w,h)
+    match := IsObject(card) ? UM14_MenuWordPair(identity,card,name,true) : false
+    if (!IsObject(match)) {
+        label := UM14_Region(Round(w*(right ? .50 : .22)),Round(h*(bottom ? .57 : .39)),
+            Round(w*.19),Round(h*.13),w,h)
+        if (IsObject(label) && UM14_MenuTextPair(identity,label,name))
+            match := {x:Round(label.x+label.w/2),y:Round(label.y+label.h/2)}
+    }
+    if (IsObject(match))
+        match.identity := identity
+    return match
+}
+
+UM14_MenuTextPair(identity, region, expected, ellipsis := false) {
+    Loop 2 {
+        UM14_RequireReadyFocus()
+        if !UM14_ConnectionSame(identity)
+            return false
+        factor := Min(3.0,2200/Max(region.w,region.h))
+        text := UM14_ConnectionOCR(identity,region,factor)
+        if (Type(text) != "String")
+            return false
+        matches := 0
+        for line in StrSplit(text,"`n","`r") {
+            line := Trim(line)
+            if (ellipsis)
+                line := RegExReplace(line,"[.…]+$")
+            if (StrLower(line) = StrLower(expected))
+                matches++
+        }
+        if (matches != 1 || !UM14_ConnectionSame(identity))
+            return false
+        if (A_Index = 1)
+            Sleep(100)
+    }
+    return true
+}
+
+UM14_MapOverridePrompt() {
+    UM14_RequireReadyFocus()
+    identity := UM14_ConnectionSnapshot()
+    if (!IsObject(identity))
+        return false
+    w := identity.w, h := identity.h
+    ready := UM14_Region(Round(w*.32),Round(h*.55),Round(w*.36),Round(h*.37),w,h)
+    if !IsObject(UM14_MenuImagePair(identity,ready,"Ready.png",.76))
+        return false
+    ; Roblox keeps a near-fixed caption size on compact clients. The old
+    ; percentage crop cut both ends off "Override Map" at 800 pixels wide.
+    prompt := UM14_Region(Round(w*.27),Round(h*.38),Round(w*.46),Round(h*.34),w,h)
+    if (!IsObject(prompt) || !UM14_MenuTextPair(identity,prompt,"Override Map"))
+        return false
+    return UM14_ConnectionSame(identity) ? identity : false
 }
 
 UM14_ModifierName(value) {

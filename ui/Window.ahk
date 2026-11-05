@@ -280,7 +280,7 @@ class MW {
         MW.recordEditArea.visible := false
         MW.recordDraftPanel := c.Add(draft)
 
-        adv := Button(_T("Match options"), (*) => MW.advanced.Show(MW.advancedButton.checked))
+        adv := Button(_T("Match options"), (button) => MW.ToggleSection(button, MW.advanced))
         adv.checkable := true
         MW.advancedButton := root.Add(adv)
         MW.advanced := root.Add(Card())
@@ -490,7 +490,7 @@ class MW {
         gp.Add(tr)
         gp.Add(MW.Caption("Applies when playback starts, not during a run. Availability depends on the game, mode and any required access or owned tickets. Selecting a speed does not purchase tickets."))
 
-        more := Button(_T("Advanced settings"), (*) => MW.moreFrame.Show(MW.moreButton.checked))
+        more := Button(_T("Advanced settings"), (button) => MW.ToggleSection(button, MW.moreFrame))
         more.checkable := true
         MW.moreButton := root.Add(more)
         MW.moreFrame := root.Add(VBox(, 12))
@@ -525,16 +525,30 @@ class MW {
         for action in Store.BINDING_ORDER {
             r := HBox(, 6)
             r.Add(Label(_T(Store.BINDING_TITLES[action]), "subtitle"), 1)
-            MW.bindingInputs[action] := r.Add(Field(s["recordBindings"][action], "", {maxLength: 40, fixedW: 150}))
+            MW.bindingInputs[action] := r.Add(Field(s["recordBindings"][action], "",
+                {maxLength: 40, fixedW: 150, onCommit: (*) => MW.SaveRecordBindings(true)}))
             rc.Add(r)
         }
         rc.Add(MW.Caption("Example: F, Ctrl+U or Shift+F3. Active only in Roblox."))
+        MW.bindingStatus := rc.Add(MW.Caption("Valid shortcuts save when you leave a field. Start, Stop and emergency stop stay F1, F2 and F8."))
         rc.Add(Button(_T("Apply shortcuts"), (*) => MW.SaveRecordBindings()))
         MW.moreFrame.Add(Button(_T("Import older settings"), (*) => MW.ImportOlderSettings()))
         MW.moreFrame.Add(Button(_T("Export logic source"), (*) => MW.ExportLogic()))
         MW.moreFrame.Add(Button(_T("Third-party notices"), (*) => MW.OpenNotices()))
         MW.moreFrame.Add(Button(_T("Terms & conditions ↗"), (*) => Run(FirstUse.TERMS_URL)))
         MW.moreFrame.Add(Button(_T("Privacy policy ↗"), (*) => Run(FirstUse.PRIVACY_URL)))
+    }
+
+    static ToggleSection(button, section) {
+        section.Show(button.checked)
+        surface := section.surface
+        if !surface
+            return
+        surface.Relayout()
+        if button.checked
+            surface.ScrollTo(surface.scrollY + section.y - 12)
+        else
+            surface.EnsureVisible(button)
     }
 
     ; ======================================================================
@@ -903,23 +917,42 @@ class MW {
         return MW.loadoutCache[item.path] := Strategy.RequiredLoadout(item)
     }
 
+    static RotationReason(settings, items) {
+        for slot in ["slot1", "slot2"] {
+            path := settings.Has(slot) ? settings[slot] : ""
+            selected := ""
+            if (path != "")
+                for candidate in items
+                    if (candidate.path = path) {
+                        selected := candidate
+                        break
+                    }
+            if !IsObject(selected)
+                return _T("Choose both strategy slots for rotation.")
+            reason := MW.Reason(selected)
+            if (reason != "")
+                return reason
+        }
+        return ""
+    }
+
     static RefreshSlots(index := -1) {
         s := Store.settings
-        Loop 2 {
-            path := s["slot" A_Index], assigned := ""
+        for slotIndex, slotKey in ["slot1", "slot2"] {
+            path := s[slotKey], assigned := ""
             for it in MW.items
                 if (it.path = path)
                     assigned := it
-            MW.slotNames[A_Index].SetText(IsObject(assigned) ? assigned.title : _T("Not set"))
-            MW.slotLoadouts[A_Index].SetText(IsObject(assigned) ? MW.RequiredLoadout(assigned) : _T("Not set"))
-            MW.slotButtons[A_Index].SetText(_T(IsObject(MW.current) && MW.current.path = path ? "In slot" : "Use selected"))
+            MW.slotNames[slotIndex].SetText(IsObject(assigned) ? assigned.title : _T("Not set"))
+            MW.slotLoadouts[slotIndex].SetText(IsObject(assigned) ? MW.RequiredLoadout(assigned) : _T("Not set"))
+            MW.slotButtons[slotIndex].SetText(_T(IsObject(MW.current) && MW.current.path = path ? "In slot" : "Use selected"))
         }
         rows := [], sel := 0
         for i, it in MW.visibleItems {
             slots := ""
-            Loop 2
-                if (s["slot" A_Index] = it.path)
-                    slots .= (slots = "" ? "" : ", ") A_Index
+            for slotIndex, slotKey in ["slot1", "slot2"]
+                if (s[slotKey] = it.path)
+                    slots .= (slots = "" ? "" : ", ") slotIndex
             rows.Push({item: it, slots: slots})
             if (IsObject(MW.current) && it.path = MW.current.path)
                 sel := i
@@ -1049,17 +1082,28 @@ class MW {
             MW.Log("Use a different single letter or digit for each gameplay key, not used by a recording shortcut.")
     }
 
-    static SaveRecordBindings() {
+    static SaveRecordBindings(quiet := false) {
         if (MW.Active || MW.busy || MW.stopPending || MW.closing) {
-            MW.Log("Stop the macro before changing recording shortcuts.")
-            return
+            if !quiet
+                MW.Log("Stop the macro before changing recording shortcuts.")
+            return false
         }
+        if (!MW.HasOwnProp("bindingInputs") || MW.bindingInputs.Count != Store.BINDING_ORDER.Length)
+            return false
         v := Map()
         for k, f in MW.bindingInputs
             v[k] := f.Text
         try {
             v := Store.ValidBindings(v, Store.settings["runtime"])
             prev := Store.settings["recordBindings"]
+            changed := false
+            for k, value in v
+                if (prev[k] != value)
+                    changed := true
+            if !changed {
+                MW.bindingStatus.SetText(_T("Recording shortcuts saved."))
+                return true
+            }
             Store.settings["recordBindings"] := v
             try Store.Save()
             catch as e {
@@ -1067,14 +1111,20 @@ class MW {
                 throw e
             }
         } catch {
-            MW.Log("Shortcuts were not saved. Use distinct keys; F1, F2, F8, Ctrl+1–5, Ctrl+B, Ctrl+Shift+E and gameplay keys are reserved.")
-            return
+            message := "Shortcuts were not saved. Use distinct keys; F1, F2, F8, Ctrl+1–5, Ctrl+B, Ctrl+Shift+E and gameplay keys are reserved."
+            if MW.HasOwnProp("bindingStatus")
+                MW.bindingStatus.SetText(_T(message))
+            if !quiet
+                MW.Log(message)
+            return false
         }
         for k, t in v
             MW.bindingInputs[k].Text := t
         MW.RefreshRecordHelp()
         Hotkeys.Rebind()
+        MW.bindingStatus.SetText(_T("Recording shortcuts saved."))
         MW.Log("Recording shortcuts saved.")
+        return true
     }
 
     static RefreshRecordHelp() {
@@ -1092,7 +1142,7 @@ class MW {
             MW.Log("Undock Roblox and stop the macro before importing settings.")
             return
         }
-        path := FileSelect(1, , _T("Import older settings"), "Macro profiles (*.json; *.tds)")
+        path := FileSelect(1, , _T("Import older settings"), "Macro profiles (*.ump; *.json; *.tds)")
         if (path = "")
             return
         try result := LegacyProfile.Read(path, Store.settings)
@@ -1105,7 +1155,7 @@ class MW {
             return
         }
         if (Dialog.Ask(_T("Import older settings"), "Apply " result.imported " supported settings? " result.skipped " entries were skipped. "
-            . "Delays below 20 ms are adjusted to 20 ms. Secrets and strategy paths are not imported. Your original file remains unchanged.", ["Yes", "No"], 2) != "Yes")
+            . "Delays below 20 ms are adjusted to 20 ms. Secrets and strategies are not imported. Your original file remains unchanged.", ["Yes", "No"], 2) != "Yes")
             return
         prev := Store.settings
         Store.settings := result.candidate
@@ -1261,17 +1311,9 @@ class MW {
             c.Enable(enabled && !MW.rec.draft)
         MW.refreshBtn.Enable(enabled)
         blocked := ""
-        if s["rotation"] {
-            Loop 2 {
-                item := ""
-                for it in MW.items
-                    if (it.path = s["slot" A_Index])
-                        item := it
-                blocked := IsObject(item) ? MW.Reason(item) : _T("Choose both strategy slots for rotation.")
-                if (blocked != "")
-                    break
-            }
-        } else if IsObject(MW.current)
+        if s["rotation"]
+            blocked := MW.RotationReason(s, MW.items)
+        else if IsObject(MW.current)
             blocked := MW.Reason(MW.current)
         MW.startBtn.Enable(enabled && IsObject(MW.current) && MW.page = 1 && blocked = "")
         MW.startBtn.tip := blocked != "" ? blocked : "Start the selected strategy; F1 in Roblox."
@@ -1890,10 +1932,26 @@ class MW {
     }
 
     static DockResult(result) {
-        if (result = "attached")
+        if (result = "attached") {
+            SetTimer(() => MW.SyncDockGeometry(), -100)
             MW.Log("Window layout applied.")
-        else
+        } else
             MW.DockRestoreFinished(result)
+    }
+
+    static SyncDockGeometry(attempt := 0) {
+        if (MW.closing || WinGetMinMax(MW.gui) = -1)
+            return
+        if MW.surface.rendering {
+            if (attempt < 4)
+                SetTimer(() => MW.SyncDockGeometry(attempt+1), -50)
+            return
+        }
+        ; The asynchronous Windows move can finish during startup painting.
+        ; Use confirmed client bounds after it settles, not the old Size event.
+        WinGetClientPos(,, &w, &h, MW.gui)
+        if (w > 0 && h > 0)
+            MW.OnSize(WinGetMinMax(MW.gui), w, h)
     }
 
     static DockRestoreFinished(result) {
@@ -1911,6 +1969,8 @@ class MW {
             if (result != "partial" && result != "attach-partial")
                 MW.gui.Maximize()
         }
+        if (result = "restored" || result = "partial")
+            SetTimer(() => MW.SyncDockGeometry(), -100)
         MW.dockRoblox.SetChecked(Store.settings["dockRoblox"])
     }
 

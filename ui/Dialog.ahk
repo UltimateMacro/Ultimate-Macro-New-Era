@@ -168,7 +168,7 @@ class LegacyProfile {
     static Read(path, current) {
         SplitPath(path, , , &ext)
         ext := StrLower(ext)
-        if (ext != "json" && ext != "tds")
+        if (ext != "json" && ext != "tds" && ext != "ump")
             throw ValueError("Choose a legacy profile or settings file")
         if (FileGetSize(path) > 1024 * 1024)
             throw ValueError("Profile exceeds the size limit")
@@ -176,15 +176,19 @@ class LegacyProfile {
         b0 := raw.Size >= 2 ? NumGet(raw, 0, "UShort") : 0
         text := (b0 = 0xFEFF || b0 = 0xFFFE) ? FileRead(path, "UTF-16") : FileRead(path, "UTF-8")
         sections := Map()
-        if (ext = "json") {
+        if (ext = "json" || ext = "ump") {
             v := JSON.parse(text)
             if !(v is Map)
                 throw ValueError()
             ver := "", secs := ""
+            versionKey := ext = "ump" ? "formatversion" : "schemaversion"
+            settingsKey := ext = "ump" ? "settings" : "sections"
+            if (ext = "ump" && (!v.Has("application") || v["application"] != "Ultimate Macro"))
+                throw ValueError("Not an Ultimate Macro profile")
             for k, x in v {
-                if (StrLower(k) = "schemaversion")
+                if (StrLower(k) = versionKey)
                     ver := x
-                if (StrLower(k) = "sections")
+                if (StrLower(k) = settingsKey)
                     secs := x
             }
             if (ver != 1 || !(secs is Map))

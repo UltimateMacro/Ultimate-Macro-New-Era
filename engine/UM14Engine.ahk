@@ -1,4 +1,4 @@
-﻿; Ultimate Macro (macro for TDS) by Darksen
+; Ultimate Macro (macro for TDS) by Darksen
 ;   Free for anyone to use
 ;   Modifications are welcome, however stealing credit is not.
 ;   You can add your name, but my original credit must remain.
@@ -123,8 +123,8 @@ global HostName := IniRead(SettingsFile, "Multiplayer", "HostName", "...")
 global MultiplayerEnabled := IniRead(SettingsFile, "Multiplayer", "MultiplayerEnabled", 0)
 
 global DefaultMouseSpeed := IniRead(SettingsFile, "Options", "DefaultMouseSpeed", "2")
-global MouseDelay := IniRead(SettingsFile, "Options", "MouseDelay", "-1")
-global KeyDelay := IniRead(SettingsFile, "Options", "KeyDelay", "-1")
+global MouseDelay := IniRead(SettingsFile, "Options", "MouseDelay", "10")
+global KeyDelay := IniRead(SettingsFile, "Options", "KeyDelay", "20")
 
 global PlaceTowerKey := IniRead(SettingsFile, "RecordingHotkeys", "PlaceTowerKey", "f")
 global UpgradeTowerKey := IniRead(SettingsFile, "RecordingHotkeys", "UpgradeTowerKey", "^u")
@@ -4263,13 +4263,12 @@ RunStrategy(stratFile := "", skipRestart := false) {
             closeRoblox_ := true
             if (GetRobloxHWND()){
                 ActivateRoblox()
-                Loop 2 {
-                    play_btn := AdvancedImageSearch("Resources/Play.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.75), Round(h * 0.34))
-                    if (play_btn.status = "success" && play_btn.score > 0.65) {
+                Loop 5 {
+                    if UM14_LobbyOrInventory() {
                         closeRoblox_ := false
                         break
                     } 
-                    Sleep 150
+                    Sleep 400
                 }
             }
             
@@ -4287,14 +4286,13 @@ RunStrategy(stratFile := "", skipRestart := false) {
         closeRoblox_ := true
         if (GetRobloxHWND()){
             ActivateRoblox()
-            Loop 2 {
+            Loop 5 {
                 getRobloxPos(,,&w,&h)
-                play_btn := AdvancedImageSearch("Resources/Play.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.75), Round(h * 0.34))
-                if (play_btn.status = "success" && play_btn.score > 0.65) {
+                if UM14_LobbyOrInventory() {
                     closeRoblox_ := false
                     break
                 } 
-                Sleep 150
+                Sleep 400
             }
         }
         
@@ -4510,10 +4508,7 @@ EquipTowers(towers) {
             menuSearch := AdvancedImageSearch("Resources\searchbar_items.png", 0, 0, Round(rw*.5), Round(rh*.5))
             if (!UM14_ConnectionSame(inventoryContext))
                 UM14_Fatal("The inventory client changed while checking its controls. No inventory input was sent.")
-            menuSeen := menuClose.status = "success" && menuClose.score >= .80
-                && menuSearch.status = "success" && menuSearch.score > .67
-                && menuClose.x >= Round(rw*.2) && menuClose.x < rw && menuClose.y >= 0 && menuClose.y < Round(rh*.4)
-                && menuSearch.x >= 0 && menuSearch.x < Round(rw*.5) && menuSearch.y >= 0 && menuSearch.y < Round(rh*.5)
+            menuSeen := UM14_InventoryMenuControls(menuClose,menuSearch,inventoryContext)
             if (!menuSeen) {
                 if (IsObject(previousClose))
                     UM14_Fatal("Inventory controls changed while checking the existing menu. Retry when it is stable.")
@@ -4546,7 +4541,12 @@ EquipTowers(towers) {
                 item := {x:resItems.x,y:resItems.y+ScaleY(7)}
             else {
                 itemsOcrTried := true
-                item := UM14_MenuWordPair(inventoryContext,left,"ITEMS")
+                item := false
+                for itemScale in [3.0,2.0,1.5] {
+                    item := UM14_MenuWordPair(inventoryContext,left,"ITEMS",false,false,itemScale)
+                    if IsObject(item)
+                        break
+                }
             }
             if IsObject(item) {
                 UM14_RequireReadyFocus()
@@ -4585,9 +4585,7 @@ EquipTowers(towers) {
             search := AdvancedImageSearch("Resources\searchbar_items.png", 0, 0, Round(rw*.5), Round(rh*.5))
             if !UM14_ConnectionSame(inventoryContext)
                 UM14_Fatal("Roblox moved while confirming the inventory.")
-            if (resclose.status = "success" && resclose.score >= .80 && search.status = "success" && search.score > .67
-                && resclose.x >= X1 && resclose.x < rw && resclose.y >= 0 && resclose.y < H_close
-                && search.x >= 0 && search.x < Round(rw*.5) && search.y >= 0 && search.y < Round(rh*.5)) {
+            if UM14_InventoryMenuControls(resclose,search,inventoryContext) {
                 if (IsObject(previousClose) && Abs(resclose.x-previousClose.x) <= 4 && Abs(resclose.y-previousClose.y) <= 4
                     && Abs(search.x-previousSearch.x) <= 4 && Abs(search.y-previousSearch.y) <= 4) {
                     openedMenu := true, savedCloseX := resclose.x, savedCloseY := resclose.y
@@ -4628,8 +4626,14 @@ EquipTowers(towers) {
     identity := UM14_ConnectionSnapshot()
     if !IsObject(identity)
         UM14_Fatal("Roblox moved before inventory setup.")
-    if !UM14_ReferenceVisibleTower(identity,"Sniper")
+    if !UM14_ReferenceVisibleTower(identity,"Sniper") {
         UM14_ReferenceInventorySearch("Sniper",resBar,identity)
+        if !UM14_ReferenceTitle("Sniper",resBar,identity) {
+            UM14_ReferenceInventorySearch("Sniper",resBar,identity,true)
+            if !UM14_ReferenceTitle("Sniper",resBar,identity)
+                UM14_Fatal("The Sniper reference card could not be verified. No loadout change was sent.")
+        }
+    }
     anchor := UM14_ReferenceWaitAction(identity,"EQUIP",1800)
     if !IsObject(anchor)
         anchor := UM14_ReferenceWaitAction(identity,"UNEQUIP",1800)
@@ -4651,9 +4655,9 @@ EquipTowers(towers) {
 
         if !UM14_ReferenceVisibleTower(identity,towerToEnter) {
             UM14_ReferenceInventorySearch(towerToEnter,resBar,identity)
-            if !UM14_LoadoutTitle(towerToEnter) {
+            if !UM14_ReferenceTitle(towerToEnter,resBar,identity) {
                 UM14_ReferenceInventorySearch(towerToEnter,resBar,identity,true)
-                if !UM14_LoadoutTitle(towerToEnter) && !UM14_ReferenceVisibleTower(identity,towerToEnter)
+                if !UM14_ReferenceTitle(towerToEnter,resBar,identity) && !UM14_ReferenceVisibleTower(identity,towerToEnter)
                     UM14_Fatal("Could not verify the selected tower " tower ". Check the inventory search result and retry. No Equip click was sent for this tower.")
             }
         }
@@ -4671,10 +4675,10 @@ EquipTowers(towers) {
             ; A card can survive the clear, but its button does not identify
             ; the hotbar slot. Replaying with the wrong slot would place a different tower.
             if (!ownedControl && IsObject(UM14_ReferenceInventoryAction(identity,"UNEQUIP"))
-                && UM14_LoadoutTitle(towerToEnter) && UM14_ConnectionSame(identity))
+                && UM14_ReferenceTitle(towerToEnter,resBar,identity) && UM14_ConnectionSame(identity))
                 UM14_Fatal(tower " is still equipped after clearing the loadout. Clear the hotbar manually and retry to keep strategy slots in order.")
             if (ownedControl) {
-                if (UM14_ConnectionSame(identity) && UM14_LoadoutTitle(towerToEnter)) {
+                if (UM14_ConnectionSame(identity) && UM14_ReferenceTitle(towerToEnter,resBar,identity)) {
                     towerEquipped := UM14_ReferenceChangeAction(identity,resEquip,"EQUIP","UNEQUIP")
                     if !towerEquipped
                         UM14_Fatal("Roblox did not confirm the Equip click for " tower ". No later tower or match was started.")
@@ -5061,13 +5065,12 @@ CheckRestart() {
         if (GetRobloxHWND()){
             ActivateRoblox()
             getRobloxPos(,,&w,&h)
-            Loop 2 {
-                play_btn := AdvancedImageSearch("Resources/Play.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.75), Round(h * 0.34))
-                if (play_btn.status = "success" && play_btn.score > 0.65) {
+            Loop 5 {
+                if UM14_LobbyOrInventory() {
                     closeRoblox_ := false
                     break
                 } 
-                Sleep 150
+                Sleep 400
             }
         }
         
@@ -5210,10 +5213,8 @@ RunRoblox(doReload := true) {
             return false
         }
         ActivateRoblox()
-        ExitFullScreen()
-        WinMinimize "Roblox"
-        WinMaximize "Roblox"
-        ActivateRoblox()
+        ; The owning launcher has already restored or docked the new client.
+        ; Minimize/maximize here would immediately undo that approved layout.
 
         SetTimer(CheckPopups, 5000)
 
@@ -5230,8 +5231,7 @@ RunRoblox(doReload := true) {
                 }
             }
 
-            play_btn := AdvancedImageSearch("Resources/Play.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.75), Round(h * 0.34))
-            if (play_btn.status = "success" && play_btn.score > 0.65) {
+            if IsObject(UM14_LobbyPlay()) {
                 break
             } 
             Sleep(1500)
@@ -5367,8 +5367,8 @@ JoinGame() {
         x2 := Round(w * 0.75)
         y2 := Round(h * 0.34)
         
-        res := AdvancedImageSearch("Resources\Play.png", x1, y1, x2, y2)
-        if (res.status == "success" && res.score > 0.65) {
+        res := UM14_LobbyPlay()
+        if IsObject(res) {
             ActivateRoblox()
             if (CollectPlaytimeRewards = "1" || CollectPlaytimeRewards = 1) {
                 claimPlaytimeRewards()
@@ -5439,13 +5439,18 @@ JoinGame() {
             break
         getRobloxPos(,, &w, &h)
         if (A_TickCount - startTime >= 60000)
-            UM14_LobbyFailure("difficulty selection")
+            UM14_LobbyFailure("difficulty selection: " difficulty)
         if (A_TickCount - startTime > 20000 && A_TickCount-lastPlayRetry >= 2000) {
             lastPlayRetry := A_TickCount
             res := AdvancedImageSearch("Resources\Play.png", Round(w*.25), Round(h*.66), Round(w*.5), Round(h*.34))
             if (res.status == "success" && res.score > 0.7) {
                 Click(res.x, res.y)
                 Sleep(1000)
+                    currentMenuSeen := false
+                    if (UM14_SelectCurrentMode(difficulty, &currentMenuSeen))
+                        break
+                    if (!currentMenuSeen)
+                        UM14_ModeScroll()
             }
         }
         res := AdvancedImageSearch("Resources/" difficulty ".png", 0, 0, w, h)
@@ -5457,41 +5462,41 @@ JoinGame() {
     }
     Sleep(300)
 
+    squad := "Solo", lastSquadRead := 0
+    if (MultiplayerEnabled) {
+        totalPartyMembers := 0
+        Loop Parse, PartyMembers, "," {
+            if (Trim(A_LoopField) != "")
+                totalPartyMembers++
+        }
+        if (totalPartyMembers >= 1 && totalPartyMembers <= 3)
+            squad := ["Duo","Trio","Quad"][totalPartyMembers]
+    }
     startTime := A_TickCount
     Loop {
         getRobloxPos(,, &w, &h)
         if (A_TickCount - startTime > 40000)
             UM14_LobbyFailure("squad selection")
-        if (!MultiplayerEnabled) {
-            res := AdvancedImageSearch("Resources/Solo.png", 0, Round(h * 0.2), Round(w * 0.7), Round(h * 0.55))
-            if (res.status = "success" && res.score >= 0.7) {
-                Click(res.x, res.y)
-                break 
-            }
-        } else {
-            totalPartyMembers := 0
-            Loop Parse, PartyMembers, "," {
-                member := Trim(A_LoopField)
-                if (member = "") {
+        image := squad = "Solo" ? "Solo" : StrLower(squad)
+        res := squad = "Solo"
+            ? AdvancedImageSearch("Resources/" image ".png", 0, Round(h*.20), Round(w*.70), Round(h*.55))
+            : AdvancedImageSearch("Resources/" image ".png", Round(w*.20), Round(h*.20), Round(w*.60), Round(h*.60))
+        if (res.status = "success" && res.score >= .70) {
+            UM14_RequireReadyFocus()
+            Click(res.x,res.y)
+            break
+        }
+        if (A_TickCount-lastSquadRead >= 1100) {
+            lastSquadRead := A_TickCount
+            card := UM14_SquadCard(squad)
+            if (IsObject(card)) {
+                UM14_RequireReadyFocus()
+                if (!UM14_ConnectionSame(card.identity))
                     continue
-                }
-                totalPartyMembers++
+                Click(card.x,card.y)
+                LogToConsole("Squad size selected by label: " squad)
+                break
             }
-            if (totalPartyMembers = 1) {
-                res := AdvancedImageSearch("Resources/duo.png", Round(w * 0.2), Round(h * 0.2), Round(w * 0.6), Round(h * 0.6))
-            } else if (totalPartyMembers = 2) {
-                res := AdvancedImageSearch("Resources/trio.png", Round(w * 0.2), Round(h * 0.2), Round(w * 0.6), Round(h * 0.6))
-            } else if (totalPartyMembers = 3) {
-                res := AdvancedImageSearch("Resources/quad.png", Round(w * 0.2), Round(h * 0.2), Round(w * 0.6), Round(h * 0.6))
-            } else {
-                res := AdvancedImageSearch("Resources/Solo.png", 0, Round(h * 0.2), Round(w * 0.7), Round(h * 0.55))
-            }
-
-            if (res.status = "success" && res.score >= 0.7) {
-                Click(res.x, res.y)
-                break 
-            }
-
         }
         Sleep(100)
     }
@@ -5961,11 +5966,18 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         }
 
         if !(e_pr.score >= 0.75) {
-            LogToConsole("The macro can't see the E prompt (" e_pr.score "), retrying again... ", true) 
-            UM14_LobbyFailure("map-selection interaction prompt")
-            return
+            promptIdentity := UM14_MapOverridePrompt()
+            if !IsObject(promptIdentity) {
+                UM14_LobbyFailure("map-selection interaction prompt")
+                return
+            }
+            UM14_RequireReadyFocus()
+            if !UM14_ConnectionSame(promptIdentity)
+                UM14_LobbyFailure("map-selection interaction prompt")
+            LogToConsole("Map selection: verified the Override Map label")
         }
 
+        UM14_RequireReadyFocus()
         SendEvent("{sc012 down}") 
         Sleep(1000)
         SendEvent("{sc012 up}")
@@ -7580,27 +7592,13 @@ HasGlobal(varName) {
 
 closeChat() {
     global AutoCloseChat
-    if !AutoCloseChat
+    static reminded := false
+    if (!AutoCloseChat || reminded)
         return
-
-    getRobloxPos(&pX, &pY, &w, &h)
-    UM14_RequireReadyFocus()
-    chatColor := PixelGetColor(pX + 138, pY + 37, "RGB")
-    r1 := (chatColor >> 16) & 0xFF, g1 := (chatColor >> 8) & 0xFF, b1 := chatColor & 0xFF
-    r2 := 0xF4, g2 := 0xF5, b2 := 0xF8
-    diff := Sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2)
-    if (diff < 12) {
-        MouseGetPos(&cx, &cy)
-        UM14_RequireReadyFocus()
-        MouseMove(pX + 140, pY + 35, 2)
-        Sleep(100)
-        UM14_RequireReadyFocus()
-        Click()
-        Sleep(100)
-        UM14_RequireReadyFocus()
-        MouseMove(cx, cy)
-        LogToConsole("Closed chat")
-    }
+    ; The old white-pixel test now overlaps other Roblox topbar controls.
+    ; Keep the preference, but send no click until a chat close is identifiable.
+    reminded := true
+    LogToConsole("Close Roblox chat manually if it covers the game. The retired topbar click is disabled.")
 }
 
 

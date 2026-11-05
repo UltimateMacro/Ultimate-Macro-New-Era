@@ -24,3 +24,13 @@ jobs:
             if ($p.ExitCode -ne 0) { Get-Content stdout.txt, stderr.txt; throw "$script failed validation" }
             Write-Host "$script OK"
           }
+      - name: Run lobby and profile regressions
+        shell: pwsh
+        run: |
+          $ahk = (Resolve-Path engine/submacros/AutoHotkey64.exe).Path
+          foreach ($script in @('TestLegacyProfile.ahk', 'TestModeSelection.ahk', 'TestReleaseUi.ahk', 'TestInventoryQuery.ahk')) {
+            $p = Start-Process $ahk -ArgumentList '/ErrorStdOut', $script -WindowStyle Hidden -PassThru -RedirectStandardOutput stdout.txt -RedirectStandardError stderr.txt
+            if (!$p.WaitForExit(15000)) { Stop-Process -Id $p.Id; throw "$script timed out" }
+            Get-Content stdout.txt, stderr.txt
+            if ($p.ExitCode -ne 0) { throw "$script failed" }
+          }
