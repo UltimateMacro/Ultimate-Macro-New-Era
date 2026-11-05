@@ -3556,7 +3556,7 @@ ShowTowerPathDialog(towerID) {
         PathGui.Add("Text", "x25 y20 w350", "Tower " towerID)
         PathGui.SetFont("s11 w400 c000000", "Segoe UI")
         PathGui.Add("Text", "x25 y+10 w350", "Choose an upgrade path")
-        PathGui.Add("Text", "x25 y+10 w350", "Rigth click on the tower indicator to make this appear.`nNote: enter 3 for Pursuit, Juggernaut, and Kingpin, 4 for Hacker")
+        PathGui.Add("Text", "x25 y+10 w350", "Right click on the tower indicator to make this appear.`nNote: enter 3 for Pursuit, Juggernaut, and Kingpin, 4 for Hacker")
         PathGui.SetFont("s10 w600 c000000")
         b1 := PathGui.Add("Button", "x25 y+25 w165 h40", "Path 1 (Top)")
         b1.OnEvent("Click", (*) => SelectPath(PathGui, 1))
