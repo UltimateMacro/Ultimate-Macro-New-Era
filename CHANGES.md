@@ -1,0 +1,76 @@
+# AutoHotkey edition
+
+## 1.4.0.35 release candidate
+
+- Docking reports whether Windows applied the layout. A rejected or stalled
+  move no longer leaves the controls stuck. Restore avoids windows the user
+  has moved or the macro cannot identify.
+- Playback waits for the new docking position after a Roblox relaunch.
+- Manual update review blocks playback and duplicate checks. Settings shows
+  the outcome of background checks, or that automatic checks are off.
+- Rapid window resizing cannot expose a half-built drawing buffer to queued
+  paints. Scrollbar geometry stays inside short panels, and the Output drawer
+  opens at compact heights without an integer conversion error.
+- The backdrop blends in a single pass to avoid the live docking repaint crash.
+- When the older Items icon does not match, auto-equip checks the exact Items
+  label in its lobby control region before clicking. The inventory search and
+  close controls must then stay visible in the same positions across two frames.
+- Equipment verification moves the pointer off the button so hover colors
+  do not hide the result, with a same-row label check as a fallback. Search
+  sends paced keystrokes and checks the tower name before equipping. Visible
+  cards can be selected without typing a search when their label is unambiguous.
+
+## 1.4.0.34 preview
+
+- The updater retries the whole manifest/signature pair once if the server
+  changes offers between the two requests. An invalid signature still fails.
+- Packages that use a path as both a file and a folder are rejected before
+  the install prompt. Background downloads and explicit install approval remain.
+
+## 1.4.0.23-ahk1
+
+### Fixes (round 3)
+- Auto equip failed with "The selected game could not be read for inventory verification" when the macro window (always on top) covered Roblox: the engine refuses to read the game through any overlapping window. Starting a run now minimizes the macro whenever it overlaps Roblox, including F1 starts from inside Roblox and docked layouts that still overlap.
+- Engine patch A14: the error now says when another window covers the inventory (with its position) and the capture stage otherwise, instead of the generic message.
+
+### Fixes (round 2)
+- Fixed the GDI+ access violation (0xc0000005 in Gfx.ahk) when resizing the window or switching the Christmas theme. The background was drawn from a cached bitmap that a resize or theme change could free mid-paint; that cache is gone and painting is now uninterruptible.
+- Flat background like the Python window. The faded scenery is off by default (existing profiles are migrated); it is still available as an opt-in under Settings > Theme background.
+- Sidebar matches the Python layout: "Library" caption above the list, regular-weight strategy titles.
+
+## Port
+
+- The Python/Qt window (`ultmacro_ui/window.py`) is rebuilt in AutoHotkey v2 with
+  a small GDI+ widget toolkit: same pages (Run, Record, Party, Discord, Tools,
+  Settings), same layout metrics, charcoal/lavender palette, Christmas theme,
+  translucent cards over the Alpine backdrop, toggles, 2 px corners, two-line
+  strategy rows with slot badges, compact layout under 740 px, boot stage,
+  window opacity, startup sounds and community translations.
+- The C# `LegacyHost`/`EngineController`/`EngineWorkspace` are ported to
+  `app\Engine.ahk`: session-scoped WM_COPYDATA protocol, build check, adoption of
+  relaunched engines, 8 s stop grace, emergency termination, held-input release,
+  session revocation and the outside-engine Roblox relaunch for disconnects.
+- Webhook notifications, the personal bot remote (!stop/!status/!start/!screenshot)
+  and the official UltBot `/remote link` relay are ported with async WinHTTP.
+- Docking, Roblox launch, legacy settings import, Output export, strategy import
+  and the crate utility are ported.
+- The engine is rebuilt from `legacy-133a` with the repository's own
+  `EnginePatcher` (132 anchored patches) plus 13 recorder patches (see
+  `engine\ENGINE-NOTICE.md`). Native DLLs and the interpreter come from 1.3.3a.
+
+## Fixes and improvements over the hybrid build
+
+- Recording no longer needs the Python recorder: the engine recorder is driven
+  from the UI. Placement uses the Ctrl+1–5 slot and an automatic tower ID instead
+  of two blocking InputBoxes; F2 in Roblox keeps a draft instead of opening the
+  legacy save dialogs.
+- "Run and record action" and "Record sell clicks" now work with the engine
+  (new `recordstep` verb; sell clicks need a positive Sell-button match).
+- The recording map list only offers maps the engine can actually select, and
+  all engine modes are available (Casual, Voidcore, Pizza Party, …).
+- Stopping a recording always keeps the draft (Stop button, F2 and F8).
+- The launcher never treats itself as an engine process when it runs on the
+  bundled interpreter.
+- A terminal engine error ends the run immediately instead of waiting 30 s.
+- Dialog default buttons carry the accent, never the destructive choice.
+- Settings are validated field by field; a bad value only resets itself.
