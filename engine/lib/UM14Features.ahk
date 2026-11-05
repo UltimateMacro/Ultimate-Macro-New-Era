@@ -1,4 +1,4 @@
-﻿; Reviewed compatibility additions from IlMlN's modified 1.3.3a source.
+; Reviewed compatibility additions from IlMlN's modified 1.3.3a source.
 ; Original GPLv3/contributor notices continue to apply. No fork updater is used.
 UM14_ApplyGameInput() {
     global DefaultMouseSpeed, MouseDelay, KeyDelay
@@ -257,8 +257,9 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         return false
     ; In a docked/narrow client the menu fills the viewport and moves the
     ; sidebar against the left edge instead of centering it with the cards.
-    narrow := identity.w < identity.h*1.3
-    sidebar := UM14_Region(Round(identity.w*(narrow ? .01 : .12)),Round(identity.h*.09),
+    verticalEdge := identity.w < identity.h*1.3
+    fullWidth := identity.w <= identity.h*1.4
+    sidebar := UM14_Region(Round(identity.w*(verticalEdge ? .01 : .12)),Round(identity.h*.09),
         Round(identity.w*.09),Round(identity.h*.69),identity.w,identity.h)
     if (!IsObject(sidebar))
         return false
@@ -273,21 +274,32 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         if (IsObject(tabs)) {
             survival := UM14_MenuWordPair(identity,tabs,"Survival")
             story := IsObject(survival) ? UM14_MenuWordPair(identity,tabs,"Story") : false
+            if (fullWidth && !IsObject(story)) {
+                ; At 800x600, the tiny labels blend into the tab art. Crop and
+                ; upscale each one independently before trusting either tab.
+                tabY := Round(identity.h*.055), tabH := Round(identity.h*.075)
+                survivalTab := UM14_Region(Round(identity.w*.33),tabY,Round(identity.w*.085),tabH,identity.w,identity.h)
+                storyTab := UM14_Region(Round(identity.w*.415),tabY,Round(identity.w*.085),tabH,identity.w,identity.h)
+                if (IsObject(survivalTab) && IsObject(storyTab)) {
+                    survival := UM14_MenuWordPair(identity,survivalTab,"Survival")
+                    story := IsObject(survival) ? UM14_MenuWordPair(identity,storyTab,"Story") : false
+                }
+            }
             if (IsObject(story) && story.x > survival.x && Abs(story.y-survival.y) <= 5)
                 navigation := survival
         }
     }
-    menuClose := UM14_Region(Round(identity.w*(narrow ? .91 : .68)),0,
-        Round(identity.w*(narrow ? .09 : .20)),Round(identity.h*(narrow ? .26 : .15)),identity.w,identity.h)
-    cardX := Round(identity.w*(narrow ? .106 : .21))
-    cardWidth := Round(identity.w*(narrow ? .865 : .62))
-    cardBottom := Floor(identity.h*(narrow ? .98 : .94))
+    menuClose := UM14_Region(Round(identity.w*(fullWidth ? .91 : .68)),0,
+        Round(identity.w*(fullWidth ? .09 : .20)),Round(identity.h*(fullWidth ? .26 : .15)),identity.w,identity.h)
+    cardX := Round(identity.w*(fullWidth ? .10 : .21))
+    cardWidth := Round(identity.w*(fullWidth ? .875 : .62))
+    cardBottom := Floor(identity.h*(fullWidth ? .98 : .94))
     heading := false
     if (!IsObject(navigation)) {
         ; The first row may be visible with Fallen and Frost below the fold.
         ; Keep searching after a confirmed heading, even without sidebar OCR.
-        headingRegion := UM14_Region(Round(identity.w*(narrow ? .15 : .21)),Round(identity.h*.10),
-            Round(identity.w*(narrow ? .34 : .27)),Round(identity.h*.80),identity.w,identity.h)
+        headingRegion := UM14_Region(Round(identity.w*(fullWidth ? .095 : .21)),Round(identity.h*.10),
+            Round(identity.w*(fullWidth ? .40 : .27)),Round(identity.h*.80),identity.w,identity.h)
         heading := UM14_MenuWordPair(identity,headingRegion,"Survival")
         if (!IsObject(heading) || heading.y >= identity.h*.86)
             return false
@@ -326,7 +338,9 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         if (A_Index = 9 || (!IsObject(UM14_MenuImagePair(identity,sidebar,"Survival.png"))
             && !IsObject(UM14_MenuImagePair(identity,menuClose,"close.png",.86))
             && !IsObject(UM14_MenuWordPair(identity,sidebar,"Survival"))
-            && (!IsSet(tabs) || !IsObject(tabs) || !IsObject(UM14_MenuWordPair(identity,tabs,"Survival")))))
+            && (!IsSet(tabs) || !IsObject(tabs) || !IsObject(UM14_MenuWordPair(identity,tabs,"Survival")))
+            && (!IsSet(survivalTab) || !IsObject(survivalTab)
+                || !IsObject(UM14_MenuWordPair(identity,survivalTab,"Survival")))))
             return false
         UM14_RequireReadyFocus()
         MouseMove(Round(identity.w*.5),Round(identity.h*.5))

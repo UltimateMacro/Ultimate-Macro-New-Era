@@ -22,11 +22,18 @@ UM14_RequireReadyFocus() => 0
 UM14_Fatal(message) {
     throw Error(message)
 }
-UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" ? {w:1078, h:995} : {w:1000, h:700}
+UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" ? {w:1078, h:995}
+    : scenario = "horizontal" ? {w:800, h:600} : {w:1000, h:700}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => recognized
 UM14_ConnectionOCR(identity, region, *) {
+    if (scenario = "horizontal" && region.y = 33) {
+        if (region.x = 264)
+            return [{text:"SURVIVAL",raw:"Survival",x:275,y:45,w:40,h:10}]
+        if (region.x = 332)
+            return [{text:"STORY",raw:"Story",x:348,y:45,w:28,h:10}]
+    }
     if (scenario = "squad") {
         if (region.y = Round(identity.h*.08))
             return [{text:"SQUAD",raw:"Squad",x:500,y:135,w:49,h:16}]
@@ -56,6 +63,10 @@ AdvancedImageSearch(path, x, y, w, h, *) {
             return wheelCount && x <= 899 && x+w > 899
                 ? {status:"success", score:.9, x:899, y:725}
                 : {status:"failed", score:0, x:0, y:0}
+        if (scenario = "horizontal")
+            return wheelCount && x <= 724 && x+w > 724
+                ? {status:"success", score:.9, x:724, y:511}
+                : {status:"failed", score:0, x:0, y:0}
         if (wheelCount >= 1)
             return {status:"success", score:.9, x:x+90, y:y+90}
     }
@@ -76,6 +87,10 @@ try {
     Need(UM14_SelectCurrentMode("Frost", &seen) && seen, "Frost selected in the docked full-width menu")
     Need(clicks.Length = 2 && clicks[1][1] = 58 && clicks[2][1] = 899 && wheelCount = 1,
         "Docked sidebar and far-right card are both in bounds")
+    scenario := "horizontal", wheelCount := 0, clicks := [], probes := 0
+    Need(UM14_SelectCurrentMode("Frost", &seen) && seen, "Frost selected in an 800x600 client")
+    Need(clicks.Length = 2 && clicks[1][1] = 295 && clicks[2][1] = 724 && wheelCount = 1,
+        "Small horizontal tabs are confirmed before scrolling or clicking")
     scenario := "squad"
     solo := UM14_SquadCard("Solo")
     Need(IsObject(solo) && solo.x = 280 && solo.y = 487, "Docked Solo label is verified under the squad heading")
