@@ -32,14 +32,15 @@ A_MaxHotkeysPerInterval := 9999
 #Include app\Store.ahk
 #Include app\Updater.ahk
 #Include app\Engine.ahk
+#Include app\PrivateServer.ahk
 #Include app\Roblox.ahk
 #Include app\Docking.ahk
 #Include app\Discord.ahk
 #Include app\Passive.ahk
 
 class App {
-    static VERSION := "1.4.0.38-ahk"
-    static UPDATE_VERSION := "1.4.0.38"
+    static VERSION := "1.4.0.39-ahk"
+    static UPDATE_VERSION := "1.4.0.39"
     static RELEASE := "1.4.0.23"   ; protocol version string for the official relay
     static SHORT_VERSION := "1.4"
     static assets := A_ScriptDir "\assets"
@@ -65,6 +66,7 @@ class App {
         OnExit(App.Cleanup.Bind(App))
         UI_Install()
         Store.Init()
+        PrivateServer.Init(Store.root)
         Theme.christmas := Store.settings["halloween"]
         Locale.Set(Store.settings["language"])
         if (Store.settings["policyRevision"] != FirstUse.POLICY_REVISION && !FirstUse.Terms())
@@ -115,6 +117,7 @@ class App {
             if Docking.active
                 Docking.Detach()
         }
+        try Backdrop.Dispose()
         try Gfx.Shutdown()
         return 0
     }

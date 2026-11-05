@@ -4,6 +4,7 @@ class Backdrop {
     static image := 0, imgW := 0, imgH := 0
 
     static Load(path) {
+        Backdrop.Dispose()
         Backdrop.image := Gfx.LoadImage(path)
         if Backdrop.image {
             sz := Gfx.ImageSize(Backdrop.image)
@@ -73,12 +74,16 @@ class Backdrop {
         DllCall("gdiplus\GdipSetSmoothingMode", "Ptr", g, "Int", 3)
         DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", g, "Int", Backdrop.fast ? 3 : 7)
         DllCall("gdiplus\GdipSetPixelOffsetMode", "Ptr", g, "Int", Backdrop.fast ? 0 : 4)
-        prev := Gfx.G
+        prev := Gfx.G, composed := false
         Gfx.G := g
-        try paint.Call(pw / Gfx.S, ph / Gfx.S)
-        finally {
+        try {
+            paint.Call(pw / Gfx.S, ph / Gfx.S)
+            composed := true
+        } finally {
             Gfx.G := prev
             DllCall("gdiplus\GdipDeleteGraphics", "Ptr", g)
+            if !composed
+                Gfx.Disposable(bmp)
         }
         Backdrop.cache[name] := {key: key, bmp: bmp, w: pw, h: ph, sharp: !Backdrop.fast}
         return bmp
@@ -112,6 +117,14 @@ class Backdrop {
             Gfx.Disposable(Backdrop.cache[name].bmp)
             Backdrop.cache.Delete(name)
         }
+    }
+
+    static Dispose() {
+        for name, entry in Backdrop.cache
+            Gfx.Disposable(entry.bmp)
+        Backdrop.cache.Clear()
+        Gfx.Disposable(Backdrop.image)
+        Backdrop.image := Backdrop.imgW := Backdrop.imgH := 0
     }
 
     static BeginSizing() {

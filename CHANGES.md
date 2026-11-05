@@ -1,5 +1,16 @@
 # AutoHotkey edition
 
+## 1.4.0.39
+
+- Reuse the scaled backdrop and drawing buffers so hovering, switching tabs
+  and resizing do less work. Paint a fresh frame before showing a page.
+
+- Add a private server invite field under Settings. Save a Roblox TDS invite
+  and use Join private server before starting. New launches and disconnect
+  recovery use the same saved invite; forget it to go back to public TDS.
+- Windows protects the saved invite for the current account. The link does not
+  go into engine settings, exported profiles, or Output logs.
+
 ## 1.4.0.38
 
 - Hardcore map search reads only the selected Roblox client. It no longer

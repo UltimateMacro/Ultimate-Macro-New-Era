@@ -1,4 +1,4 @@
-; Roblox window identity, the fixed TDS protocol launch and scoped game recovery
+; Roblox window identity, validated launch targets and scoped game recovery
 ; (platform.py, roblox_launcher.py, game_recovery.py).
 
 class Roblox {
@@ -63,20 +63,27 @@ class Roblox {
     }
 
     ; ---- explicit launch ----------------------------------------------------
-    static Launch() {
+    static Launch(joinPrivate := false) {
         if Roblox.waiting
             return "waiting"
+        try target := PrivateServer.Target(Roblox.URI, joinPrivate)
+        catch
+            return "invalid-private"
         w := Roblox.Windows()
         if (w.Length > 1)
             return "multiple"
-        if (w.Length = 1)
+        if (w.Length = 1 && !joinPrivate)
             return "ready"
-        try Run(Roblox.URI)
+        try Roblox.OpenUri(target)
         catch
             return "unavailable"
+        if (w.Length = 1)
+            return "invite-opened" ; a pre-existing window does not prove the join succeeded
         Roblox.waiting := true, Roblox.deadline := A_TickCount + 90000
         return "waiting"
     }
+
+    static OpenUri(uri) => Run(uri)
 
     static Poll() {
         if !Roblox.waiting
@@ -239,9 +246,10 @@ class Roblox {
 }
 
 ; One claimed relaunch for the engine's disconnect recovery. Only the selected game
-; process is closed; the fixed TDS protocol URI is the only thing opened.
+; process is closed. The launcher, not the engine request, owns the join target.
 class GameRecovery {
     static state := "idle", request := "", deadline := 0, pid := 0, stamp := 0
+    static launchUri := ""
     static candidateKey := "", candidateSince := 0
     static originalMode := "", originalBounds := [], replacement := 0, replacementToken := ""
 
@@ -257,6 +265,7 @@ class GameRecovery {
     static Begin(request) {
         if GameRecovery.Busy
             throw Error("Another recovery is pending")
+        target := PrivateServer.Target(Roblox.URI)
         w := Roblox.Windows()
         if (w.Length != 1 || w[1] != request.hwnd || !Roblox.IsForeground(request.hwnd))
             throw ValueError("The selected game must remain foreground")
@@ -268,6 +277,7 @@ class GameRecovery {
         GameRecovery.request := request, GameRecovery.stamp := GameRecovery.InputStamp()
         ; WM_CLOSE can spawn a Roblox Home client; end only the verified game process.
         ProcessClose(GameRecovery.pid)
+        GameRecovery.launchUri := target
         GameRecovery.state := "closing", GameRecovery.deadline := A_TickCount + 3000
     }
 
@@ -284,7 +294,7 @@ class GameRecovery {
                     return GameRecovery.Finish(false)
                 return ""
             }
-            try Run(Roblox.URI)
+            try Roblox.OpenUri(GameRecovery.launchUri)
             catch
                 return GameRecovery.Finish(false)
             GameRecovery.state := "opening", GameRecovery.deadline := A_TickCount + 60000
@@ -368,6 +378,7 @@ class GameRecovery {
 
     static Finish(ok) {
         GameRecovery.state := "idle", GameRecovery.request := "", GameRecovery.pid := 0
+        GameRecovery.launchUri := ""
         GameRecovery.CandidateStable("", A_TickCount)
         GameRecovery.originalMode := "", GameRecovery.originalBounds := []
         GameRecovery.replacement := 0, GameRecovery.replacementToken := ""
