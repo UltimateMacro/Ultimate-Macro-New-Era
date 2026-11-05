@@ -22,11 +22,17 @@ UM14_RequireReadyFocus() => 0
 UM14_Fatal(message) {
     throw Error(message)
 }
-UM14_ConnectionSnapshot() => scenario = "docked" ? {w:1078, h:995} : {w:1000, h:700}
+UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" ? {w:1078, h:995} : {w:1000, h:700}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => recognized
 UM14_ConnectionOCR(identity, region, *) {
+    if (scenario = "squad") {
+        if (region.y = Round(identity.h*.08))
+            return [{text:"SQUAD",raw:"Squad",x:500,y:135,w:49,h:16}]
+        if (region.x = Round(identity.w*.19) && region.y = Round(identity.h*.34))
+            return [{text:"SOLO",raw:"Solo",x:264,y:480,w:31,h:14}]
+    }
     if (scenario = "modifier" && hover[2] = Round(identity.h*.945))
         return [{text:"ADD", x:32, y:615, w:18, h:9},
             {text:"MODIFIER", x:54, y:615, w:43, h:9}]
@@ -70,6 +76,10 @@ try {
     Need(UM14_SelectCurrentMode("Frost", &seen) && seen, "Frost selected in the docked full-width menu")
     Need(clicks.Length = 2 && clicks[1][1] = 58 && clicks[2][1] = 899 && wheelCount = 1,
         "Docked sidebar and far-right card are both in bounds")
+    scenario := "squad"
+    solo := UM14_SquadCard("Solo")
+    Need(IsObject(solo) && solo.x = 280 && solo.y = 487, "Docked Solo label is verified under the squad heading")
+    Need(!UM14_SquadCard("Duo"), "Do not click the wrong squad card")
     scenario := "moved", activeDifficulty := "Fallen", seen := false, wheelCount := 0, clicks := []
     Need(!UM14_SelectCurrentMode("Fallen", &seen) && wheelCount = 0 && clicks.Length = 0, "No input when Roblox identity changed")
     scenario := "modifier", clicks := [], hover := [0, 0]

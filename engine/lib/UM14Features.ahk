@@ -339,6 +339,25 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
     return false
 }
 
+UM14_SquadCard(name) {
+    UM14_RequireReadyFocus()
+    identity := UM14_ConnectionSnapshot()
+    if (!IsObject(identity))
+        return false
+    w := identity.w, h := identity.h
+    title := UM14_Region(Round(w*.25),Round(h*.08),Round(w*.50),Round(h*.22),w,h)
+    if (!IsObject(title) || !IsObject(UM14_MenuWordPair(identity,title,"Squad")))
+        return false
+    right := name = "Duo" || name = "Quad"
+    bottom := name = "Trio" || name = "Quad"
+    card := UM14_Region(Round(w*(right ? .49 : .19)),Round(h*(bottom ? .53 : .34)),
+        Round(w*.32),Round(h*.23),w,h)
+    match := IsObject(card) ? UM14_MenuWordPair(identity,card,name,true) : false
+    if (IsObject(match))
+        match.identity := identity
+    return match
+}
+
 UM14_ModifierName(value) {
     ; Exact aliases only; never the fork's arbitrary prefix/substring matches.
     static names := ["Broke","Exploding","Flying","Foggy","Glass","Healthy","Hidden",

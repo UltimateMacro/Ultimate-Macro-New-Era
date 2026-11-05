@@ -1890,10 +1890,26 @@ class MW {
     }
 
     static DockResult(result) {
-        if (result = "attached")
+        if (result = "attached") {
+            SetTimer(() => MW.SyncDockGeometry(), -100)
             MW.Log("Window layout applied.")
-        else
+        } else
             MW.DockRestoreFinished(result)
+    }
+
+    static SyncDockGeometry(attempt := 0) {
+        if (MW.closing || WinGetMinMax(MW.gui) = -1)
+            return
+        if MW.surface.rendering {
+            if (attempt < 4)
+                SetTimer(() => MW.SyncDockGeometry(attempt+1), -50)
+            return
+        }
+        ; The asynchronous Windows move can finish during startup painting.
+        ; Use confirmed client bounds after it settles, not the old Size event.
+        WinGetClientPos(,, &w, &h, MW.gui)
+        if (w > 0 && h > 0)
+            MW.OnSize(WinGetMinMax(MW.gui), w, h)
     }
 
     static DockRestoreFinished(result) {
@@ -1911,6 +1927,8 @@ class MW {
             if (result != "partial" && result != "attach-partial")
                 MW.gui.Maximize()
         }
+        if (result = "restored" || result = "partial")
+            SetTimer(() => MW.SyncDockGeometry(), -100)
         MW.dockRoblox.SetChecked(Store.settings["dockRoblox"])
     }
 

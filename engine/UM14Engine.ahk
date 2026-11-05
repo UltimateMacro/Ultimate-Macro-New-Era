@@ -5462,41 +5462,41 @@ JoinGame() {
     }
     Sleep(300)
 
+    squad := "Solo", lastSquadRead := 0
+    if (MultiplayerEnabled) {
+        totalPartyMembers := 0
+        Loop Parse, PartyMembers, "," {
+            if (Trim(A_LoopField) != "")
+                totalPartyMembers++
+        }
+        if (totalPartyMembers >= 1 && totalPartyMembers <= 3)
+            squad := ["Duo","Trio","Quad"][totalPartyMembers]
+    }
     startTime := A_TickCount
     Loop {
         getRobloxPos(,, &w, &h)
         if (A_TickCount - startTime > 40000)
             UM14_LobbyFailure("squad selection")
-        if (!MultiplayerEnabled) {
-            res := AdvancedImageSearch("Resources/Solo.png", 0, Round(h * 0.2), Round(w * 0.7), Round(h * 0.55))
-            if (res.status = "success" && res.score >= 0.7) {
-                Click(res.x, res.y)
-                break 
-            }
-        } else {
-            totalPartyMembers := 0
-            Loop Parse, PartyMembers, "," {
-                member := Trim(A_LoopField)
-                if (member = "") {
+        image := squad = "Solo" ? "Solo" : StrLower(squad)
+        res := squad = "Solo"
+            ? AdvancedImageSearch("Resources/" image ".png", 0, Round(h*.20), Round(w*.70), Round(h*.55))
+            : AdvancedImageSearch("Resources/" image ".png", Round(w*.20), Round(h*.20), Round(w*.60), Round(h*.60))
+        if (res.status = "success" && res.score >= .70) {
+            UM14_RequireReadyFocus()
+            Click(res.x,res.y)
+            break
+        }
+        if (A_TickCount-lastSquadRead >= 1100) {
+            lastSquadRead := A_TickCount
+            card := UM14_SquadCard(squad)
+            if (IsObject(card)) {
+                UM14_RequireReadyFocus()
+                if (!UM14_ConnectionSame(card.identity))
                     continue
-                }
-                totalPartyMembers++
+                Click(card.x,card.y)
+                LogToConsole("Squad size selected by label: " squad)
+                break
             }
-            if (totalPartyMembers = 1) {
-                res := AdvancedImageSearch("Resources/duo.png", Round(w * 0.2), Round(h * 0.2), Round(w * 0.6), Round(h * 0.6))
-            } else if (totalPartyMembers = 2) {
-                res := AdvancedImageSearch("Resources/trio.png", Round(w * 0.2), Round(h * 0.2), Round(w * 0.6), Round(h * 0.6))
-            } else if (totalPartyMembers = 3) {
-                res := AdvancedImageSearch("Resources/quad.png", Round(w * 0.2), Round(h * 0.2), Round(w * 0.6), Round(h * 0.6))
-            } else {
-                res := AdvancedImageSearch("Resources/Solo.png", 0, Round(h * 0.2), Round(w * 0.7), Round(h * 0.55))
-            }
-
-            if (res.status = "success" && res.score >= 0.7) {
-                Click(res.x, res.y)
-                break 
-            }
-
         }
         Sleep(100)
     }
