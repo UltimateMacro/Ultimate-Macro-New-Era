@@ -8,7 +8,7 @@ on:
       - .github/scripts/update_readme_stats.py
       - .github/workflows/readme-stats.yml
   schedule:
-    - cron: "17 * * * *"
+    - cron: "0 0,12 * * *"
   workflow_dispatch:
 
 permissions:
