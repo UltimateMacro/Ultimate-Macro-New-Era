@@ -39,7 +39,7 @@ Ultimate Macro is an advanced, fully-featured automation tool for Roblox Tower D
 
 ## Links & Support
 
-* **Discord Server:** [Join for help, strategies, and updates!](https://discord.gg/DQnc2JDJtr)
+* **Discord Server:** [Join for help, strategies, and updates!](https://discord.gg/ultmacro)
 * **YouTube Channel:** [@darksenn](https://www.youtube.com/@darksenn)
 * **GitHub Repository:** [DarksenDev/tds-macro](https://github.com/DarksenDev/tds-macro)
 

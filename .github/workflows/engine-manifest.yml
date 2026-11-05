@@ -1,0 +1,32 @@
+name: Engine manifest
+
+on:
+  pull_request:
+    paths:
+      - "engine/**"
+      - ".github/scripts/verify_engine_manifest.py"
+      - ".github/workflows/engine-manifest.yml"
+  push:
+    branches: [main]
+    paths:
+      - "engine/**"
+      - ".github/scripts/verify_engine_manifest.py"
+      - ".github/workflows/engine-manifest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-manifest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify engine file hashes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check engine-manifest.json
+        run: python3 .github/scripts/verify_engine_manifest.py

@@ -7,7 +7,7 @@
 ; This is a modified version of "Ultimate Macro", licensed GNU GPLv3. The 1.4
 ; Python/Qt window and C# engine host were ported back to AutoHotkey v2; the
 ; gameplay engine in .\engine is the 1.4 patched 1.3.3a engine (see
-; engine\ENGINE-NOTICE.md). Discord server - https://discord.gg/DQnc2JDJtr
+; engine\ENGINE-NOTICE.md). Discord server - https://discord.gg/ultmacro
 
 #Requires AutoHotkey v2.0 64-bit
 #SingleInstance Off
