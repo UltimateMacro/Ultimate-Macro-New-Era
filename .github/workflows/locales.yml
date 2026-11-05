@@ -1,0 +1,32 @@
+name: Locales
+
+on:
+  pull_request:
+    paths:
+      - "assets/locales/**"
+      - ".github/scripts/validate_locales.py"
+      - ".github/workflows/locales.yml"
+  push:
+    branches: [main]
+    paths:
+      - "assets/locales/**"
+      - ".github/scripts/validate_locales.py"
+      - ".github/workflows/locales.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: locales-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate locale catalogs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check assets/locales/*.json
+        run: python3 .github/scripts/validate_locales.py
