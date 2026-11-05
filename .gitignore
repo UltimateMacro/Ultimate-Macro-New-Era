@@ -1,2 +1,6 @@
-setup/AutomatedLogs-Access.ini
-Resources/Strats/*.bak
+﻿# runtime output / local junk
+*.log
+*.bak
+Thumbs.db
+desktop.ini
+.vscode/

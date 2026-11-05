@@ -1,0 +1,48 @@
+ULTIMATE MACRO PERSONAL-USE SOURCE-AVAILABLE LICENSE — 1.0
+Copyright (c) 2026 Ultimate Macro contributors. All rights reserved except as granted below.
+
+1. Scope. This license applies only to newly authored Ultimate Macro code expressly
+marked as covered by this license. It does not relicense earlier GPL releases,
+third-party libraries, runtimes, artwork or other separately licensed components.
+Their notices and licenses control those components. Mandatory legal rights prevail.
+
+2. Personal permission. You may download, inspect, run and privately modify covered
+code solely for your own personal use, while complying with applicable access/key
+requirements. You may retain private backups for yourself. No rights are granted
+to another person by your possession of a copy. This is not an open-source license.
+
+3. No redistribution or commercial exploitation. You may not publish, upload, share,
+give away, sublicense, sell, rent, distribute or otherwise provide covered code,
+binaries, modified versions or derivative works to another person, whether free or
+paid. You may not incorporate covered code or its protectable translated/adapted
+implementation into a product, service, source archive or other work offered to
+others. Personal modification permission does not permit distributing patches or
+extracts of covered code. Obtain separate written permission for any such activity.
+These restrictions do not claim ownership of general ideas, facts, algorithms or
+independently created implementations not derived from protectable covered material.
+
+4. Security and access controls. You may not remove, defeat, bypass, disable or
+modify licensing, key verification, session/concurrent-device enforcement,
+expiration, update-signature verification or other access/security controls to
+obtain unauthorized access. This prohibition applies even to private or personal
+use. You may not share keys, session credentials or signing credentials, forge
+entitlements, or assist others in circumventing these controls. Report defects
+privately; security testing that defeats controls requires prior written permission.
+Nothing here limits rights that applicable law does not allow to be restricted.
+
+5. Notices and separate rights. Retain copyright, attribution and license notices
+in permitted private copies. This license grants no trademark rights, server
+access, ownership of a key, or right to represent an unofficial build as official.
+It does not remove rights already granted for earlier versions or dependencies.
+
+6. Termination. Permission terminates upon breach. Stop using covered material and
+delete unauthorized copies, except records or copies required by applicable law.
+Separate written permission may reinstate rights. Existing statutory consumer,
+refund, privacy and payment-dispute rights are not waived.
+
+7. Disclaimer. To the extent allowed by law, covered material is provided AS IS,
+without warranties of merchantability, fitness for a particular purpose or
+noninfringement. To that extent, contributors are not liable for losses arising
+from its use. No exclusion applies where liability cannot legally be excluded.
+
+Permission requests and defect reports: tdsultimatemacro@gmail.com

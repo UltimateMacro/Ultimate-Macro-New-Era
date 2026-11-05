@@ -13,7 +13,7 @@
   <img src=".github/assets/community-stats.svg" width="760" alt="GitHub downloads from Darksen and The New Era, Discord community members, and GitHub stars">
 </p>
 
-<p align="center"><strong><a href="LICENSE">Source available</a></strong> &nbsp;·&nbsp; <strong><a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">Official releases</a></strong> &nbsp;·&nbsp; <strong><a href="#the-team">Community-maintained</a></strong></p>
+<p align="center"><strong>Version 1.4</strong> &nbsp;·&nbsp; <strong><a href="LICENSE-1.4.txt">Source available</a></strong> &nbsp;·&nbsp; <strong><a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">Official releases</a></strong> &nbsp;·&nbsp; <strong><a href="#the-team">Community-maintained</a></strong></p>
 
 ## What is Ultimate Macro?
 
@@ -62,7 +62,7 @@ The macro includes resolution-aware detection, but the recommended display and i
 ### 2. Download and install
 
 1. Download from **[ultmacro.xyz/download](https://ultmacro.xyz/download)** or the official **[GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases)** page. Avoid reuploads from strangers.
-2. Extract the entire ZIP to a normal folder, such as **Documents\Ultimate Macro**. Keep its `Resources`, `lib` and `submacros` folders alongside `Main.ahk`.
+2. Extract the entire ZIP to a normal folder, such as **Documents\Ultimate Macro**. Keep its `app`, `ui`, `engine` and `assets` folders alongside `Main.ahk`.
 3. Install **[AutoHotkey v2](https://www.autohotkey.com/v2/)** if needed. The macro's source requires version 2, not version 1.
 4. Open the extracted folder and run **`Main.ahk`**. If Windows asks which program to use, select your AutoHotkey v2 installation.
 
@@ -82,7 +82,7 @@ Strategies are not universal. They can depend on a particular game update, loado
 
 **We want users to be able to check, not just take our word for it.**
 
-Ultimate Macro's current source is **available for inspection and private modification under a restricted license**. You can inspect the [main script](Main.ahk), the [supporting code](lib/), and the [original project](https://github.com/DarksenDev/tds-macro). Historical GPL releases and third-party components retain their licenses. It is built with AutoHotkey, a Windows scripting language often used for legitimate keyboard, mouse and interface automation.
+Ultimate Macro's current source is **available for inspection and private modification under a restricted license**. You can inspect the [main script](Main.ahk), the [supporting code](app/), the [interface](ui/), the [engine](engine/), and the [original project](https://github.com/DarksenDev/tds-macro). Historical GPL releases and third-party components retain their licenses. It is built with AutoHotkey, a Windows scripting language often used for legitimate keyboard, mouse and interface automation.
 
 **Open source does not guarantee that every downloaded file is harmless.** There is no meaningful way to promise that any software is “100% virus-free” simply from its README. Download official builds, keep Windows security protections enabled, and check a file if a security product flags it.
 
@@ -139,8 +139,8 @@ Thanks to everyone sharing strategies, reporting bugs and helping new members in
 
 ## Source availability & community
 
-- **Current first-party license:** [Ultimate Macro Personal-Use Source-Available License](LICENSE): personal use, inspection and private edits/forks allowed; resale and public redistribution restricted, subject to the GitHub platform exception. Not an OSI open-source license.
-- **Earlier releases and dependencies:** existing licenses remain in force; [historical GPL text](COPYING-GPL-3.0.txt). This change does not revoke previous GPL permissions or relicense third-party components.
+- **Current first-party license:** [Ultimate Macro Personal-Use Source-Available License](LICENSE-1.4.txt): personal use, inspection and private edits/forks allowed; resale and public redistribution restricted, subject to the GitHub platform exception. Not an OSI open-source license.
+- **Earlier releases and dependencies:** existing licenses remain in force; [historical GPL text](LICENSE). This change does not revoke previous GPL permissions or relicense third-party components.
 - **Source code:** [This repository](https://github.com/UltimateMacro/Ultimate-Macro-New-Era).
 - **Updates:** [GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
 - **Documentation:** [Wiki](https://ultmacro.xyz/wiki/).
