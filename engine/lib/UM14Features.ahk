@@ -360,18 +360,53 @@ UM14_SquadCard(name) {
     if (!IsObject(identity))
         return false
     w := identity.w, h := identity.h
-    title := UM14_Region(Round(w*.25),Round(h*.025),Round(w*.50),Round(h*.275),w,h)
-    ; The compact dialog puts "Squad..." above the old title region.
-    if (!IsObject(title) || !IsObject(UM14_MenuWordPair(identity,title,"Squad",false,true)))
+    title := UM14_Region(Round(w*.28),Round(h*.025),Round(w*.44),Round(h*.205),w,h)
+    if (!IsObject(title))
+        return false
+    ; The compact title can be read as a line even when the OCR result has
+    ; no usable word boxes. Require the complete dialog title in that case.
+    if (!IsObject(UM14_MenuWordPair(identity,title,"Squad",false,true))
+        && !UM14_SquadTextPair(identity,title,"Choose a Squad",true))
         return false
     right := name = "Duo" || name = "Quad"
     bottom := name = "Trio" || name = "Quad"
     card := UM14_Region(Round(w*(right ? .49 : .19)),Round(h*(bottom ? .53 : .34)),
         Round(w*.32),Round(h*.23),w,h)
     match := IsObject(card) ? UM14_MenuWordPair(identity,card,name,true) : false
+    if (!IsObject(match)) {
+        label := UM14_Region(Round(w*(right ? .50 : .22)),Round(h*(bottom ? .57 : .39)),
+            Round(w*.19),Round(h*.13),w,h)
+        if (IsObject(label) && UM14_SquadTextPair(identity,label,name))
+            match := {x:Round(label.x+label.w/2),y:Round(label.y+label.h/2)}
+    }
     if (IsObject(match))
         match.identity := identity
     return match
+}
+
+UM14_SquadTextPair(identity, region, expected, heading := false) {
+    Loop 2 {
+        UM14_RequireReadyFocus()
+        if !UM14_ConnectionSame(identity)
+            return false
+        factor := Min(3.0,2200/Max(region.w,region.h))
+        text := UM14_ConnectionOCR(identity,region,factor)
+        if (Type(text) != "String")
+            return false
+        matches := 0
+        for line in StrSplit(text,"`n","`r") {
+            line := Trim(line)
+            if (heading)
+                line := RegExReplace(line,"[.…]+$")
+            if (StrLower(line) = StrLower(expected))
+                matches++
+        }
+        if (matches != 1 || !UM14_ConnectionSame(identity))
+            return false
+        if (A_Index = 1)
+            Sleep(100)
+    }
+    return true
 }
 
 UM14_ModifierName(value) {

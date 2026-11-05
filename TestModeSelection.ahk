@@ -23,11 +23,17 @@ UM14_Fatal(message) {
     throw Error(message)
 }
 UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" ? {w:1078, h:995}
-    : scenario = "horizontal" ? {w:800, h:600} : {w:1000, h:700}
+    : scenario = "horizontal" || scenario = "squad-compact" ? {w:800, h:600} : {w:1000, h:700}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
-UM14_OCRWords(recognized, *) => recognized
+UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, *) {
+    if (scenario = "squad-compact") {
+        if (region.y = 15)
+            return "Choose a Squad...`nSelect the maximum..."
+        if (region.x = 176 && region.y = 234)
+            return "Solo"
+    }
     if (scenario = "horizontal" && region.y = 33) {
         if (region.x = 264)
             return [{text:"SURVIVAL",raw:"Survival",x:275,y:45,w:40,h:10}]
@@ -95,6 +101,10 @@ try {
     solo := UM14_SquadCard("Solo")
     Need(IsObject(solo) && solo.x = 280 && solo.y = 487, "Docked Solo label is verified under the squad heading")
     Need(!UM14_SquadCard("Duo"), "Do not click the wrong squad card")
+    scenario := "squad-compact"
+    solo := UM14_SquadCard("Solo")
+    Need(IsObject(solo) && solo.x = 252 && solo.y = 273, "Compact squad uses exact text when word boxes are missing")
+    Need(!UM14_SquadCard("Duo"), "Compact fallback rejects a different squad label")
     scenario := "moved", activeDifficulty := "Fallen", seen := false, wheelCount := 0, clicks := []
     Need(!UM14_SelectCurrentMode("Fallen", &seen) && wheelCount = 0 && clicks.Length = 0, "No input when Roblox identity changed")
     scenario := "modifier", clicks := [], hover := [0, 0]
