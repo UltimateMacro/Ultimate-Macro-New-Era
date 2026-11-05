@@ -63,14 +63,30 @@ def read_state():
         return {}
 
 
+def darksen_stats(old):
+    try:
+        return release_downloads(REPOS[0]), True
+    except urllib.error.URLError as err:
+        print(f"Warning: Darksen stats unavailable; retaining the last known count: {err}")
+        downloads = old.get("darksen_downloads")
+        assets = old.get("darksen_release_assets")
+        return {
+            "downloads": downloads if type(downloads) is int and downloads >= 0 else None,
+            "assets": assets if type(assets) is int and assets >= 0 else None,
+        }, False
+
+
 def draw(stats):
     number = lambda n: f"{n:,}"
     members = stats.get("discord_members")
     members_display = (number(members) if stats.get("discord_members_fresh")
                        else "~" + number(members)) if members is not None else "—"
+    download_sources = "The New Era only" if stats["darksen_downloads"] is None else (
+        "Darksen + The New Era" if stats["darksen_downloads_fresh"] else "The New Era + last known Darksen count"
+    )
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="760" height="605" viewBox="0 0 760 605" role="img" aria-labelledby="title desc">
 <title id="title">Ultimate Macro community statistics</title>
-<desc id="desc">{number(stats['total_downloads'])} GitHub release downloads across Darksen and The New Era, {html.escape(members_display)} approximate Discord members, {number(stats['stars'])} stars on this GitHub repository.</desc>
+<desc id="desc">{number(stats['total_downloads'])} GitHub release downloads ({download_sources}), {html.escape(members_display)} approximate Discord members, {number(stats['stars'])} stars on this GitHub repository.</desc>
 <defs>
   <linearGradient id="downloads" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#101720"/><stop offset=".62" stop-color="#142132"/><stop offset="1" stop-color="#1A344C"/></linearGradient>
   <linearGradient id="community" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#111721"/><stop offset=".62" stop-color="#1B1E35"/><stop offset="1" stop-color="#2B2746"/></linearGradient>
@@ -82,7 +98,7 @@ def draw(stats):
 <g font-family="Arial, Helvetica, sans-serif">
   <text x="38" y="58" font-size="30" font-weight="600" fill="#A9C7E7">Downloads</text>
   <text x="37" y="133" font-size="78" font-weight="700" letter-spacing="-2" fill="#F2F7FF">{number(stats['total_downloads'])}</text>
-  <text x="40" y="166" font-size="21" fill="#B1C0D2">Darksen + The New Era</text>
+  <text x="40" y="166" font-size="21" fill="#B1C0D2">{download_sources}</text>
   <text x="38" y="263" font-size="30" font-weight="600" fill="#C4B5FD">Community of</text>
   <text x="37" y="338" font-size="78" font-weight="700" letter-spacing="-2" fill="#F8F6FF">{html.escape(members_display)}</text>
   <text x="40" y="371" font-size="21" fill="#BFC0D6">Discord members</text>
@@ -104,7 +120,8 @@ def draw(stats):
 
 def main():
     old = read_state()
-    darksen, new_era = (release_downloads(repo) for repo in REPOS)
+    darksen, darksen_fresh = darksen_stats(old)
+    new_era = release_downloads(REPOS[1])
     repo = get_json("https://api.github.com/repos/UltimateMacro/Ultimate-Macro-New-Era")
     stars = int(repo["stargazers_count"])
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -124,16 +141,19 @@ def main():
         print(f"Warning: Discord count unavailable; keeping last known estimate: {err}")
     stats = {
         "darksen_downloads": darksen["downloads"],
+        "darksen_downloads_fresh": darksen_fresh,
+        "darksen_release_assets": darksen["assets"],
         "new_era_downloads": new_era["downloads"],
-        "total_downloads": darksen["downloads"] + new_era["downloads"],
-        "counted_release_assets": darksen["assets"] + new_era["assets"],
+        "total_downloads": (darksen["downloads"] or 0) + new_era["downloads"],
+        "counted_release_assets": None if darksen["assets"] is None else darksen["assets"] + new_era["assets"],
         "stars": stars,
         "discord_members": members,
         "discord_members_checked_at": member_checked_at,
         "discord_members_fresh": fresh,
         "updated_at": now,
     }
-    changed_fields = ("darksen_downloads", "new_era_downloads", "total_downloads",
+    changed_fields = ("darksen_downloads", "darksen_downloads_fresh", "darksen_release_assets",
+                      "new_era_downloads", "total_downloads",
                       "counted_release_assets", "stars", "discord_members",
                       "discord_members_fresh")
     if IMAGE_PATH.exists() and all(old.get(key) == stats[key] for key in changed_fields):
