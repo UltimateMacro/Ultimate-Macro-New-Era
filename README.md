@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/actions/workflows/ci.yml"><img src="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
   <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases"><img src="https://img.shields.io/github/v/release/UltimateMacro/Ultimate-Macro-New-Era?include_prereleases&label=release&color=orange" alt="Latest release"></a>
-  <a href="LICENSE-1.4.txt"><img src="https://img.shields.io/badge/license-Source%20Available-orange" alt="License: Source Available"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-orange" alt="GPL-3.0 license" title="GPL-3.0 license"></a>
   <a href="https://discord.gg/ultmacro"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2Fultmacro%3Fwith_counts%3Dtrue&query=%24.approximate_presence_count&label=chat&suffix=%20online&color=brightgreen" alt="Discord members online"></a>
 </p>
 
