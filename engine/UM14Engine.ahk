@@ -3385,7 +3385,7 @@ BrawlerReposition(towerId, x, y) {
         Towers[towerId].x := x
         Towers[towerId].y := y
         UpdateTowerIndicator(towerId)
-        LogToConsole("Successfully reposited " towerId " to " x ", " y ".")
+        LogToConsole("Successfully repositioned " towerId " to " x ", " y ".")
         break
     }
 
@@ -6983,7 +6983,7 @@ SetDJTrack(track) {
             x2 := Round(w * 0.7)
             y2 := Round(h * 0.3)
             If (ImageSearch(&fx,&fy,x1,y1,x2,y2, "*Trans000000 *50 " A_WorkingDir "/Resources/please_wait.png") || ReadMessage(["please", "wait"])) {
-                LogToConsole("Need to wait before swithcing the track. Waiting 5 seconds...")
+                LogToConsole("Need to wait before switching the track. Waiting 5 seconds...")
                 Sleep(4500)
                 continue
             } else {
