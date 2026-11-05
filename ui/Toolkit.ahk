@@ -12,7 +12,7 @@ class Surface {
         this.gui := gui, this.hwnd := gui.Hwnd, this.root := root, this.scrollable := scrollable
         this.scrollY := 0, this.contentH := 0, this.contentW := 0
         this.pw := 0, this.ph := 0, this.lw := 0, this.lh := 0
-        this.dc := 0, this.hbm := 0, this.obm := 0
+        this.dc := 0, this.hbm := 0, this.obm := 0, this.cw := 0, this.ch := 0
         this.hover := "", this.pressed := "", this.capture := "", this.focusWidget := ""
         this.natives := [], this.pending := false, this.layoutPending := false
         this.rendering := false, this.deferredSize := "", this.layouting := false
@@ -42,7 +42,7 @@ class Surface {
             DllCall("DeleteObject", "Ptr", this.hbm)
             DllCall("DeleteDC", "Ptr", this.dc)
         }
-        this.dc := 0, this.hbm := 0, this.obm := 0
+        this.dc := 0, this.hbm := 0, this.obm := 0, this.cw := 0, this.ch := 0
     }
 
     Resize(pw, ph) {
@@ -51,13 +51,16 @@ class Surface {
             this.deferredSize := [pw,ph]
             return
         }
-        if (pw != this.pw || ph != this.ph) {
+        ; The back buffer keeps some slack so a live resize reuses it instead of
+        ; reallocating a DIB section for every pixel the window edge moves.
+        if (!this.dc || pw > this.cw || ph > this.ch || this.cw > pw + 512 || this.ch > ph + 512) {
             previous := A_IsCritical
             Critical("On")
             try {
+                cw := Ceil(pw / 128) * 128, ch := Ceil(ph / 128) * 128
                 ; Publish only a complete buffer; queued paints must never see a freed DC.
                 bi := Buffer(40, 0)
-                NumPut("UInt", 40, "Int", pw, "Int", -ph, "UShort", 1, "UShort", 32, bi)
+                NumPut("UInt", 40, "Int", cw, "Int", -ch, "UShort", 1, "UShort", 32, bi)
                 hdc := DllCall("GetDC", "Ptr", 0, "Ptr")
                 if !hdc
                     return
@@ -74,9 +77,10 @@ class Surface {
                 }
                 this.FreeBuffer()
                 this.dc := dc, this.hbm := bitmap, this.obm := old
-                this.pw := pw, this.ph := ph
+                this.cw := cw, this.ch := ch
             } finally Critical(previous ? previous : "Off")
         }
+        this.pw := pw, this.ph := ph
         this.lw := pw / Gfx.S, this.lh := ph / Gfx.S
         this.Relayout()
     }
@@ -85,6 +89,31 @@ class Surface {
         if !this.pending {
             this.pending := true
             SetTimer(this.renderFn, -1)
+        }
+    }
+
+    ; Paint now and put the frame on screen, instead of waiting for the queued
+    ; render. Used when a surface is resized or about to be shown, so Windows
+    ; never presents a stale, black or half-arranged buffer in between.
+    RenderNow() {
+        SetTimer(this.renderFn, 0)
+        this.pending := false
+        if (!this.dc || this.rendering)
+            return
+        if this.layoutPending {
+            SetTimer(this.layoutFn, 0)
+            this.Relayout()
+            SetTimer(this.renderFn, 0)
+            this.pending := false
+        }
+        this.DoRender()
+        if !DllCall("IsWindowVisible", "Ptr", this.hwnd)
+            return
+        hdc := DllCall("GetDC", "Ptr", this.hwnd, "Ptr")
+        if hdc {
+            DllCall("BitBlt", "Ptr", hdc, "Int", 0, "Int", 0, "Int", this.pw, "Int", this.ph, "Ptr", this.dc, "Int", 0, "Int", 0, "UInt", 0x00CC0020)
+            DllCall("ReleaseDC", "Ptr", this.hwnd, "Ptr", hdc)
+            DllCall("ValidateRect", "Ptr", this.hwnd, "Ptr", 0)
         }
     }
 

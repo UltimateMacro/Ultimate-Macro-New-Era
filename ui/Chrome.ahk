@@ -12,21 +12,126 @@ class Backdrop {
     }
 
     ; Flat base colour like the Python window. The optional scenery ("Theme
-    ; background") is drawn straight from the decoded image, cropped to the window,
-    ; with no shared cached bitmap that a resize or theme change could free mid-paint.
+    ; background") is composed once per window size/theme into a cached bitmap,
+    ; then every surface copies its slice 1:1. Rescaling the full-size JPEG with
+    ; bicubic filtering and an alpha matrix on every repaint (each hover frame,
+    ; fade step and resize) was the main source of UI lag.
+    ; Painting runs on the script's single thread with Critical on, so a cache
+    ; entry is only ever replaced between draws, never while one is using it.
     static PaintFor(surface, offX, offY) {
         base := Theme.C("base")
-        Gfx.Rect(0, 0, surface.lw, surface.lh, base)
-        if (!Backdrop.image || !Store.settings["themeBackground"] || !Backdrop.imgW || !MW.surface || MW.surface.pw < 2)
+        if (!Backdrop.image || !Store.settings["themeBackground"] || !Backdrop.imgW || !MW.surface || MW.surface.pw < 2) {
+            Gfx.Rect(0, 0, surface.lw, surface.lh, base)
             return
+        }
         ww := MW.surface.pw, wh := MW.surface.ph
+        opacity := (255 - Theme.C("overlay")) / 255
+        bmp := Backdrop.Cached("window", ww "x" wh "|" base "|" opacity, ww, wh
+            , (lw, lh) => Backdrop.ComposeWindow(ww, wh, base, opacity))
+        if !bmp {
+            Gfx.Rect(0, 0, surface.lw, surface.lh, base)
+            Backdrop.ComposeWindow(ww, wh, base, opacity, offX, offY)
+            return
+        }
+        Backdrop.Blit(bmp, ww, wh, 0, 0, Round(offX), Round(offY), surface.pw, surface.ph, base)
+    }
+
+    static ComposeWindow(ww, wh, base, opacity, offX := 0, offY := 0) {
+        s := Gfx.S
         scale := Max(ww / Backdrop.imgW, wh / Backdrop.imgH)
         dw := Backdrop.imgW * scale, dh := Backdrop.imgH * scale
-        s := Gfx.S
-        ; Blend the image directly over the base. This avoids a separate
-        ; translucent rectangle pass on a freshly resized child surface.
+        if (offX = 0 && offY = 0)
+            Gfx.Rect(0, 0, ww / s + 1, wh / s + 1, base)
         Gfx.ImageRegion(Backdrop.image, ((ww - dw) / 2 - offX) / s, ((wh - dh) / 2 - offY) / s
-            , dw / s, dh / s, 0, 0, Backdrop.imgW, Backdrop.imgH, (255 - Theme.C("overlay")) / 255)
+            , dw / s, dh / s, 0, 0, Backdrop.imgW, Backdrop.imgH, opacity)
+    }
+
+    ; ---- cache -----------------------------------------------------------
+    static cache := Map()
+    ; True while Windows' move/size loop runs: rebuilds use bilinear filtering,
+    ; and EndSizing swaps in a sharp bitmap once the drag ends.
+    static fast := false
+
+    ; Returns a premultiplied GDI+ bitmap of pw x ph physical pixels, building it
+    ; with paint(lw, lh) (logical units, Gfx helpers) when key changes.
+    static Cached(name, key, pw, ph, paint) {
+        if Backdrop.cache.Has(name) {
+            c := Backdrop.cache[name]
+            if (c.key == key)
+                return c.bmp
+            Backdrop.cache.Delete(name)
+            Gfx.Disposable(c.bmp)
+        }
+        pw := Max(1, Round(pw)), ph := Max(1, Round(ph))
+        bmp := 0, g := 0
+        if (DllCall("gdiplus\GdipCreateBitmapFromScan0", "Int", pw, "Int", ph, "Int", 0, "Int", 0xE200B, "Ptr", 0, "Ptr*", &bmp) || !bmp)
+            return 0
+        if (DllCall("gdiplus\GdipGetImageGraphicsContext", "Ptr", bmp, "Ptr*", &g) || !g) {
+            Gfx.Disposable(bmp)
+            return 0
+        }
+        DllCall("gdiplus\GdipSetSmoothingMode", "Ptr", g, "Int", 3)
+        DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", g, "Int", Backdrop.fast ? 3 : 7)
+        DllCall("gdiplus\GdipSetPixelOffsetMode", "Ptr", g, "Int", Backdrop.fast ? 0 : 4)
+        prev := Gfx.G
+        Gfx.G := g
+        try paint.Call(pw / Gfx.S, ph / Gfx.S)
+        finally {
+            Gfx.G := prev
+            DllCall("gdiplus\GdipDeleteGraphics", "Ptr", g)
+        }
+        Backdrop.cache[name] := {key: key, bmp: bmp, w: pw, h: ph, sharp: !Backdrop.fast}
+        return bmp
+    }
+
+    ; Copy a w x h slice (sx, sy) of a cached bitmap to (dx, dy) on the current
+    ; surface without filtering or blending. Area outside the bitmap gets base.
+    static Blit(bmp, bw, bh, dx, dy, sx, sy, w, h, base) {
+        G := Gfx.G, s := Gfx.S
+        cw := Min(w, bw - sx), ch := Min(h, bh - sy)
+        if (sx < 0 || sy < 0 || cw < w || ch < h)
+            Gfx.Rect(dx / s, dy / s, w / s + 1, h / s + 1, base)
+        if (sx < 0)
+            dx -= sx, cw += sx, sx := 0
+        if (sy < 0)
+            dy -= sy, ch += sy, sy := 0
+        if (cw <= 0 || ch <= 0)
+            return
+        DllCall("gdiplus\GdipSetCompositingMode", "Ptr", G, "Int", 1)
+        DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", G, "Int", 5)
+        try DllCall("gdiplus\GdipDrawImageRectRectI", "Ptr", G, "Ptr", bmp, "Int", dx, "Int", dy, "Int", cw, "Int", ch
+            , "Int", sx, "Int", sy, "Int", cw, "Int", ch, "Int", 2, "Ptr", 0, "Ptr", 0, "Ptr", 0)
+        finally {
+            DllCall("gdiplus\GdipSetCompositingMode", "Ptr", G, "Int", 0)
+            DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", G, "Int", 7)
+        }
+    }
+
+    static Drop(name) {
+        if Backdrop.cache.Has(name) {
+            Gfx.Disposable(Backdrop.cache[name].bmp)
+            Backdrop.cache.Delete(name)
+        }
+    }
+
+    static BeginSizing() {
+        Backdrop.fast := true
+    }
+
+    static EndSizing() {
+        Backdrop.fast := false
+        stale := []
+        for name, c in Backdrop.cache
+            if !c.sharp
+                stale.Push(name)
+        if !stale.Length
+            return
+        for name in stale
+            Backdrop.Drop(name)
+        if MW.surface
+            MW.surface.Invalidate()
+        if (MW.page && MW.pages.Length >= MW.page)
+            MW.pages[MW.page].surface.Invalidate()
     }
 }
 
@@ -240,6 +345,7 @@ class BootStage {
         if (BootStage.ready && (elapsed >= 1000 || !Store.settings["motion"])) {
             SetTimer(BootStage.timer, 0)
             BootStage.done := true
+            Backdrop.Drop("boot")
             MW.ShowWorkspace()
             return
         }
@@ -257,9 +363,23 @@ class BootStage {
         t := Store.settings["motion"] ? A_TickCount - BootStage.start : 1000
         Gfx.Rect(x, y, w, h, 0xFF0E0D12)
         if (Backdrop.image && Backdrop.imgW && Backdrop.imgH && Min(w,h) > 0) {
-            fit := Max(w/Backdrop.imgW, h/Backdrop.imgH)
-            sw := w/fit, sh := h/fit
-            Gfx.ImageRegion(Backdrop.image, x,y,w,h,(Backdrop.imgW-sw)/2,Backdrop.imgH-sh,sw,sh)
+            ; The scenery is static for the whole boot animation: scale it once
+            ; and copy it per frame instead of re-filtering the JPEG at 30 fps.
+            s := Gfx.S, pw := Max(1, Round(w * s)), ph := Max(1, Round(h * s))
+            compose(lw, lh) {
+                local bootFit := Max(lw/Backdrop.imgW, lh/Backdrop.imgH)
+                local cropW := lw/bootFit, cropH := lh/bootFit
+                Gfx.Rect(0, 0, lw + 1, lh + 1, 0xFF0E0D12)
+                Gfx.ImageRegion(Backdrop.image, 0, 0, lw, lh, (Backdrop.imgW-cropW)/2, Backdrop.imgH-cropH, cropW, cropH)
+            }
+            bmp := Backdrop.Cached("boot", pw "x" ph, pw, ph, compose)
+            if bmp
+                Backdrop.Blit(bmp, pw, ph, Round(x * s), Round(y * s), 0, 0, pw, ph, 0xFF0E0D12)
+            else {
+                fit := Max(w/Backdrop.imgW, h/Backdrop.imgH)
+                sw := w/fit, sh := h/fit
+                Gfx.ImageRegion(Backdrop.image, x,y,w,h,(Backdrop.imgW-sw)/2,Backdrop.imgH-sh,sw,sh)
+            }
         }
         Gfx.Rect(x, y, w, h, Alpha(0xFF100D18, Round(153*(1-.17*BootStage.Quint(t/1000)))))
         Gfx.VerticalGradient(x, y, w, h, 0x300E0D12, 0xE00E0D12)

@@ -1,5 +1,17 @@
 # AutoHotkey edition
 
+## Unreleased
+
+- Fix the laggy interface. The theme background is scaled once per window
+  size and copied into each repaint, instead of re-filtering the full-size
+  image on every hover frame, page fade and resize step. The boot screen
+  caches its scenery the same way.
+- Switching tabs paints the new page completely before showing it, so pages
+  no longer flash the bare background or show input fields before their panels.
+- Resizing and maximizing paint immediately instead of flashing black. The
+  back buffer is reused during a drag, and the background uses faster scaling
+  while the edge is moving, then sharpens when the drag ends.
+
 ## 1.4.0.38
 
 - Hardcore map search reads only the selected Roblox client. It no longer

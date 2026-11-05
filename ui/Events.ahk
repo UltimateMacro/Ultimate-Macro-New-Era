@@ -18,6 +18,8 @@ UI_Install() {
     OnMessage(0x0024, UI_GetMinMaxInfo)
     OnMessage(0x0138, UI_CtlColorStatic)
     OnMessage(0x0133, UI_CtlColorStatic)
+    OnMessage(0x0231, UI_EnterSizeMove)
+    OnMessage(0x0232, UI_ExitSizeMove)
 }
 
 UI_Uninstall() {
@@ -26,7 +28,8 @@ UI_Uninstall() {
         [0x020A,UI_MouseWheel], [0x02A3,UI_MouseLeave], [0x0020,UI_SetCursor],
         [0x0100,UI_KeyDown], [0x0104,UI_SysKeyDown], [0x0102,UI_Char],
         [0x0083,UI_NcCalcSize], [0x0084,UI_NcHitTest], [0x0024,UI_GetMinMaxInfo],
-        [0x0138,UI_CtlColorStatic], [0x0133,UI_CtlColorStatic]]
+        [0x0138,UI_CtlColorStatic], [0x0133,UI_CtlColorStatic],
+        [0x0231,UI_EnterSizeMove], [0x0232,UI_ExitSizeMove]]
         OnMessage(binding[1], binding[2], 0)
 }
 
@@ -40,6 +43,18 @@ UI_Paint(wParam, lParam, msg, hwnd) {
         Surface.all[hwnd].OnPaint()
         return 0
     }
+}
+
+; While the user drags the window edge, rebuild the scaled backdrop with cheap
+; filtering; the sharp version is restored as soon as the drag ends.
+UI_EnterSizeMove(wParam, lParam, msg, hwnd) {
+    if (MW.gui && hwnd = MW.gui.Hwnd)
+        Backdrop.BeginSizing()
+}
+
+UI_ExitSizeMove(wParam, lParam, msg, hwnd) {
+    if (MW.gui && hwnd = MW.gui.Hwnd)
+        Backdrop.EndSizing()
 }
 
 UI_EraseBkgnd(wParam, lParam, msg, hwnd) {
