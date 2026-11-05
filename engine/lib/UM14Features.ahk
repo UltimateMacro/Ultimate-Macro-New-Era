@@ -255,7 +255,10 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
     identity := UM14_ConnectionSnapshot()
     if (!IsObject(identity))
         return false
-    sidebar := UM14_Region(Round(identity.w*.12),Round(identity.h*.09),
+    ; In a docked/narrow client the menu fills the viewport and moves the
+    ; sidebar against the left edge instead of centering it with the cards.
+    narrow := identity.w < identity.h*1.3
+    sidebar := UM14_Region(Round(identity.w*(narrow ? .01 : .12)),Round(identity.h*.09),
         Round(identity.w*.09),Round(identity.h*.69),identity.w,identity.h)
     if (!IsObject(sidebar))
         return false
@@ -274,14 +277,17 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
                 navigation := survival
         }
     }
-    menuClose := UM14_Region(Round(identity.w*.68),0,Round(identity.w*.20),
-        Round(identity.h*.15),identity.w,identity.h)
+    menuClose := UM14_Region(Round(identity.w*(narrow ? .91 : .68)),0,
+        Round(identity.w*(narrow ? .09 : .20)),Round(identity.h*(narrow ? .26 : .15)),identity.w,identity.h)
+    cardX := Round(identity.w*(narrow ? .106 : .21))
+    cardWidth := Round(identity.w*(narrow ? .865 : .62))
+    cardBottom := Floor(identity.h*(narrow ? .98 : .94))
     heading := false
     if (!IsObject(navigation)) {
         ; The first row may be visible with Fallen and Frost below the fold.
         ; Keep searching after a confirmed heading, even without sidebar OCR.
-        headingRegion := UM14_Region(Round(identity.w*.21),Round(identity.h*.10),
-            Round(identity.w*.27),Round(identity.h*.80),identity.w,identity.h)
+        headingRegion := UM14_Region(Round(identity.w*(narrow ? .15 : .21)),Round(identity.h*.10),
+            Round(identity.w*(narrow ? .34 : .27)),Round(identity.h*.80),identity.w,identity.h)
         heading := UM14_MenuWordPair(identity,headingRegion,"Survival")
         if (!IsObject(heading) || heading.y >= identity.h*.86)
             return false
@@ -294,14 +300,14 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         Click(navigation.x,navigation.y)
         Sleep(300)
     }
-    region := UM14_Region(Round(identity.w*.21),Round(identity.h*.10),
-        Round(identity.w*.62),Round(identity.h*.80),identity.w,identity.h)
+    region := UM14_Region(cardX,Round(identity.h*.10),
+        cardWidth,cardBottom-Round(identity.h*.10),identity.w,identity.h)
     started := A_TickCount
     Loop 9 {
         if (!UM14_ConnectionSame(identity) || A_TickCount-started >= 16000)
             return false
-        cardRegion := A_Index = 1 && IsObject(heading) ? UM14_Region(Round(identity.w*.21),
-            heading.y+1,Round(identity.w*.62),Floor(identity.h*.94)-heading.y-1,identity.w,identity.h) : region
+        cardRegion := A_Index = 1 && IsObject(heading) ? UM14_Region(cardX,
+            heading.y+1,cardWidth,cardBottom-heading.y-1,identity.w,identity.h) : region
         if (!IsObject(cardRegion))
             return false
         card := UM14_MenuImagePair(identity,cardRegion,difficulty ".png")

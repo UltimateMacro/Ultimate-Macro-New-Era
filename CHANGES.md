@@ -4,6 +4,8 @@
 
 - The lobby selector checks the Survival icon as well as its label and scrolls
   the confirmed mode menu to find cards below the first row.
+- Narrow Roblox windows use the full-width menu layout, including the far-left
+  Survival tab and right-hand Frost card while docked.
 - Import older settings recognizes 1.3.6 `.ump` profiles. It imports supported
   preferences only, leaving strategies and private fields untouched.
 - Modifier setup checks the map-vote screen, then hovers over the Add Modifier

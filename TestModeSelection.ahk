@@ -22,7 +22,7 @@ UM14_RequireReadyFocus() => 0
 UM14_Fatal(message) {
     throw Error(message)
 }
-UM14_ConnectionSnapshot() => {w:1000, h:700}
+UM14_ConnectionSnapshot() => scenario = "docked" ? {w:1078, h:995} : {w:1000, h:700}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => recognized
@@ -40,10 +40,16 @@ AdvancedImageSearch(path, x, y, w, h, *) {
         return {status:"success", score:.9, x:x+100, y:y+50}
     if (path = "Resources/Survival.png" && scenario = "sidebar")
         return {status:"success", score:.93, x:x+25, y:y+30}
+    if (path = "Resources/Survival.png" && scenario = "docked" && x <= 58 && x+w > 58)
+        return {status:"success", score:.93, x:58, y:295}
     if (path = "Resources/close.png" && scenario = "heading")
         return {status:"success", score:.95, x:x+30, y:y+30}
     if (path = "Resources/" activeDifficulty ".png") {
         probes++
+        if (scenario = "docked")
+            return wheelCount && x <= 899 && x+w > 899
+                ? {status:"success", score:.9, x:899, y:725}
+                : {status:"failed", score:0, x:0, y:0}
         if (wheelCount >= 1)
             return {status:"success", score:.9, x:x+90, y:y+90}
     }
@@ -60,6 +66,10 @@ try {
     scenario := "heading", activeDifficulty := "Frost", wheelCount := 0, clicks := [], probes := 0
     Need(UM14_SelectCurrentMode("Frost", &seen) && seen, "Frost selected when below the heading")
     Need(wheelCount = 1 && clicks.Length = 1 && probes >= 3, "Frost heading path avoids a blind sidebar click")
+    scenario := "docked", activeDifficulty := "Frost", wheelCount := 0, clicks := [], probes := 0
+    Need(UM14_SelectCurrentMode("Frost", &seen) && seen, "Frost selected in the docked full-width menu")
+    Need(clicks.Length = 2 && clicks[1][1] = 58 && clicks[2][1] = 899 && wheelCount = 1,
+        "Docked sidebar and far-right card are both in bounds")
     scenario := "moved", activeDifficulty := "Fallen", seen := false, wheelCount := 0, clicks := []
     Need(!UM14_SelectCurrentMode("Fallen", &seen) && wheelCount = 0 && clicks.Length = 0, "No input when Roblox identity changed")
     scenario := "modifier", clicks := [], hover := [0, 0]
