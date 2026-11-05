@@ -626,8 +626,10 @@ class MW {
 
     static ShowWorkspace() {
         MW.booting := false
-        MW.ApplyResponsive()
-        MW.PlacePages()
+        ; Boot can finish before the first visible size event, especially with
+        ; motion disabled. Lay out the workspace from the actual client now.
+        WinGetClientPos(, , &w, &h, MW.gui)
+        MW.OnSize(WinGetMinMax(MW.gui), w, h)
         MW.UpdateControls()
         SetTimer(() => MW.ApplySavedDocking(), -400)
     }

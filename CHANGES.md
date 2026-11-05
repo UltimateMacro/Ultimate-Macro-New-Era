@@ -1,5 +1,27 @@
 # AutoHotkey edition
 
+## 1.4.0.38
+
+- Hardcore map search reads only the selected Roblox client. It no longer
+  mistakes the macro's nearby strategy title for a map board when docked.
+  Weak or unconfirmed terrain matches stop before strategy placements.
+- Keep recorded tower placements aligned with the map in tall/docked windows.
+  World X uses the game's vertical field of view; HUD scaling stays separate.
+  A point outside the current view stops with a clear message, and blocked-tile
+  retries remain local instead of doubling across the map.
+- Close the previous tower panel before switching upgrade or sell targets,
+  including when it covers the next tower in a narrow window. Selling a replayed
+  tower no longer assumes it has a recording-window handle.
+- If timescale tickets run out, cancel the identified ticket dialog and keep
+  playing at normal speed. Do not retry tickets in subsequent matches of the
+  same Start; a new Start retries the user's saved preference.
+- An unavailable or delayed optional timescale confirmation no longer restarts
+  the macro. Count ticket usage only after its confirmation closes. Never click
+  Get More or guess a missing Cancel button.
+- Rebuild the workspace layout from the actual client size when startup ends,
+  including when animations are disabled.
+- Keep OFF and the first dropdown choices visible when the whole list fits.
+
 ## 1.4.0.37
 
 - Strategy rotation checks only its two assigned slots, even in a large library.
