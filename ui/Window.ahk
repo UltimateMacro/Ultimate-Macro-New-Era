@@ -495,6 +495,8 @@ class MW {
         MW.reduceMotion := w.Add(Toggle(_T("Reduce animations"), !s["motion"], (t, v) => (Store.settings["motion"] := !v, MW.Persist())))
 
         gp := root.Add(Card("GAMEPLAY"))
+        MW.autoCloseChat := gp.Add(Toggle(_T("Auto close Roblox chat"), s["autoCloseChat"], (t,v) => MW.SaveAutoCloseChat(v)))
+        MW.autoCloseChat.tip := "Close open Roblox chat during setup. This setting applies on the next run."
         tr := HBox(, 6)
         tr.Add(Label(_T("Timescale"), "subtitle"), 1)
         MW.timescale := tr.Add(Select(["OFF", "1.5x", "2x"], 1, (*) => MW.SaveTimescale()))
@@ -1154,6 +1156,21 @@ class MW {
         MW.Persist()
     }
 
+    static SaveAutoCloseChat(value) {
+        previous := Store.settings["autoCloseChat"]
+        if !MW.RunSettingsEditable() {
+            MW.autoCloseChat.SetChecked(previous)
+            return
+        }
+        Store.settings["autoCloseChat"] := value
+        try Store.Save()
+        catch {
+            Store.settings["autoCloseChat"] := previous
+            MW.autoCloseChat.SetChecked(previous)
+            MW.Log("Auto close Roblox chat was not saved. Check the settings folder.")
+        }
+    }
+
     static SaveRuntime() {
         v := Map()
         for k, f in MW.runtimeInputs
@@ -1255,6 +1272,7 @@ class MW {
         }
         c := result.candidate
         MW.topmost.SetChecked(c["topmost"]), MW.rotate.SetChecked(c["rotation"]), MW.equip.SetChecked(c["autoEquip"])
+        MW.autoCloseChat.SetChecked(c["autoCloseChat"])
         MW.repeat.SetChecked(c["repeat"]), MW.rotationAmount.Value := c["rotationAmount"], MW.rotationUnit.ChooseValue(c["rotationUnit"])
         MW.upgradeDelay.Value := c["runtime"]["upgradeDelayMs"]
         for k, f in MW.runtimeDelays
@@ -1482,6 +1500,7 @@ class MW {
         MW.dockApply.Show(s["dockRoblox"] && !Docking.active)
 
         runEditable := enabled && MW.RunSettingsEditable()
+        MW.autoCloseChat.Enable(runEditable)
         MW.rotate.Enable(runEditable)
         MW.equip.Enable(runEditable && !MW.rotate.checked)
         MW.repeat.Enable(runEditable && !MW.rotate.checked)
@@ -1494,7 +1513,7 @@ class MW {
     ; ======================================================================
     static RunOptions(withParty := true) {
         s := Store.settings
-        return {autoEquip: s["autoEquip"], repeat: s["repeat"], timeScale: s["timeScaleMode"], legacy: s["legacyOptions"]
+        return {autoEquip: s["autoEquip"], autoCloseChat: s["autoCloseChat"], repeat: s["repeat"], timeScale: s["timeScaleMode"], legacy: s["legacyOptions"]
             , runtime: s["runtime"], bindings: s["recordBindings"], party: withParty ? MW.PartyProfile() : "", rotation: ""}
     }
 

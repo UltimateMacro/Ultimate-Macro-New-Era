@@ -92,6 +92,7 @@ class Engine {
     static Profile(opts) {
         s := Map()
         s["Options.AutoEquip"] := opts.autoEquip ? "1" : "0"
+        s["Options.AutoCloseChat"] := !opts.HasOwnProp("autoCloseChat") || opts.autoCloseChat ? "1" : "0"
         s["Options.Repeat"] := opts.repeat ? "1" : "0"
         s["Options.TimeScaleMode"] := opts.timeScale
         s["Options.RotateStrategies"] := "0"

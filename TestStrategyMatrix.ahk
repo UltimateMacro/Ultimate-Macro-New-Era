@@ -36,16 +36,16 @@ try {
                             runtime := Store.CopyMap(Store.DEFAULT_RUNTIME)
                             runtime["upgradeDelayMs"] := high ? 999 : 20, runtime["keyDelayMs"] := high ? 250 : 20
                             runtime["extraUiWait"] := high ? 90 : 0, runtime["preJoinDelay"] := high ? 60 : 0
-                            settings := Map("appearanceRevision",5,"dockRoblox",dock,"autoEquip",equip,"repeat",repeat,
+                            settings := Map("appearanceRevision",5,"dockRoblox",dock,"autoEquip",equip,"autoCloseChat",high,"repeat",repeat,
                                 "timeScaleMode",mode,"runtime",runtime,"motion",!high,"themeBackground",!high,"topmost",high,
                                 "halloween",high,"halloweenSounds",high,"windowOpacity",high ? 90 : 100,"updatePrompts",high,
                                 "legacyOptions",Map("scrollModeList",high,"scrollAmount",high ? 20 : 5,"scrollDelayMs",high ? 5000 : 0))
                             Store.Accept(settings)
                             Need(!Store.recovered && Store.settings["dockRoblox"] = dock && Store.settings["motion"] = !high
                                 && Store.settings["themeBackground"] = !high && Store.settings["windowOpacity"] = settings["windowOpacity"]
-                                && Store.settings["updatePrompts"] = high, item.title ": profile values were lost")
+                                && Store.settings["updatePrompts"] = high && Store.settings["autoCloseChat"] = high, item.title ": profile values were lost")
                             ini := Engine.RenderIni(Engine.Profile(MW.RunOptions(false)),["Options","Hotkeys","RecordingHotkeys"])
-                            for key, value in Map("AutoEquip",equip,"Repeat",repeat,"TimeScaleMode",mode,"ScrollDownForMap",high,
+                            for key, value in Map("AutoEquip",equip,"AutoCloseChat",high,"Repeat",repeat,"TimeScaleMode",mode,"ScrollDownForMap",high,
                                 "ScrollDownAmount",high ? 20 : 5,"ScrollDelay",high ? 5000 : 0,"UpgradeDelay",runtime["upgradeDelayMs"],
                                 "KeyDelay",runtime["keyDelayMs"],"ExtraUiWait",runtime["extraUiWait"],"PreJoinDelay",runtime["preJoinDelay"])
                                 CheckOption(ini,key,value,item.title)

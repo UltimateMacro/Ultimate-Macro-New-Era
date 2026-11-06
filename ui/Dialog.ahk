@@ -137,7 +137,7 @@ class FirstUse {
 
 ; Read-only, allowlisted import of 1.3.x / 1.4 preferences (legacy_profile.py).
 class LegacyProfile {
-    static FLAGS := Map("alwaysontop", "topmost", "autoequip", "autoEquip")
+    static FLAGS := Map("alwaysontop", "topmost", "autoequip", "autoEquip", "autoclosechat", "autoCloseChat")
     static KEYS := Map("cancelplacement", "cancelKey", "raisethedead", "raiseDeadKey", "chain", "chainKey", "caravan", "caravanKey"
         , "beat", "beatKey", "hologram", "hologramKey", "repo", "repositionKey")
     static RECORD := Map("aligncamerakey", "align", "placetowerkey", "place", "upgradetowerkey", "upgrade", "selltowerkey", "sell"

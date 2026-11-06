@@ -219,46 +219,42 @@ UM14_StartupOverlay(identity, &evidence := "", underPointer := false) {
 UM14_StartupPointIn(region, x, y) => IsObject(region)
     && x >= region.x && y >= region.y && x < region.x+region.w && y < region.y+region.h
 
-UM14_ChatOpen(identity, scale, &readable := false) {
-    readable := false
-    ; Read only the panel tabs. Don't OCR or retain chat messages or drafts.
-    width := Min(identity.w-Round(8*scale),Max(Round(344*scale),Round(identity.h*.29+186*scale)))
-    header := UM14_Region(Round(8*scale),Round(66*scale),width,Round(33*scale),identity.w,identity.h)
-    if !IsObject(header)
-        return false
-    text := UM14_ConnectionOCR(identity,header,2.7)
-    readable := UM14_ConnectionOCRStage() = "success" && UM14_ConnectionSame(identity)
-    return readable && Type(text) = "String" && StrLen(text) <= 100
-        && RegExMatch(text,"i)\bHere\b[^a-z]{0,7}\bGlobal\b[^a-z]{0,7}\bFriends\b")
+UM14_ChatInk(x, y, scale) {
+    rgb := PixelGetColor(Round(x*scale),Round(y*scale))
+    r := (rgb>>16)&255, g := (rgb>>8)&255, b := rgb&255
+    return Min(r,g,b) >= 146 && Max(r,g,b)-Min(r,g,b) <= 78
 }
 
-UM14_ChatToggle(identity, scale) {
-    if !UM14_ChatOpen(identity,scale)
-        return false
+UM14_ChatIcon(identity, scale) {
     band := UM14_Region(Round(119*scale),Round(13*scale),Round(42*scale),Round(40*scale),identity.w,identity.h)
     if (!IsObject(band) || !UM14_ConnectionCaptureClear(identity,band))
-        return false
-    bright := 0, dark := 0
+        return ""
+    edge := 0, dark := 0, left := 0, right := 0
     try {
-        ; The chat bubble is light in the upper-left native topbar segment.
-        ; Count a few pixels instead of relying on the old single white dot.
-        for xy in [[131,28],[135,28],[139,27],[144,28],[147,28],[130,33],[134,32],[141,31],[144,32]] {
-            rgb := PixelGetColor(Round(xy[1]*scale),Round(xy[2]*scale))
-            r := (rgb>>16)&255, g := (rgb>>8)&255, b := rgb&255
-            if (Min(r,g,b) >= 150 && Max(r,g,b)-Min(r,g,b) <= 90)
-                bright++
+        ; A Roblox chat bubble has a light outline when closed and a filled
+        ; body when open. The tabs can fade even while the panel is open.
+        ; Check both sides of the interior, away from the two text strokes.
+        for y in [27,30,33,36,38] {
+            left += UM14_ChatInk(131,y,scale)
+            right += UM14_ChatInk(144,y,scale)
         }
-        for xy in [[121,23],[156,23],[122,44]] {
+        for xy in [[128,28],[128,32],[128,35],[128,37],[133,25],[138,25],[142,25],[148,33],[148,36]]
+            edge += UM14_ChatInk(xy[1],xy[2],scale)
+        for xy in [[121,23],[156,23],[122,44],[138,48]] {
             rgb := PixelGetColor(Round(xy[1]*scale),Round(xy[2]*scale))
             if Max((rgb>>16)&255,(rgb>>8)&255,rgb&255) <= 118
                 dark++
         }
     } catch {
-        return false
+        return ""
     }
-    if (bright < 3 || dark < 2 || !UM14_ConnectionSame(identity))
-        return false
-    return {x:Round(146*scale),y:Round(41*scale)}
+    if (edge < 4 || dark < 3 || !UM14_ConnectionSame(identity))
+        return ""
+    if (left >= 4 && right >= 4)
+        return "open"
+    if (left <= 2 && right <= 2)
+        return "closed"
+    return ""
 }
 
 UM14_CloseRobloxChat(identity) {
@@ -267,23 +263,26 @@ UM14_CloseRobloxChat(identity) {
         try dpi := DllCall("GetDpiForWindow","Ptr",identity.hwnd,"UInt")
     options := dpi >= 110 && dpi <= 192 ? [1,dpi/96] : [1]
     for scale in options {
-        button := UM14_ChatToggle(identity,scale)
-        if !IsObject(button)
+        state := UM14_ChatIcon(identity,scale)
+        if (state = "closed")
+            return false
+        if (state != "open")
             continue
         MouseGetPos(&oldX,&oldY)
-        if !UM14_HeldClick(identity,button.x,button.y,"Close Roblox chat",150,
-            () => UM14_ButtonStillAt(button,UM14_ChatToggle(identity,scale)))
-            return false
-        closed := 0
-        Loop 4 {
-            Sleep(180)
-            open := UM14_ChatOpen(identity,scale,&readable)
-            closed := readable && !open ? closed+1 : 0
-            if (closed >= 2)
-                break
+        closed := 0, x := Round(155*scale), y := Round(42*scale)
+        try {
+            if !UM14_HeldClick(identity,x,y,"Close Roblox chat",150,() => UM14_ChatIcon(identity,scale) = "open")
+                return false
+            Loop 4 {
+                Sleep(140)
+                closed := UM14_ChatIcon(identity,scale) = "closed" ? closed+1 : 0
+                if (closed >= 2)
+                    break
+            }
+        } finally {
+            if (oldX >= 0 && oldX < identity.w && oldY >= 0 && oldY < identity.h && UM14_ConnectionSame(identity))
+                MouseMove(oldX,oldY,0)
         }
-        if (oldX >= 0 && oldX < identity.w && oldY >= 0 && oldY < identity.h && UM14_ConnectionSame(identity))
-            MouseMove(oldX,oldY,0)
         return closed >= 2 ; never retry a toggle and accidentally reopen it
     }
     return false
@@ -1284,8 +1283,23 @@ UM14_MapHoveredCardName(identity, card, field, name) {
     return false
 }
 
-UM14_MapReceiptGreen(identity) {
-    region := UM14_StartupRegion(identity,.25,.23,.75,.315)
+UM14_MapReceiptBand(identity, field, masked := false) {
+    left := masked ? .28 : .23, right := masked ? .72 : .77
+    if IsObject(field) {
+        ; The banner sits above the picker, not at a fixed percent of client
+        ; height. In a maximized client, the old crop began below the banner.
+        top := Max(0,field.y-Max(93,Round(field.height*5.5)))
+        bottom := Min(identity.h,field.y-Max(8,Round(field.height*.55)))
+        x := Round(identity.w*left), w := Round(identity.w*right)-x
+        anchored := UM14_Region(x,top,w,bottom-top,identity.w,identity.h)
+        if IsObject(anchored)
+            return anchored
+    }
+    return UM14_StartupRegion(identity,left,masked ? .22 : .21,right,masked ? .315 : .34)
+}
+
+UM14_MapReceiptGreen(identity, field := false) {
+    region := UM14_MapReceiptBand(identity,field,true)
     if (!IsObject(region) || !UM14_ConnectionSame(identity) || !UM14_ConnectionCaptureClear(identity,region))
         return -1 ; capture unavailable is not a verified clear baseline
     try {
@@ -1340,13 +1354,16 @@ UM14_MapReceiptText(recognized, region, factor, name, &other) {
 }
 
 UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, beforeGreen := false, timeout := 4100, &evidence := "") {
-    region := UM14_StartupRegion(identity,.23,.21,.77,.34)
-    toast := UM14_StartupRegion(identity,.28,.22,.72,.315)
-    if (!IsObject(region) || !IsObject(toast))
+    anchored := UM14_MapReceiptBand(identity,field), mask := UM14_MapReceiptBand(identity,field,true)
+    if (!IsObject(anchored) || !IsObject(mask))
         return ""
     start := A_TickCount
     observedGreen := false, observedText := false, lastOther := "", sightings := 0, scaleIndex := 0
     while (A_TickCount-start < timeout && UM14_ConnectionSame(identity)) {
+        ; Keep the older relative crop as a fallback for compact clients.
+        alternate := IsObject(field) && Mod(scaleIndex,2)
+        region := alternate ? UM14_MapReceiptBand(identity,false) : anchored
+        toast := alternate ? UM14_MapReceiptBand(identity,false,true) : mask
         ; Capture the short green line first. The selected-window path works
         ; even when a click-through overlay would invalidate desktop pixels.
         toastFactor := Min(3.3,2500/Max(toast.w,toast.h))
@@ -1355,7 +1372,7 @@ UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, 
             UM14_RejectMapPurchase(identity)
             return "changed"
         }
-        green := UM14_MapReceiptGreen(identity) = 1
+        green := UM14_MapReceiptGreen(identity,field) = 1
         observedGreen := observedGreen || green
         appeared := titleVerified && beforeGreen = 0 && IsObject(field) && green
         factor := Min(Mod(scaleIndex++,2) ? 2.8 : 3.5,2500/Max(region.w,region.h))
@@ -1383,6 +1400,7 @@ UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, 
     }
     evidence := "hover-title=" (titleVerified ? "exact" : "unverified")
         . " toast-before=" beforeGreen " toast-after=" Integer(observedGreen) " readable=" Integer(observedText)
+        . " anchored-y=" anchored.y "–" anchored.y+anchored.h
     return ""
 }
 
@@ -1390,7 +1408,7 @@ UM14_MapCardBeforePress(identity, card, field, name, &evidence, &titleVerified, 
     titleVerified := UM14_MapHoveredCardName(identity,card,field,name)
     if (!titleVerified && !UM14_ButtonStillAt(card,UM14_MapOverrideCard(identity,field,name,&evidence,1)))
         return false
-    beforeGreen := UM14_MapReceiptGreen(identity)
+    beforeGreen := UM14_MapReceiptGreen(identity,field)
     return UM14_ConnectionSame(identity)
 }
 
