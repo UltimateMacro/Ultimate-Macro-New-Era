@@ -1,5 +1,13 @@
 # AutoHotkey edition
 
+## 1.4.0.41
+
+- Handle the verified Login Rewards dialog before looking for the lobby.
+- Confirm the Survival section and distinguish Easy from Casual by its label, not its artwork. Keep Hardcore selection on its own card.
+- Stop if Roblox opens a purchase prompt during map override. Do not use an unverified search-field coordinate.
+- Verify the in-match Ready control before clicking and recheck that it cleared before proceeding.
+- Bring the verified update review window forward when the macro still has focus. Downloads can be quiet; installation still requires approval.
+
 ## 1.4.0.40
 
 - Wait for a recognizable TDS screen rather than relaunching a healthy client

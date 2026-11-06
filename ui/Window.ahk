@@ -851,6 +851,8 @@ class MW {
             return
         }
         MW.updateReviewing := manual
+        updateSurface := manual && MW.pages[MW.page].surface == MW.updateButton.surface ? MW.updateButton.surface : false
+        updateScroll := IsObject(updateSurface) ? updateSurface.scrollY : 0
         MW.updateButton.Enable(false)
         if manual
             MW.updateStatus.SetText("Checking the signed AHK update channel…")
@@ -861,8 +863,14 @@ class MW {
             status := UpdateHelper.Check(manual)
         } finally {
             MW.updateReviewing := false
-            if (manual && !MW.closing)
+            if (manual && !MW.closing) {
                 MW.gui.Opt((Store.settings["topmost"] ? "+" : "-") "AlwaysOnTop")
+                if (IsObject(updateSurface) && MW.pages[MW.page].surface == updateSurface) {
+                    updateSurface.ScrollTo(updateScroll)
+                    if WinActive("ahk_id " MW.gui.Hwnd)
+                        DllCall("SetFocus","Ptr",updateSurface.hwnd)
+                }
+            }
             MW.UpdateControls()
         }
         if (manual || Store.settings["updatePrompts"]) {

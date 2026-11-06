@@ -1,5 +1,5 @@
 {
- "build": "1.3.3a-um14.26-ahk3",
+ "build": "1.3.3a-um14.27-ahk3",
  "patches": [
   "A01-recorder-state",
   "A02-build-id",
@@ -21,10 +21,11 @@
   "A18-reference-wide-unequip-and-equip-receipt",
   "A19-verified-watchdog-recovery",
   "A20-bounded-lobby-wait",
-  "A21-verified-clicks-and-timing"
+  "A21-verified-clicks-and-timing",
+  "A22-verified-lobby-mode-ready"
  ],
  "files": {
-  "ENGINE-NOTICE.md": "94573e60dec7d48ad4e130a472a879495f6806de05908fc82eccc428813828b4",
+  "ENGINE-NOTICE.md": "419b7d0fafcb994b980fe51ea5bca0019359ef55eff7ed5efb1c7cef32f345b4",
   "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
   "README.md": "d605f5446b9b909fec4e16a953a6ced3b19ae2a0a3c5b57a3bec185a1eed1cb2",
   "Resources/(1.png": "91fadbeb93f6a3b6e91f9f49c1e9686d14ffd314e306e3ab5ec78acff83415a4",
@@ -161,7 +162,7 @@
   "Resources/x.png": "eec2f66e0c2ba18c48e0143f5a5450a1f8b4da650b83d358363b6063a490e323",
   "Resources/xp.png": "9d8885289aafedf89dda401f8062c64c87d3feb4ff6a2796891b66b3606cf7f2",
   "Resources/youtube.png": "8f6dbae4c07fd3530079089260d6782f3b5b7fdd625b09eb040829fbeb4c9e19",
-  "UM14Engine.ahk": "503f4fb4a899193ae6a028dd74b4b2d6236373a744443b073c95857849032e20",
+  "UM14Engine.ahk": "62986ccf2da72e0ef5620c1506d772769fcaf59c923646adfcd2e039592dfb15",
   "icon.ico": "b398b35d0d2438fc9c36796d478afd6578a0e2c0af4681c40966ad4964955f87",
   "lib/Discord.ahk": "10139275232808e85e8be54b7c9db364cb50cccfa83a30440a0d28eec625ec29",
   "lib/Gdip_All.ahk": "72dcc0fc9bada8e76e8d2f4868f6b23f7a42db3b675a7a490360ab2d96b30fff",
@@ -175,11 +176,11 @@
   "lib/JSON.ahk": "ff12ab5672cfca9c479598f431252ee803fbe649da82b29f7713939af4b8f5a6",
   "lib/OCR.ahk": "888fc050051e0d5bfb0905a82d47f174ad4306676ef91408c72408c580f13528",
   "lib/Roblox.ahk": "6eac539d5d8284f68fd3891549ae6e8d5b447815f7f8bad3b93b87a0c7fd0b5f",
-  "lib/UM14Bridge.ahk": "3d5873015d793351d4cc86d7493cf4fae588ad232b9a8ea902eea691bb45ad4a",
+  "lib/UM14Bridge.ahk": "cfbf36f582d9e3293ad4f19d7305e844ed85f0de97b3921e1c8a39505b3d1853",
   "lib/UM14Click.ahk": "7af504c21f89b3a655722901d21d0ac4eb529356981ef7c2398dd66ed3990ced",
   "lib/UM14Capture.ahk": "4e042592e7759ac446c9509226c8419811cccc8aec2074e876802a740da39ec8",
   "lib/UM14Connection.ahk": "3fc383fcbf10f392ea98479b5cc3c62f32292de33306e2e9c0a86464fc0e6098",
-  "lib/UM14Features.ahk": "611f91f2798bf3030222c5db181c8cb81cd7219147a847a285f8fae070afcb46",
+  "lib/UM14Features.ahk": "4c17c2868e75cb927ee86667cd743994ac9190386e3c6734580c609abf6abec6",
   "lib/UM14Geometry.ahk": "71aefc057778ae74b8dd8533eb6bce0e2e1630df8e08af3a64b55c36d1905fb4",
   "lib/UM14Guard.ahk": "2e9361ea96bceef06711840d1c8c85a4f517ebd8e0e650bb91a8a5482e62873c",
   "lib/UM14InputPoint.ahk": "872ffba698c45e344bdcdbfb9dfce009ef423c31017c976d857ed385bf52cdff",

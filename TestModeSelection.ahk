@@ -36,6 +36,8 @@ UM14_Fatal(message) {
 UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenario = "hardcore" ? {w:1078, h:995}
     : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" ? {w:800, h:600} : {w:1000, h:700}
 UM14_ConnectionSame(*) => scenario != "moved"
+UM14_ConnectionOCRStage() => scenario = "ready-uncertain" ? "overlap" : "success"
+PixelGetColor(x,y) => scenario = "ready-green" ? 0x22CA38 : 0xB8A9A7
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, factor := 0, *) {
@@ -45,6 +47,15 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
         return [{text:"ITEMS",raw:"Items",x:85,y:320,w:40,h:14}]
     if (scenario = "lobby" && region.x = 250 && region.y = 462)
         return [{text:"PLAY",raw:"PLAY",x:450,y:640,w:50,h:16}]
+    if (scenario = "login-reward" && region.x = 270 && region.y = 175)
+        return "Rewards Rewards scale with your login streak! Day 1 Day 2 x75 Day 3 Day 4 Day 5"
+    if ((scenario = "login-reward" || scenario = "unrelated-claim") && region.x = 360 && region.y = 406)
+        return [{text:"CLAIM",raw:"CLAIM",x:475,y:560,w:50,h:16}]
+    if (scenario = "map-purchase" && region.x = 220 && region.y = 154)
+        return "Buy Robux and item VIP"
+    if ((scenario = "ready-green" || scenario = "ready-uncertain" || scenario = "ready-nongreen")
+        && region.x = 290 && !clicks.Length)
+        return [{text:"READY",raw:"READY",x:480,y:145,w:40,h:16}]
     if (scenario = "easy" && region.x = 210 && region.w = 620)
         return [{text:"EASY",raw:"Easy",x:300,y:200,w:40,h:14},
             {text:"CASUAL",raw:"Casual",x:500,y:200,w:50,h:14}]
@@ -74,18 +85,26 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
     if (scenario = "modifier-compact" && region.w >= 220 && hover[2] = Round(identity.h*.98))
         return [{text:"ADD",x:43,y:550,w:22,h:10},
             {text:"MODIFIER",x:70,y:550,w:68,h:10}]
-    if (scenario = "heading" && region.x = 210 && region.w = 270)
-        return [{text:"SURVIVAL", raw:"Survival", x:240, y:240, w:75, h:13}]
+    if (region.y = 0 && (region.w = 270 || region.w = 431 || region.w = 320)
+        && (scenario = "heading" || scenario = "easy" || scenario = "sidebar" || scenario = "docked" || scenario = "horizontal"))
+        return [{text:"SURVIVAL", raw:"Survival", x:region.x+30, y:scenario = "heading" ? 240 : 22, w:75, h:13}]
+    if (scenario = "hardcore-title" && region.x = 210 && region.w = 310)
+        return [{text:"HARDCORE",raw:"Hardcore",x:225,y:340,w:67,h:16},
+            {text:"HARDCORE",raw:"Hardcore",x:225,y:362,w:60,h:12}]
     return []
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
     global probes
     if (scenario = "restart" && path = "Resources/Restart.png" && !clicks.Length)
         return {status:"success", score:.94, x:x+220, y:y+90}
+    if ((scenario = "ready-image" || scenario = "ready-uncertain") && path = "Resources/ready_gs.png" && !clicks.Length)
+        return {status:"success",score:.90,x:500,y:153}
     if (path = "Resources/Ready.png" && (scenario = "modifier" || scenario = "modifier-compact" || scenario = "map-prompt"))
         return {status:"success", score:.9, x:x+100, y:y+50}
-    if (path = "Resources/Survival.png" && (scenario = "sidebar" || scenario = "easy"))
+    if (path = "Resources/Survival.png" && (scenario = "sidebar" || scenario = "easy" || scenario = "misleading-easy-art"))
         return {status:"success", score:.93, x:x+25, y:y+30}
+    if (path = "Resources/Easy.png" && (scenario = "easy" || scenario = "misleading-easy-art"))
+        return {status:"success",score:.99,x:525,y:207}
     if (path = "Resources/Survival.png" && scenario = "docked" && x <= 58 && x+w > 58)
         return {status:"success", score:.93, x:58, y:295}
     if (path = "Resources/close.png" && scenario = "heading")
@@ -136,6 +155,30 @@ try {
         "Lobby Play recognition falls back to a verified live label without clicking or relaunching")
     scenario := "moved"
     Need(!UM14_LobbyPlay(), "Lobby recognition rejects a changed client")
+    scenario := "unrelated-claim", clicks := []
+    Need(!UM14_TryLoginReward() && !clicks.Length, "Claim text without the Login Rewards heading gets no click")
+    scenario := "login-reward"
+    Need(UM14_TryLoginReward() && clicks.Length = 1 && clicks[1][1] = 500,
+        "The verified login reward gets one held click")
+    clicks := []
+    scenario := "map-purchase", blocked := false
+    try UM14_MapOverrideSearch(UM14_ConnectionSnapshot())
+    catch as e
+        blocked := InStr(e.Message,"purchase prompt")
+    Need(blocked && !clicks.Length && !UM14_MapPurchaseText("Current map vote"),
+        "A Roblox purchase prompt never becomes a map-search click")
+    scenario := "ready-nongreen"
+    Need(!UM14_ReadyButton(UM14_ConnectionSnapshot()) && !clicks.Length,
+        "Plain Ready text without its button background is not clickable")
+    scenario := "ready-green"
+    ctx := UM14_ConnectionSnapshot(), button := UM14_ReadyButton(ctx)
+    Need(IsObject(button) && UM14_ClickMatchReady(ctx,button) && clicks.Length = 1,
+        "Green Ready is rechecked before input and accepted on two readable frames")
+    scenario := "ready-uncertain", clicks := []
+    ctx := UM14_ConnectionSnapshot(), button := UM14_ReadyButton(ctx)
+    Need(IsObject(button) && !UM14_ClickMatchReady(ctx,button) && clicks.Length = 1,
+        "A capture failure after Ready does not count as a transition or cause a blind retry")
+    clicks := []
     scenario := "items"
     item := UM14_MenuWordPair({w:1000,h:700},{x:0,y:250,w:168,h:130},"ITEMS",false,false,3.0)
     Need(IsObject(item) && item.x = 105 && !clicks.Length,
@@ -146,6 +189,14 @@ try {
     clicks := [], activeDifficulty := "Casual"
     Need(UM14_SelectCurrentMode("Casual", &seen) && clicks.Length = 2 && clicks[2][1] = 525,
         "Casual retains its own card")
+    scenario := "misleading-easy-art", clicks := []
+    Need(!UM14_ModeCard(UM14_ConnectionSnapshot(),{x:210,y:70,w:620,h:588},"Easy") && !clicks.Length,
+        "A misleading high-score Easy image is not enough without the Easy caption")
+    Need(!UM14_SelectCurrentMode("Easy",&seen) && !seen && clicks.Length = 1,
+        "An Event page without a verified Survival section gets only the tab click")
+    scenario := "hardcore-title"
+    card := UM14_ModeCard(UM14_ConnectionSnapshot(),{x:210,y:70,w:620,h:588},"Hardcore")
+    Need(IsObject(card) && card.y = 348, "Hardcore title wins only over its smaller aligned subtitle")
     clicks := [], wheelCount := 0, probes := 0
     scenario := "sidebar", activeDifficulty := "Fallen"
     Need(UM14_SelectCurrentMode("Fallen", &seen) && seen, "Fallen selected after seeing sidebar icon")

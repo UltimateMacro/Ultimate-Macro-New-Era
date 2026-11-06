@@ -174,8 +174,6 @@ global Slots := [
     ScaleX(1120) ", " ScaleY(960)
 ]
 
-global readyX := 0
-global readyY := 0
 
 global ChainKey, BeatKey, CaravanKey, CancelPlacementKey, TimeScaleMode, UseTimeScale, TimeScaleMultiplier
 ChainKey := IniRead(SettingsFile, "Hotkeys", "Chain", "C")
@@ -4276,9 +4274,7 @@ RunStrategy(stratFile := "", skipRestart := false) {
         JoinGame()
     }
 
-    if (readyX = 0 && readyY = 0) {
-        waitReady()
-    }
+    waitReady()
 
     if (!IsRestarting) {
         CheckTheMapF()
@@ -5827,6 +5823,9 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         }
 
         UM14_RequireReadyFocus()
+        overrideIdentity := UM14_ConnectionSnapshot()
+        if !IsObject(overrideIdentity)
+            UM14_LobbyFailure("map override game client")
         SendEvent("{sc012 down}") 
         Sleep(1000)
         SendEvent("{sc012 up}")
@@ -5834,23 +5833,16 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
 
         foundsearchbar := false
         getRobloxPos(&x, &y, &w, &h)
-        Loop 2 {
-            if (!LegacyMode) {
-                res := AdvancedImageSearch("Resources/searchbar.png", Round(w*0.1),0,Round(w*0.6),h,0.5,1.5)
-
-                if (res.status = "success" && res.score >= 0.6)  { 
-                    Click(res.x, res.y)
-                    foundsearchbar := true 
-                    break
-                } 
-            } else {
-                res := {x: ScaleX(810), y: ScaleY(218)}
-                click(Res.x, res.y)
+        Loop 4 {
+            ; No legacy coordinate fallback: E can open the Roblox purchase
+            ; UI instead of the in-game search for a non-VIP account.
+            res := UM14_MapOverrideSearch(overrideIdentity)
+            if (IsObject(res) && UM14_HeldClick(overrideIdentity,res.x,res.y,"Map override search",180,
+                () => UM14_ButtonStillAt(res,UM14_MapOverrideSearch(overrideIdentity)))) {
                 foundsearchbar := true 
                 break
             }
-
-            Sleep(500)
+            Sleep(400)
         }
 
         if (!foundsearchbar) {
@@ -5859,6 +5851,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         }        
 
         Sleep(100)
+        UM14_RejectMapPurchase(overrideIdentity)
         UM14_SearchText(gamemap)
         overrideStarted := A_TickCount
         Loop {
@@ -5867,6 +5860,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             if (!UM14_Viewport(w,h) || A_TickCount-overrideStarted >= 30000)
                 UM14_LobbyFailure("map-override confirmation within 30 seconds")
             Sleep(300)
+            UM14_RejectMapPurchase(overrideIdentity)
             if (InArray(SpecialMaps, gamemap)) {
                 SelectionICON := AdvancedImageSearch("Resources/Maps/" gamemap "_Selection.png", Round(w*0.1),0,Round(w*0.7),h,0.5,1.5)
             
@@ -5977,7 +5971,6 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
     Sleep(100)
 
     Click(readyX, readyY)
-    waitReady()
 }
 
 CheckTheMapF() {
@@ -6059,33 +6052,10 @@ ApplyModifiers() {
 }
 
 ClickReady() {
-    global readyX, readyY
-
-    Loop 40 {
-        UM14_RequireReadyFocus()
-        MouseMove(readyX, readyY)
-        Sleep 50
-        UM14_RequireReadyFocus()
-        MouseClick()
-        Sleep 200
-
-        getRobloxPos(,,&w,&h)
-        readyc := AdvancedImageSearch("Resources/ready_gs.png",Round(w * 0.25), Round(h * 0.08), Round(w * 0.5), Round(h * 0.34))
-        if !(readyc.score > 0.7) {
-            LogToConsole("Ready prompt is no longer detected; continuing.")
-            return true
-        } else {
-            LogToConsole("Failed to press the ready button, retrying...")
-            if PixelSearch(&fx, &fy, Round(w*0.4),Round(h*0.05), Round(w*0.7), Round(h*0.35), 0x2BEB00, 2) {
-                readyX := fx
-                readyY := fy
-                continue
-            } else {
-                Sleep(100)
-            }
-        }
-    }
-    UM14_Fatal("Ready button still detected after 40 attempts. Automation stopped; check the game UI before retrying.")
+    identity := waitReady()
+    if !UM14_ClickMatchReady(identity,identity.ready)
+        UM14_LobbyFailure("in-match Ready transition; no further input was sent")
+    LogToConsole("In-match Ready accepted.")
 }
 
 UM14_RequireReadyFocus() {
@@ -6096,7 +6066,7 @@ UM14_RequireReadyFocus() {
 }
 
 waitReady() {
-    global readyX, readyY, MultiplayerEnabled, PlayerRole
+    global MultiplayerEnabled, PlayerRole
     start := A_TickCount
     wt := ((MultiplayerEnabled && PlayerRole = "Member") ? 90000 : 40000) + UM14_ExtraUiWait()
     KillSubmacros()
@@ -6104,15 +6074,12 @@ waitReady() {
         UM14_RequireReadyFocus()
         if (A_TickCount - start >= wt)
             UM14_LobbyFailure("in-match Ready button")
-        getRobloxPos(,, &w, &h)
-        if (!UM14_Viewport(w, h))
-            UM14_LobbyFailure("game client while waiting for Ready")
-        if PixelSearch(&fx, &fy, Round(w*0.4),Round(h*0.05), Round(w*0.7), Round(h*0.35), 0x2BEB00, 2) {
-            readyX := fx
-            readyY := fy
-            break
+        identity := UM14_ConnectionSnapshot()
+        if (IsObject(identity) && IsObject(button := UM14_ReadyButton(identity))) {
+            identity.ready := button
+            return identity
         }
-        Sleep(50)
+        Sleep(250)
     }
 }
 
@@ -6564,12 +6531,6 @@ CheckPopups(*) {
     static clickedNotNow := false
 
     getRobloxPos(,,&w,&h)
-
-    res := AdvancedImageSearch("Resources/Claim.png", Round(w * 0.25), Round(h * 0.4), Round(w * 0.5), Round(h * 0.5))
-    if (res.status = "success" && res.score >= 0.65) {
-        LogToConsole("Claimed daily reward.")
-        Click(res.x, res.y)
-    }
 
     res := AdvancedImageSearch("Resources/cancel_rejoin.png", Round(w * 0.15), Round(h * 0.4), Round(w * 0.7), Round(h * 0.4))
     if (res.status = "success" && res.score >= 0.65) {

@@ -41,10 +41,15 @@ UM14_ExtraUiWait() {
 UM14_WaitSetupLobby(timeout := 12000, allowResultsRelaunch := false) {
     start := A_TickCount
     deadline := timeout + UM14_ExtraUiWait()
+    checkedReward := start-1000, rewardInputSent := false
     Loop {
         UM14_RequireReadyFocus()
         if UM14_LobbyOrInventory()
             return true
+        if (!rewardInputSent && A_TickCount-checkedReward >= 1000) {
+            checkedReward := A_TickCount
+            rewardInputSent := UM14_TryLoginReward()
+        }
         if (allowResultsRelaunch && UM14_VerifiedResults()) {
             LogToConsole("Rejoining TDS from the confirmed match-results screen.")
             return RunRoblox()
@@ -53,6 +58,39 @@ UM14_WaitSetupLobby(timeout := 12000, allowResultsRelaunch := false) {
             UM14_LobbyFailure("the TDS lobby (Play button or the open inventory with Auto Equip on)")
         Sleep(350)
     }
+}
+
+UM14_LoginRewardsHeading(text) {
+    return Type(text) = "String" && StrLen(text) <= 4096
+        && (RegExMatch(text,"im)^\s*(?:31\s+)?Login\h+Rewards\b")
+            || RegExMatch(text,"i)\bRewards\s+scale\s+with\s+your\s+login\s+streak\b"))
+}
+
+UM14_LoginRewardButton(identity) {
+    w := identity.w, h := identity.h
+    title := UM14_Region(Round(w*.27),Round(h*.25),Round(w*.46),Round(h*.27),w,h)
+    button := UM14_Region(Round(w*.36),Round(h*.58),Round(w*.28),Round(h*.33),w,h)
+    if (!IsObject(title) || !IsObject(button) || !UM14_ConnectionSame(identity))
+        return false
+    if !UM14_LoginRewardsHeading(UM14_ConnectionOCR(identity,title,Min(2,2300/title.w)))
+        return false
+    claim := UM14_MenuWordPair(identity,button,"CLAIM")
+    if !IsObject(claim)
+        claim := UM14_MenuImagePair(identity,button,"Claim.png",.82)
+    return UM14_ConnectionSame(identity) ? claim : false
+}
+
+UM14_TryLoginReward() {
+    identity := UM14_ConnectionSnapshot()
+    if !IsObject(identity)
+        return false
+    claim := UM14_LoginRewardButton(identity)
+    if (!IsObject(claim) || !UM14_HeldClick(identity,claim.x,claim.y,"Login reward Claim",180,
+        () => UM14_ButtonStillAt(claim,UM14_LoginRewardButton(identity))))
+        return false
+    LogToConsole("Pressed verified Login Rewards Claim; waiting for the lobby.")
+    Sleep(500)
+    return true
 }
 
 UM14_VerifiedResults() {
@@ -311,7 +349,7 @@ UM14_ModeScroll() {
     Sleep(300)
 }
 
-UM14_MenuWord(identity, region, expected, caption := false, ellipsis := false, requestedScale := 0) {
+UM14_MenuWord(identity, region, expected, caption := false, ellipsis := false, requestedScale := 0, titleAboveSubtitle := false) {
     if (requestedScale != 0 && (!IsNumber(requestedScale) || requestedScale < .125 || requestedScale > 4))
         return false
     factor := Min(requestedScale ? requestedScale : (region.w < identity.w*.12 ? 3.0 : 2.0),2500/Max(region.w,region.h))
@@ -325,21 +363,32 @@ UM14_MenuWord(identity, region, expected, caption := false, ellipsis := false, r
         ; Difficulty cards repeat the name in lowercase in their descriptions.
         if (caption && word.raw == StrLower(word.raw))
             continue
-        if (IsObject(match))
-            return false
-        match := {x:Round(word.x+word.w/2),y:Round(word.y+word.h/2)}
+        candidate := {x:Round(word.x+word.w/2),y:Round(word.y+word.h/2),left:word.x,height:word.h}
+        if (IsObject(match)) {
+            ; "Hardcore" is repeated in the smaller "Hardcore mode"
+            ; subtitle on the same card. Other duplicates are ambiguous.
+            if !titleAboveSubtitle
+                return false
+            top := match.y < candidate.y ? match : candidate
+            bottom := match.y < candidate.y ? candidate : match
+            if (Abs(top.left-bottom.left) > 6 || bottom.y-top.y > Max(38,top.height*2.3)
+                || top.height < bottom.height*1.13 || top.height-bottom.height < 2)
+                return false
+            candidate := top
+        }
+        match := candidate
     }
     return UM14_ConnectionSame(identity) ? match : false
 }
 
-UM14_MenuWordPair(identity, region, expected, caption := false, ellipsis := false, requestedScale := 0) {
+UM14_MenuWordPair(identity, region, expected, caption := false, ellipsis := false, requestedScale := 0, titleAboveSubtitle := false) {
     UM14_RequireReadyFocus()
-    first := UM14_MenuWord(identity,region,expected,caption,ellipsis,requestedScale)
+    first := UM14_MenuWord(identity,region,expected,caption,ellipsis,requestedScale,titleAboveSubtitle)
     if (!IsObject(first))
         return false
     Sleep(100)
     UM14_RequireReadyFocus()
-    second := UM14_MenuWord(identity,region,expected,caption,ellipsis,requestedScale)
+    second := UM14_MenuWord(identity,region,expected,caption,ellipsis,requestedScale,titleAboveSubtitle)
     if (!IsObject(second) || !UM14_ConnectionSame(identity)
         || Abs(first.x-second.x) > 4 || Abs(first.y-second.y) > 4)
         return false
@@ -396,6 +445,7 @@ UM14_ReferenceVoteModifiers(identity) {
 }
 
 UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
+    seenMenu := false
     ; Current TDS menu is a scrollable card list with a persistent sidebar.
     ; Old builds searched only the first screen for a retired font template.
     static modes := Map("Easy","Easy","Casual","Casual","Intermediate","Intermediate",
@@ -445,48 +495,48 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
     cardX := Round(identity.w*(fullWidth ? .10 : .21))
     cardWidth := Round(identity.w*(fullWidth ? .875 : .62))
     cardBottom := Floor(identity.h*(fullWidth ? .98 : .94))
-    heading := false
-    if (!IsObject(navigation)) {
-        ; The first row may be visible with Fallen and Frost below the fold.
-        ; Keep searching after a confirmed heading, even without sidebar OCR.
-        headingRegion := UM14_Region(Round(identity.w*(fullWidth ? .095 : .21)),Round(identity.h*.10),
-            Round(identity.w*(fullWidth ? .40 : .27)),Round(identity.h*.80),identity.w,identity.h)
-        heading := UM14_MenuWordPair(identity,headingRegion,"Survival")
-        if (!IsObject(heading) || heading.y >= identity.h*.86)
-            return false
-    }
-    seenMenu := true
     if (IsObject(navigation)) {
         UM14_RequireReadyFocus()
         if (!UM14_ConnectionSame(identity))
             return false
-        UM14_HeldClick(identity,navigation.x,navigation.y,"Survival tab")
-        Sleep(300)
+        if !UM14_HeldClick(identity,navigation.x,navigation.y,"Survival tab")
+            return false
+        Sleep(450)
     }
-    region := UM14_Region(cardX,Round(identity.h*.10),
-        cardWidth,cardBottom-Round(identity.h*.10),identity.w,identity.h)
+    ; The Event and Survival cards can both be visible in the same viewport.
+    ; The sidebar proves the Play menu, not which section is under the pointer.
+    headingRegion := UM14_Region(cardX,0,Round(identity.w*(fullWidth ? .40 : .27)),
+        Round(identity.h*.90),identity.w,identity.h)
+    heading := UM14_MenuWordPair(identity,headingRegion,"Survival")
+    if (!IsObject(heading) || heading.y >= cardBottom-20)
+        return false
+    seenMenu := true
     started := A_TickCount
     Loop 9 {
         if (!UM14_ConnectionSame(identity) || A_TickCount-started >= 16000)
             return false
-        cardRegion := A_Index = 1 && IsObject(heading) ? UM14_Region(cardX,
-            heading.y+1,cardWidth,cardBottom-heading.y-1,identity.w,identity.h) : region
+        if (A_Index > 1)
+            heading := UM14_MenuWordPair(identity,headingRegion,"Survival")
+        storyHeading := UM14_MenuWordPair(identity,headingRegion,"Story")
+        top := IsObject(heading) ? Max(Round(identity.h*.08),heading.y+1) : Round(identity.h*.08)
+        bottom := IsObject(storyHeading) ? Min(storyHeading.y-1,cardBottom) : cardBottom
+        cardRegion := UM14_Region(cardX,top,cardWidth,bottom-top,identity.w,identity.h)
         if (!IsObject(cardRegion))
             return false
-        card := UM14_MenuImagePair(identity,cardRegion,difficulty ".png")
-        if (!IsObject(card))
-            card := UM14_MenuWordPair(identity,cardRegion,modes[difficulty],true)
+        card := UM14_ModeCard(identity,cardRegion,difficulty)
         if (IsObject(card)) {
             UM14_RequireReadyFocus()
             if (!UM14_ConnectionSame(identity))
                 return false
-            UM14_HeldClick(identity,card.x,card.y,"Difficulty selection")
+            if !UM14_HeldClick(identity,card.x,card.y,"Difficulty selection",180,
+                () => UM14_ButtonStillAt(card,UM14_ModeCard(identity,cardRegion,difficulty)))
+                return false
             LogToConsole("Mode selection: currentMenu=1 confirmed=1")
             return true
         }
         ; Re-prove the navigation before every bounded scroll. Capture failure
         ; or an unexpected menu never becomes permission to send wheel input.
-        if (A_Index = 9 || (!IsObject(UM14_MenuImagePair(identity,sidebar,"Survival.png"))
+        if (A_Index = 9 || IsObject(storyHeading) || (!IsObject(UM14_MenuImagePair(identity,sidebar,"Survival.png"))
             && !IsObject(UM14_MenuImagePair(identity,menuClose,"close.png",.86))
             && !IsObject(UM14_MenuWordPair(identity,sidebar,"Survival"))
             && (!IsSet(tabs) || !IsObject(tabs) || !IsObject(UM14_MenuWordPair(identity,tabs,"Survival")))
@@ -506,6 +556,28 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         Sleep(240)
     }
     return false
+}
+
+UM14_ModeCard(identity, region, difficulty) {
+    ; Artwork is not an identifier: Easy and Casual share scenery and the
+    ; Hardcore / Voidcore art can share effects. Prefer the actual label.
+    twoCards := difficulty = "Hardcore" || difficulty = "Voidcore"
+    if twoCards {
+        ; Hardcore and Voidcore are side by side. The Voidcore unlock text
+        ; itself says Hardcore; never treat that right-hand text as a card.
+        half := Floor(region.w/2)
+        region := UM14_Region(region.x+(difficulty = "Voidcore" ? half : 0),region.y,
+            half,region.h,identity.w,identity.h)
+        if !IsObject(region)
+            return false
+    }
+    card := UM14_MenuWordPair(identity,region,difficulty,true,false,0,difficulty = "Hardcore")
+    if (!IsObject(card) && (difficulty = "Easy" || difficulty = "Casual" || twoCards))
+        card := UM14_MenuWordPair(identity,region,difficulty,true,false,2.8,difficulty = "Hardcore")
+    if (!IsObject(card) && difficulty != "Easy" && difficulty != "Casual"
+        && difficulty != "Hardcore" && difficulty != "Voidcore")
+        card := UM14_MenuImagePair(identity,region,difficulty ".png")
+    return card
 }
 
 UM14_InitialScrollNotches() {
@@ -592,6 +664,89 @@ UM14_MapOverridePrompt() {
     if (!IsObject(prompt) || !UM14_MenuTextPair(identity,prompt,"Override Map"))
         return false
     return UM14_ConnectionSame(identity) ? identity : false
+}
+
+UM14_MapPurchaseText(text) {
+    return Type(text) = "String" && StrLen(text) <= 4096
+        && RegExMatch(text,"i)\b(?:Buy\s+Robux|Buy\s+Item|Purchase\s+Item|Not\s+Enough\s+Robux|Insufficient\s+Robux)\b")
+}
+
+UM14_RejectMapPurchase(identity) {
+    if !UM14_ConnectionSame(identity)
+        UM14_Fatal("Roblox changed during map override. No more input was sent.")
+    region := UM14_Region(Round(identity.w*.22),Round(identity.h*.22),Round(identity.w*.56),
+        Round(identity.h*.52),identity.w,identity.h)
+    if !IsObject(region)
+        UM14_Fatal("Could not verify the map-override window. No more input was sent.")
+    text := UM14_ConnectionOCR(identity,region,1.5)
+    if UM14_MapPurchaseText(text)
+        UM14_Fatal("Roblox opened a purchase prompt while overriding the map. No purchase was made. Close the prompt and vote for the map normally, or use an account that already has map override access.")
+    if (UM14_ConnectionOCRStage() != "success" || !UM14_ConnectionSame(identity))
+        UM14_Fatal("Could not verify the map-override window. No more input was sent.")
+}
+
+UM14_MapOverrideSearch(identity) {
+    UM14_RejectMapPurchase(identity)
+    region := UM14_Region(Round(identity.w*.10),0,Round(identity.w*.64),Round(identity.h*.55),identity.w,identity.h)
+    return IsObject(region) ? UM14_MenuImagePair(identity,region,"searchbar.png",.72) : false
+}
+
+UM14_ReadyButton(identity, &readable := false) {
+    readable := false
+    w := identity.w, h := identity.h
+    region := UM14_Region(Round(w*.29),Round(h*.035),Round(w*.42),Round(h*.38),w,h)
+    if !IsObject(region)
+        return false
+    image := UM14_MenuImagePair(identity,region,"ready_gs.png",.76)
+    if IsObject(image) {
+        readable := true
+        return image
+    }
+    ; Revalidate a current label against the button background. Green map
+    ; terrain or HUD text on its own is never a Ready coordinate.
+    label := UM14_MenuWordPair(identity,region,"READY")
+    readable := UM14_ConnectionOCRStage() = "success" && UM14_ConnectionSame(identity)
+    return readable && IsObject(label) && UM14_ReadyBackground(identity,label) ? label : false
+}
+
+UM14_ReadyBackground(identity, label) {
+    matches := 0
+    for dy in [-1,1] {
+        for dx in [-1,1] {
+            x := label.x+dx*Max(7,Round(identity.h*.012))
+            y := label.y+dy*Max(5,Round(identity.h*.009))
+            if (x < 0 || x >= identity.w || y < 0 || y >= identity.h)
+                continue
+            try {
+                rgb := PixelGetColor(x,y)
+                r := (rgb>>16)&255, g := (rgb>>8)&255, b := rgb&255
+                if (g >= 130 && g-r >= 42 && g-b >= 42)
+                    matches++
+            }
+        }
+    }
+    return matches >= 2 && UM14_ConnectionSame(identity)
+}
+
+UM14_ClickMatchReady(identity, button) {
+    Loop 3 {
+        if !UM14_HeldClick(identity,button.x,button.y,"In-match Ready",180,
+            () => UM14_ButtonStillAt(button,UM14_ReadyButton(identity)))
+            return false
+        gone := 0
+        Loop 4 {
+            Sleep(250)
+            fresh := UM14_ReadyButton(identity,&readable)
+            if !UM14_ConnectionSame(identity)
+                return false
+            gone := readable && !IsObject(fresh) ? gone+1 : 0
+            if (gone >= 2)
+                return true
+        }
+        if !UM14_ButtonStillAt(button,fresh)
+            return false
+    }
+    return false
 }
 
 UM14_MapCaption(text, expected) {

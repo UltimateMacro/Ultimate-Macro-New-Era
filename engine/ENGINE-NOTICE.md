@@ -102,3 +102,7 @@ Native files copied verbatim from the 1.3.3a release: `lib/ImageSearch/*.dll`,
   only for a confirmed disconnect or a verified result when rejoining.
 - A21: hold and verify high-impact clicks, wait for the previous tower panel
   to close, and add bounded UI wait and pre-join tuning.
+
+## AHK 1.4.0.41 (build `1.3.3a-um14.27-ahk3`)
+
+- A22: verify login claim, Survival mode captions and in-match Ready against the selected Roblox client. Stop at an unverified map-override or purchase prompt instead of sending further input.
