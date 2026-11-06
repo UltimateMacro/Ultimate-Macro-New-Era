@@ -4159,16 +4159,13 @@ LoadStrategyFile(file) {
 
     inSteps := false
     Loop Read, file {
-        line := Trim(A_LoopReadLine)
-        if (line ~= "i)^\[Settings\]") { 
-            inSteps := false
+        line := UM14_RecordedStepLine(A_LoopReadLine)
+        if RegExMatch(line,"^\[.*\]$") {
+            inSteps := RegExMatch(line,"i)^\[\s*Steps\s*\]$") != 0
+            continue
         }
-        if (line ~= "i)^\[Steps\]")    { 
-            inSteps := true
-        }
-        if (inSteps && line != "") {
+        if (inSteps && line != "" && !RegExMatch(line,"i)^-{5,}(?:\s*\(\s*(?:Alignment|Steps)\s*\))?$"))
             RecordedSteps.Push(line)
-        }
     }
 
     
@@ -4292,7 +4289,7 @@ RunStrategy(stratFile := "", skipRestart := false) {
 }
 
 PlayStrategy() {
-    global canUseAbility, MultiplayerEnabled, StateFile
+    global canUseAbility, MultiplayerEnabled, StateFile, LastOpenedTowerID
 
     UM14_BeginMatchRun()
     IniWrite(A_TickCount, StateFile, "State", "TimeWhenStartedPlaying")
@@ -4305,27 +4302,11 @@ PlayStrategy() {
     i := 1
     while (i <= RecordedSteps.Length) {
         step := RecordedSteps[i]
-        isMacroStep := RegExMatch(step, "i)^(Click|Send|Sleep)\s*\(")
-
-        if RegExMatch(step, "i)UpgradeTower\s*\(\s*([^,]+?)\s*(?:,\s*(false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)", &m) {
-            currentID    := Trim(m[1])
-            countUpgrades := (m[3] != "") ? Integer(m[3]) : 1
-            currentPath   := (m[4] != "") ? Integer(m[4]) : 0
-            currentpathLevel := (m[5] != "") ? Integer(m[5]) : 4
-
-            lookAhead := i + 1
-            while (lookAhead <= RecordedSteps.Length) {
-                nextStep := RecordedSteps[lookAhead]
-                if RegExMatch(nextStep, "i)UpgradeTower\s*\(\s*" currentID "\s*(?:,\s*(?:false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)", &mN) {
-                    countUpgrades += (mN[1] != "") ? Integer(mN[1]) : 1
-                    lookAhead++
-                } else {
-                    break
-                }
-            }
-
-            success := UpgradeTower(currentID, false, countUpgrades, currentPath, currentpathLevel)
-            i := success ? lookAhead : i + 1
+        batch := UM14_UpgradeBatch(RecordedSteps,i)
+        if IsObject(batch) {
+            skipOpen := batch.skip && LastOpenedTowerID == batch.id
+            success := UpgradeTower(batch.id,skipOpen,batch.count,batch.path,batch.level)
+            i := success ? batch.next : i+1
         } else if RegExMatch(step, "i)SetDJTrack\s*\(\s*([^\s,)]+)\s*\)", &t) {
             SetDJTrack(t[1])
             i++
@@ -4357,8 +4338,7 @@ ExecuteStep(step) {
     global Commander, unfocusX, unfocusY
     if UM14_ExecuteInputStep(step)
         return
-    step := RegExReplace(step, "\s*;.*$", "")
-    step := Trim(step)
+    step := UM14_RecordedStepLine(step)
     if (step = "")
         return
     if RegExMatch(step, "i)SpawnTower\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d)\s*,\s*(.*?)\s*\)", &m) {
@@ -5831,91 +5811,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         SendEvent("{sc012 up}")
         Sleep(500)
 
-        foundsearchbar := false
-        getRobloxPos(&x, &y, &w, &h)
-        Loop 4 {
-            ; No legacy coordinate fallback: E can open the Roblox purchase
-            ; UI instead of the in-game search for a non-VIP account.
-            res := UM14_MapOverrideSearch(overrideIdentity)
-            if (IsObject(res) && UM14_HeldClick(overrideIdentity,res.x,res.y,"Map override search",180,
-                () => UM14_ButtonStillAt(res,UM14_MapOverrideSearch(overrideIdentity)))) {
-                foundsearchbar := true 
-                break
-            }
-            Sleep(400)
-        }
-
-        if (!foundsearchbar) {
-            UM14_LobbyFailure("map-override search field; your account may not have map override access")
-            return 
-        }        
-
-        Sleep(100)
-        UM14_RejectMapPurchase(overrideIdentity)
-        UM14_SearchText(gamemap)
-        overrideStarted := A_TickCount
-        Loop {
-            UM14_RequireReadyFocus()
-            getRobloxPos(,, &w, &h)
-            if (!UM14_Viewport(w,h) || A_TickCount-overrideStarted >= 30000)
-                UM14_LobbyFailure("map-override confirmation within 30 seconds")
-            Sleep(300)
-            UM14_RejectMapPurchase(overrideIdentity)
-            if (InArray(SpecialMaps, gamemap)) {
-                SelectionICON := AdvancedImageSearch("Resources/Maps/" gamemap "_Selection.png", Round(w*0.1),0,Round(w*0.7),h,0.5,1.5)
-            
-                if (SelectionICON.score >= 0.65)  { 
-                    Click(SelectionICON.x, SelectionICON.y)
-                } else {
-                    Click(res.x - ScaleX(90), res.y + 80)
-                }
-            } else {
-                Click(res.x - ScaleX(90), res.y + 80)
-            }
-            Sleep(400)
-
-            changedMap := false
-            alrinRotation := false
-            Loop 2 {
-                if PixelSearch(&gx, &gy, Round(w*0.2), Round(h*0.24), Round(w*0.7), Round(h*0.3), 0x00EC00, 3) {
-                    LogToConsole("Successfully changed the map to " gamemap,true,false)
-                    changedMap := true
-                    break
-                }
-
-                Sleep(200)
-            }
-
-            if (changedMap) {
-                break
-            }
-
-            if (ReadMessage(["already", "current", "rotation"])) {
-                LogToConsole(gamemap " is already in the current rotation. Clicking veto..", true)
-                resVeto := AdvancedImageSearch("Resources\Veto.png", 0, 0, w, h,0.5,1.5)
-                if (resVeto.status == "success" && resVeto.score > 0.65) {
-                    MouseMove(resVeto.x, resVeto.y)
-                    Sleep(30)
-                    MouseClick
-                } else {
-                    UM14_LobbyFailure("map veto control")
-                }
-                Sleep(300)
-                Send("{" SC_E " down}")
-                Sleep(760)
-                Send("{" SC_E " up}")
-
-                alrinRotation := false
-                Sleep(400)
-                continue
-            }
-
-            if (!changedMap) {
-                UM14_LobbyFailure("map change to " gamemap "; check map-override access and the game message")
-            } else {
-                break
-            }
-        }
+        UM14_ChooseOverrideMap(overrideIdentity,gamemap)
 
         if (modifiers != "")
             ApplyModifiers()
@@ -5971,6 +5867,54 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
     Sleep(100)
 
     Click(readyX, readyY)
+}
+
+UM14_ChooseOverrideMap(identity, name) {
+    Loop 2 {
+        pass := A_Index, field := false, evidence := "context"
+        Loop 4 {
+            field := UM14_MapOverrideSearch(identity,"Search for Maps",false,&evidence)
+            if (IsObject(field) && UM14_HeldClick(identity,field.x,field.y,"Map override search",180,
+                () => UM14_ButtonStillAt(field,UM14_MapOverrideSearch(identity))))
+                break
+            field := false
+            Sleep(350)
+        }
+        if !IsObject(field) {
+            LogToConsole("Map search check: " evidence)
+            UM14_LobbyFailure("the visible map-override search field; verify that the map picker is open")
+        }
+        Sleep(150)
+        UM14_RejectMapPurchase(identity)
+        UM14_SearchText(name)
+        Sleep(200)
+        card := UM14_MapOverrideCard(identity,field,name)
+        if (!IsObject(card) || !UM14_HeldClick(identity,card.x,card.y,"Filtered map card",160,
+            () => UM14_ButtonStillAt(card,UM14_MapOverrideCard(identity,field,name))))
+            UM14_LobbyFailure("the filtered map query for " name "; no map card was clicked")
+
+        receipt := UM14_MapOverrideReceipt(identity,name)
+        if (receipt = "changed") {
+            LogToConsole("Confirmed map override to " name ".")
+            return true
+        }
+        if (receipt != "rotation" || pass != 1)
+            UM14_LobbyFailure("confirmation that TDS changed the map to " name "; no gameplay input was started")
+        LogToConsole(name " is in the current rotation; retrying the verified veto once.")
+        region := UM14_StartupRegion(identity,.54,.55,.88,.93)
+        veto := UM14_MapVoteHeading(identity) ? UM14_MenuImagePair(identity,region,"Veto.png",.70) : false
+        if (!IsObject(veto) || !UM14_HeldClick(identity,veto.x,veto.y,"Map veto",160,
+            () => UM14_MapVoteHeading(identity) && UM14_ButtonStillAt(veto,UM14_MenuImagePair(identity,region,"Veto.png",.70))))
+            UM14_LobbyFailure("map veto control")
+        Sleep(500)
+        prompt := UM14_MapOverridePrompt()
+        if (!IsObject(prompt) || !UM14_ConnectionSame(identity))
+            UM14_LobbyFailure("the reopened map-override prompt after veto")
+        SendEvent("{sc012 down}")
+        try Sleep(800)
+        finally SendEvent("{sc012 up}")
+        Sleep(450)
+    }
 }
 
 CheckTheMapF() {

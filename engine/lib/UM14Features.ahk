@@ -2,6 +2,41 @@
 ; Original GPLv3/contributor notices continue to apply. No fork updater is used.
 UM14_InputRootMatches(actual, expected) => IsInteger(actual) && actual != 0 && actual = expected
 
+UM14_RecordedStepLine(line) {
+    quoted := false
+    Loop Parse line {
+        if A_LoopField = '"'
+            quoted := !quoted
+        else if (A_LoopField = ";" && !quoted)
+            return Trim(SubStr(line,1,A_Index-1))
+    }
+    return Trim(line)
+}
+
+UM14_UpgradeStep(line) {
+    if !RegExMatch(line,"i)^UpgradeTower\s*\(\s*([^,]+?)\s*(?:,\s*(false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)$",&m)
+        return false
+    return {id:Trim(m[1]), skip:m[2] = "true", count:m[3] = "" ? 1 : Integer(m[3]),
+        path:m[4] = "" ? 0 : Integer(m[4]), level:m[5] = "" ? 4 : Integer(m[5])}
+}
+
+UM14_UpgradeBatch(steps, index) {
+    first := UM14_UpgradeStep(steps[index])
+    if !IsObject(first)
+        return false
+    next := index+1
+    while (next <= steps.Length) {
+        upgrade := UM14_UpgradeStep(steps[next])
+        if (!IsObject(upgrade) || upgrade.id !== first.id || upgrade.path != first.path
+            || upgrade.level != first.level || upgrade.skip != first.skip || first.count+upgrade.count > 999)
+            break
+        first.count += upgrade.count
+        next++
+    }
+    first.next := next
+    return first
+}
+
 UM14_InventoryImageFact(value) {
     fact := {status:"missing",score:"unknown"}
     if (!IsObject(value))
@@ -41,56 +76,201 @@ UM14_ExtraUiWait() {
 UM14_WaitSetupLobby(timeout := 12000, allowResultsRelaunch := false) {
     start := A_TickCount
     deadline := timeout + UM14_ExtraUiWait()
-    checkedReward := start-1000, rewardInputSent := false
+    nextOverlayCheck := start, attempts := Map(), blocking := false, evidence := "context"
+    rewardSince := 0, rewardDismissed := false
     Loop {
         UM14_RequireReadyFocus()
         if UM14_LobbyOrInventory()
             return true
-        if (!rewardInputSent && A_TickCount-checkedReward >= 1000) {
-            checkedReward := A_TickCount
-            rewardInputSent := UM14_TryLoginReward()
+        if A_TickCount >= nextOverlayCheck {
+            identity := UM14_ConnectionSnapshot()
+            blocking := UM14_StartupOverlay(identity,&evidence)
+            if IsObject(blocking) {
+                previous := attempts.Get(blocking.kind, false)
+                reward := blocking.kind = "reward"
+                if (reward && !rewardSince)
+                    rewardSince := A_TickCount
+                if ((!reward || !rewardDismissed) && UM14_StartupRetryAllowed(identity,blocking,previous,A_TickCount)
+                    && UM14_ClickStartupOverlay(identity,blocking)) {
+                    attempts[blocking.kind] := {count:IsObject(previous) ? previous.count+1 : 1,
+                        at:A_TickCount, key:identity.key, button:blocking.button}
+                    LogToConsole("Pressed verified " blocking.action "; waiting for the lobby.")
+                }
+                if (reward && !rewardDismissed && ((IsObject(previous) && previous.count >= 2 && A_TickCount-previous.at >= 1250)
+                    || (!IsObject(blocking.button) && A_TickCount-rewardSince >= 1600))) {
+                    rewardDismissed := UM14_DismissStalledReward(identity)
+                    if rewardDismissed
+                        LogToConsole("Login Rewards stayed open. Pressed verified Login to dismiss it; no reward was confirmed.")
+                }
+                if (!rewardDismissed && !IsObject(blocking.button))
+                    UM14_ClearStartupHover(identity,blocking.region)
+            }
+            nextOverlayCheck := A_TickCount+500
         }
-        if (allowResultsRelaunch && UM14_VerifiedResults()) {
+        if (allowResultsRelaunch && !IsObject(blocking) && UM14_VerifiedResults()) {
             LogToConsole("Rejoining TDS from the confirmed match-results screen.")
             return RunRoblox()
         }
-        if A_TickCount-start >= deadline
+        if A_TickCount-start >= deadline {
+            LogToConsole("Lobby startup check: " evidence)
+            if IsObject(blocking)
+                UM14_Fatal(blocking.name " is still open. Close it in Roblox and press Start again. No match was started.")
             UM14_LobbyFailure("the TDS lobby (Play button or the open inventory with Auto Equip on)")
-        Sleep(350)
+        }
+        Sleep(250)
     }
 }
 
 UM14_LoginRewardsHeading(text) {
     return Type(text) = "String" && StrLen(text) <= 4096
-        && (RegExMatch(text,"im)^\s*(?:31\s+)?Login\h+Rewards\b")
+        && (RegExMatch(text,"im)^\s*(?:31\s+)?Login\s+Rewards\b")
             || RegExMatch(text,"i)\bRewards\s+scale\s+with\s+your\s+login\s+streak\b"))
 }
 
-UM14_LoginRewardButton(identity) {
-    w := identity.w, h := identity.h
-    title := UM14_Region(Round(w*.27),Round(h*.25),Round(w*.46),Round(h*.27),w,h)
-    button := UM14_Region(Round(w*.36),Round(h*.58),Round(w*.28),Round(h*.33),w,h)
-    if (!IsObject(title) || !IsObject(button) || !UM14_ConnectionSame(identity))
-        return false
-    if !UM14_LoginRewardsHeading(UM14_ConnectionOCR(identity,title,Min(2,2300/title.w)))
-        return false
-    claim := UM14_MenuWordPair(identity,button,"CLAIM")
-    if !IsObject(claim)
-        claim := UM14_MenuImagePair(identity,button,"Claim.png",.82)
-    return UM14_ConnectionSame(identity) ? claim : false
+UM14_LoginRewardsVisible(identity) {
+    title := UM14_StartupRegion(identity,.18,.19,.82,.55)
+    return IsObject(title) && UM14_LoginRewardsHeading(UM14_ConnectionOCR(identity,title))
 }
 
-UM14_TryLoginReward() {
-    identity := UM14_ConnectionSnapshot()
-    if !IsObject(identity)
+UM14_LoginToggle(identity) {
+    if !UM14_LoginRewardsVisible(identity)
         return false
-    claim := UM14_LoginRewardButton(identity)
-    if (!IsObject(claim) || !UM14_HeldClick(identity,claim.x,claim.y,"Login reward Claim",180,
-        () => UM14_ButtonStillAt(claim,UM14_LoginRewardButton(identity))))
+    region := UM14_StartupRegion(identity,.71,.003,.963,.155)
+    label := IsObject(region) ? UM14_MenuWordPair(identity,region,"LOGIN",false,false,3.0) : false
+    if !IsObject(label)
         return false
-    LogToConsole("Pressed verified Login Rewards Claim; waiting for the lobby.")
-    Sleep(500)
-    return true
+    y := Round(label.y-Max(12,Min(30,label.height*1.9)))
+    return UM14_StartupPointIn(region,label.x,y) && UM14_ConnectionSame(identity) ? {x:label.x,y:y} : false
+}
+
+UM14_DismissStalledReward(identity) {
+    toggle := UM14_LoginToggle(identity)
+    return IsObject(toggle) && UM14_HeldClick(identity,toggle.x,toggle.y,"Dismiss Login Rewards",160,
+        () => UM14_ButtonStillAt(toggle,UM14_LoginToggle(identity)))
+}
+
+UM14_StartupRegion(identity, left, top, right, bottom) {
+    w := identity.w, h := identity.h
+    x := Round(w*left), y := Round(h*top)
+    return UM14_Region(x,y,Round(w*right)-x,Round(h*bottom)-y,w,h)
+}
+
+UM14_UpdateNotesHeading(text, heading) {
+    ; WinRT's Text joins lines into one paragraph, including article titles
+    ; above Update Log. Match both whole headings in their own bounded crops.
+    return Type(text) = "String" && StrLen(text) <= 4096 && RegExMatch(text,"i)\b" heading "\b")
+}
+
+UM14_StartupOverlay(identity, &evidence := "", underPointer := false) {
+    evidence := "context"
+    if (!IsObject(identity) || !UM14_ConnectionSame(identity))
+        return false
+    ; The notes can sit above Login Rewards. Require both fixed headers before
+    ; looking for the red close button; there are other red X controls in TDS.
+    list := UM14_StartupRegion(identity,.015,.075,.44,.34)
+    listFound := IsObject(list) && UM14_UpdateNotesHeading(UM14_ConnectionOCR(identity,list),"All\s+Updates")
+    evidence := "viewport=" identity.w "x" identity.h " notes-list=" (listFound ? "found" : UM14_ConnectionOCRStage())
+    if listFound {
+        detail := UM14_StartupRegion(identity,.29,.22,.71,.52)
+        detailFound := IsObject(detail) && UM14_UpdateNotesHeading(UM14_ConnectionOCR(identity,detail),"Update\s+Log")
+        evidence .= " notes-detail=" (detailFound ? "found" : UM14_ConnectionOCRStage())
+        if detailFound {
+            region := UM14_StartupRegion(identity,.66,.065,.99,.34)
+            close := UM14_StartupHoveredButton(identity,underPointer,"notes",region,"red")
+            closeStatus := IsObject(close) ? "verified" : "template-missing"
+            for name in (IsObject(close) ? [] : ["close.png","close_items.png","close_freerewards.png"]) {
+                match := UM14_MenuImagePair(identity,region,name,.78)
+                if !IsObject(match)
+                    continue
+                closeStatus := "color-unverified"
+                if UM14_StartupButtonColor(identity,match,"red") {
+                    close := match, closeStatus := "verified"
+                    break
+                }
+            }
+            evidence .= " close=" closeStatus
+            return UM14_ConnectionSame(identity) ? {kind:"notes", name:"TDS Update Log",
+                action:"TDS Update Log close button", button:close, region:region} : false
+        }
+    }
+    titleFound := UM14_LoginRewardsVisible(identity)
+    evidence .= " reward-title=" (titleFound ? "found" : UM14_ConnectionOCRStage())
+    if !titleFound
+        return false
+    ; Compact and docked layouts can push Claim below 91% of the client.
+    region := UM14_StartupRegion(identity,.33,.53,.67,.995)
+    claim := UM14_StartupHoveredButton(identity,underPointer,"reward",region,"green")
+    if (!IsObject(claim) && IsObject(region))
+        claim := UM14_MenuWordPair(identity,region,"CLAIM")
+    if !UM14_StartupButtonColor(identity,claim,"green")
+        claim := UM14_MenuImagePair(identity,region,"Claim.png",.85)
+    if !UM14_StartupButtonColor(identity,claim,"green")
+        claim := false
+    evidence .= " claim=" (IsObject(claim) ? "verified" : "unverified")
+    return UM14_ConnectionSame(identity) ? {kind:"reward", name:"Login Rewards",
+        action:"Login Rewards Claim", button:claim, region:region} : false
+}
+
+UM14_StartupPointIn(region, x, y) => IsObject(region)
+    && x >= region.x && y >= region.y && x < region.x+region.w && y < region.y+region.h
+
+UM14_StartupHoveredButton(identity, previous, kind, region, color) {
+    ; Roblox draws its cursor over the icon/text and tints the hovered button.
+    ; Only an already verified button can use the surrounding color here, and
+    ; only after the same overlay's heading(s) have been verified again.
+    if (!IsObject(previous) || previous.kind != kind || !IsObject(previous.button))
+        return false
+    button := previous.button
+    return UM14_StartupPointIn(region,button.x,button.y) && UM14_StartupButtonColor(identity,button,color) ? button : false
+}
+
+UM14_ClearStartupHover(identity, region) {
+    MouseGetPos(&x,&y)
+    if !UM14_StartupPointIn(region,x,y)
+        return
+    ; Uncover the label before the next independent observation. No click.
+    x := Round(identity.w*.50), y := Round(identity.h*.045)
+    UM14_RequireInputPoint(identity,x,y,"Read TDS startup panel")
+    MouseMove(x,y,0)
+}
+
+UM14_StartupButtonColor(identity, button, color) {
+    if !IsObject(button)
+        return false
+    hits := 0, dx := Max(10,Min(18,Round(identity.h*.018))), dy := Max(6,Min(11,Round(identity.h*.011)))
+    ; A white diagonal X covers the corner samples at some viewport scales.
+    offsets := color = "red" ? [[-dx,0],[dx,0],[0,-dx],[0,dx]] : [[-dx,-dy],[dx,-dy],[-dx,dy],[dx,dy]]
+    for delta in offsets {
+        x := button.x+delta[1], y := button.y+delta[2]
+        if (x < 0 || x >= identity.w || y < 0 || y >= identity.h)
+            continue
+        try {
+            rgb := PixelGetColor(x,y), r := (rgb>>16)&255, g := (rgb>>8)&255, b := rgb&255
+            if (color = "green" ? g >= 130 && g-r >= 42 && g-b >= 42 : r >= 150 && r-g >= 58 && r-b >= 45)
+                hits++
+        }
+    }
+    return hits >= 2 && UM14_ConnectionSame(identity)
+}
+
+UM14_StartupRetryAllowed(identity, overlay, previous, now) {
+    ; A second press is safe only for the same positively recognized control,
+    ; in the same unchanged Roblox client, after the transition had time to run.
+    return IsObject(overlay.button) && (!IsObject(previous) || (previous.count = 1
+        && previous.key == identity.key && now-previous.at >= 1250
+        && UM14_ButtonStillAt(previous.button,overlay.button)))
+}
+
+UM14_StartupButtonStillAt(identity, overlay) {
+    current := UM14_StartupOverlay(identity,&evidence,overlay)
+    return IsObject(current) && current.kind = overlay.kind && UM14_ButtonStillAt(overlay.button,current.button)
+}
+
+UM14_ClickStartupOverlay(identity, overlay) {
+    if !IsObject(overlay.button)
+        return false
+    return UM14_HeldClick(identity,overlay.button.x,overlay.button.y,overlay.action,180,
+        () => UM14_StartupButtonStillAt(identity,overlay))
 }
 
 UM14_VerifiedResults() {
@@ -685,10 +865,135 @@ UM14_RejectMapPurchase(identity) {
         UM14_Fatal("Could not verify the map-override window. No more input was sent.")
 }
 
-UM14_MapOverrideSearch(identity) {
+UM14_MapVoteHeading(identity) {
+    region := UM14_StartupRegion(identity,.21,.004,.79,.155)
+    return IsObject(region) && UM14_MapCaption(UM14_ConnectionOCR(identity,region,2.6),"Vote For A Map")
+}
+
+UM14_MapSearchWords(words, phrase) {
+    want := StrSplit(StrUpper(Trim(phrase))," ")
+    if (!want.Length || want.Length > 10)
+        return false
+    found := false
+    for first in words {
+        if (first.text != want[1] || first.h < 5)
+            continue
+        left := first.x, right := first.x+first.w, center := first.y+first.h/2, height := first.h
+        complete := true
+        Loop want.Length-1 {
+            next := false, target := want[A_Index+1]
+            for word in words {
+                if (word.x < right-1 || word.x-right > height*1.7 || Abs((word.y+word.h/2)-center) > height*.55)
+                    continue
+                if (!IsObject(next) || word.x < next.x)
+                    next := word
+            }
+            if (!IsObject(next) || next.text != target || next.h < 5) {
+                complete := false
+                break
+            }
+            right := next.x+next.w
+        }
+        if !complete
+            continue
+        for word in words {
+            if (word.x >= right-1 && word.x-right <= height*1.7 && Abs((word.y+word.h/2)-center) <= height*.55) {
+                complete := false
+                break
+            }
+        }
+        if !complete
+            continue
+        if IsObject(found)
+            return false ; two matching labels cannot identify one textbox
+        found := {left:left, right:right, y:Round(center), height:height}
+    }
+    return found
+}
+
+UM14_MapSearchField(identity, phrase, anchor := false, &evidence := "") {
+    region := IsObject(anchor) ? UM14_Region(Max(0,Round(anchor.left-15)),Max(0,Round(anchor.y-13)),
+        Round(identity.w*.45),26,identity.w,identity.h) : UM14_StartupRegion(identity,.12,.155,.76,.51)
+    if !IsObject(region)
+        return false
+    factor := Min(IsObject(anchor) ? 3.6 : 3.0,2500/Max(region.w,region.h))
+    words := UM14_OCRWords(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
+    label := UM14_MapSearchWords(words,phrase)
+    evidence := "label=" (IsObject(label) ? "found" : UM14_ConnectionOCRStage())
+    if (!IsObject(label) && !IsObject(anchor) && phrase = "Search for Maps") {
+        ; The compact placeholder is gray on a translucent background. Reuse
+        ; its two-frame image match, but keep the pointer off the label itself.
+        image := UM14_MenuImagePair(identity,region,"searchbar.png",.72)
+        if (IsObject(image) && image.HasOwnProp("w") && image.w >= 40 && image.h >= 8) {
+            label := {left:image.x-image.w*.36,right:image.x+image.w*.5,y:image.y,height:Max(8,image.h*.63)}
+            evidence .= " template=found"
+        } else {
+            evidence .= " template=unverified"
+        }
+    }
+    if !IsObject(label)
+        return false
+    ; Enter in the empty part of the same row, where Roblox's I-beam will
+    ; not cover the placeholder during the post-hover verification.
+    x := Round(label.right+Max(14,label.height*1.25))
+    if !UM14_StartupPointIn(region,x,label.y)
+        return false
+    darker := 0
+    for offset in [-5,0,5] {
+        try {
+            rgb := PixelGetColor(x,label.y+offset)
+            if Max((rgb>>16)&255,(rgb>>8)&255,rgb&255) <= 140
+                darker++
+        }
+    }
+    evidence .= " field=" (darker >= 2 ? "dark" : "unverified")
+    if (darker < 2 || !UM14_ConnectionSame(identity))
+        return false
+    return {x:x,y:label.y,left:label.left,height:label.height}
+}
+
+UM14_MapOverrideSearch(identity, phrase := "Search for Maps", anchor := false, &evidence := "") {
     UM14_RejectMapPurchase(identity)
-    region := UM14_Region(Round(identity.w*.10),0,Round(identity.w*.64),Round(identity.h*.55),identity.w,identity.h)
-    return IsObject(region) ? UM14_MenuImagePair(identity,region,"searchbar.png",.72) : false
+    if !UM14_MapVoteHeading(identity) {
+        evidence := "vote=" UM14_ConnectionOCRStage()
+        return false
+    }
+    first := UM14_MapSearchField(identity,phrase,anchor,&evidence)
+    if !IsObject(first)
+        return false
+    Sleep(100)
+    second := UM14_MapSearchField(identity,phrase,anchor,&evidence)
+    return UM14_ButtonStillAt(first,second,5) ? second : false
+}
+
+UM14_MapOverrideCard(identity, anchor, name) {
+    query := UM14_MapOverrideSearch(identity,name,anchor)
+    if (!IsObject(query) || Abs(query.left-anchor.left) > 14 || Abs(query.y-anchor.y) > 6)
+        return false
+    ; With the exact typed query confirmed in the field, the first filtered
+    ; tile is below its left edge. Only continue after the exact map receipt.
+    x := Round(query.left+Max(17,anchor.height*1.55))
+    y := query.y+Max(73,Min(155,Round(anchor.height*6.5)))
+    tiles := UM14_StartupRegion(identity,.10,.27,.75,.76)
+    return UM14_StartupPointIn(tiles,x,y) ? {x:x,y:y} : false
+}
+
+UM14_MapOverrideReceipt(identity, name) {
+    region := UM14_StartupRegion(identity,.23,.16,.77,.39)
+    if !IsObject(region)
+        return ""
+    start := A_TickCount
+    while (A_TickCount-start < 2600 && UM14_ConnectionSame(identity)) {
+        text := UM14_ConnectionOCR(identity,region,3.0)
+        if UM14_MapPurchaseText(text)
+            UM14_RejectMapPurchase(identity)
+        if UM14_MapCaption(text,"Map changed to " name)
+            return "changed"
+        if UM14_MapCaption(text,"already in the current rotation")
+            return "rotation"
+        Sleep(140)
+    }
+    return ""
 }
 
 UM14_ReadyButton(identity, &readable := false) {

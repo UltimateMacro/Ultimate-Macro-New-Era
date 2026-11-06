@@ -2,10 +2,11 @@
 
 ## 1.4.0.41
 
-- Handle the verified Login Rewards dialog before looking for the lobby.
+- Clear the verified TDS Update Log and handle Login Rewards in compact and full-size windows. If TDS leaves the reward open, close it via the verified Login icon without assuming it was granted.
 - Confirm the Survival section and distinguish Easy from Casual by its label, not its artwork. Keep Hardcore selection on its own card.
-- Stop if Roblox opens a purchase prompt during map override. Do not use an unverified search-field coordinate.
+- Find the current VIP map picker by its visible search label. Check the typed map and the game's confirmation before continuing. Stop at Roblox purchase prompts.
 - Verify the in-match Ready control before clicking and recheck that it cleared before proceeding.
+- Keep commented-out strategy commands inactive and preserve separate upgrade paths. Report unsupported legacy commands before starting.
 - Bring the verified update review window forward when the macro still has focus. Downloads can be quiet; installation still requires approval.
 
 ## 1.4.0.40

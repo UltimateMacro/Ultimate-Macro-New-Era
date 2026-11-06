@@ -33,11 +33,17 @@ IniRead(file, section, key, fallback := "") => fallback
 UM14_Fatal(message) {
     throw Error(message)
 }
-UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenario = "hardcore" ? {w:1078, h:995}
-    : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" ? {w:800, h:600} : {w:1000, h:700}
+UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenario = "hardcore" ? {w:1078, h:995,key:"game"}
+    : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" || scenario = "compact-reward" ? {w:800, h:600,key:"game"} : {w:1000, h:700,key:"game"}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_ConnectionOCRStage() => scenario = "ready-uncertain" ? "overlap" : "success"
-PixelGetColor(x,y) => scenario = "ready-green" ? 0x22CA38 : 0xB8A9A7
+UM14_LobbyOrInventory() => ((scenario = "startup-stack" || scenario = "startup-retry") && clicks.Length = 2)
+    || (scenario = "startup-dismiss" && clicks.Length = 3)
+PixelGetColor(x,y) => (scenario = "startup-stack" && !clicks.Length)
+    ? (x = 770 || y = 106 ? 0xF82736 : 0xFFFFFF) : (scenario = "ready-green" || scenario = "login-reward" || scenario = "compact-reward"
+        || scenario = "unrelated-claim" || scenario = "startup-stack" || scenario = "startup-retry"
+        || scenario = "startup-stuck" || scenario = "startup-dismiss" || scenario = "reward-hidden-on-hover") ? 0x22CA38
+        : (scenario = "map-vip" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen") ? 0x203329 : 0xB8A9A7
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, factor := 0, *) {
@@ -47,12 +53,40 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
         return [{text:"ITEMS",raw:"Items",x:85,y:320,w:40,h:14}]
     if (scenario = "lobby" && region.x = 250 && region.y = 462)
         return [{text:"PLAY",raw:"PLAY",x:450,y:640,w:50,h:16}]
-    if (scenario = "login-reward" && region.x = 270 && region.y = 175)
-        return "Rewards Rewards scale with your login streak! Day 1 Day 2 x75 Day 3 Day 4 Day 5"
-    if ((scenario = "login-reward" || scenario = "unrelated-claim") && region.x = 360 && region.y = 406)
-        return [{text:"CLAIM",raw:"CLAIM",x:475,y:560,w:50,h:16}]
+    if ((scenario = "startup-stack" && !clicks.Length) || scenario = "wrong-news") {
+        if (region.x = Round(identity.w*.015))
+            return "Lobby All Updates Current Version"
+        if (region.x = Round(identity.w*.29) && scenario != "wrong-news")
+            return "Time Dilator Update Log: New tower"
+    }
+    if (scenario = "login-reward" || scenario = "compact-reward" || scenario = "unrelated-claim"
+        || scenario = "reward-nongreen" || scenario = "startup-retry" || scenario = "startup-stuck" || scenario = "startup-dismiss"
+        || (scenario = "startup-stack" && clicks.Length = 1) || (scenario = "reward-hidden-on-hover" && !hover[1])) {
+        if (region.x = Round(identity.w*.18) && scenario != "unrelated-claim")
+            return "Rewards Rewards scale with your login streak! Day 1 Day 2 x75 Day 3 Day 4 Day 5"
+        y := scenario = "compact-reward" ? 574 : 560
+        if (region.x = Round(identity.w*.33) && y >= region.y && y+13 <= region.y+region.h)
+            return [{text:"CLAIM",raw:"CLAIM",x:Round(identity.w/2)-25,y:y,w:50,h:13}]
+        if (scenario = "startup-dismiss" && region.x = 710 && clicks.Length = 2)
+            return [{text:"LOGIN",raw:"Login",x:830,y:53,w:40,h:10}]
+    }
     if (scenario = "map-purchase" && region.x = 220 && region.y = 154)
         return "Buy Robux and item VIP"
+    if (scenario = "map-vip" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen") {
+        if (region.x = 210 && scenario != "map-wrong-screen")
+            return "Vote For A Map"
+        if (region.x = 120 || region.x = 235) {
+            if (scenario = "map-vip" || scenario = "map-wrong-screen")
+                return [{text:"SEARCH",x:250,y:213,w:46,h:13},{text:"FOR",x:300,y:213,w:22,h:13},
+                    {text:"MAPS",x:326,y:213,w:32,h:13}]
+            labels := [{text:"DEAD",x:250,y:213,w:36,h:13},{text:"AHEAD",x:291,y:213,w:47,h:13}]
+            if (scenario = "map-query-suffix")
+                labels.Push({text:"ANNEX",x:344,y:213,w:40,h:13})
+            return labels
+        }
+        if (region.x = 230 && scenario = "map-query")
+            return "Map changed to Dead Ahead"
+    }
     if ((scenario = "ready-green" || scenario = "ready-uncertain" || scenario = "ready-nongreen")
         && region.x = 290 && !clicks.Length)
         return [{text:"READY",raw:"READY",x:480,y:145,w:40,h:16}]
@@ -95,6 +129,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
     global probes
+    if (path = "Resources/close.png" && ((scenario = "startup-stack" && !clicks.Length && hover[1] != 770) || scenario = "wrong-news"))
+        return {status:"success",score:.96,x:x+110,y:y+60}
     if (scenario = "restart" && path = "Resources/Restart.png" && !clicks.Length)
         return {status:"success", score:.94, x:x+220, y:y+90}
     if ((scenario = "ready-image" || scenario = "ready-uncertain") && path = "Resources/ready_gs.png" && !clicks.Length)
@@ -156,10 +192,40 @@ try {
     scenario := "moved"
     Need(!UM14_LobbyPlay(), "Lobby recognition rejects a changed client")
     scenario := "unrelated-claim", clicks := []
-    Need(!UM14_TryLoginReward() && !clicks.Length, "Claim text without the Login Rewards heading gets no click")
-    scenario := "login-reward"
-    Need(UM14_TryLoginReward() && clicks.Length = 1 && clicks[1][1] = 500,
-        "The verified login reward gets one held click")
+    Need(!UM14_StartupOverlay(UM14_ConnectionSnapshot()) && !clicks.Length,
+        "Claim text without the Login Rewards heading gets no click")
+    scenario := "reward-nongreen"
+    overlay := UM14_StartupOverlay(UM14_ConnectionSnapshot())
+    Need(IsObject(overlay) && !IsObject(overlay.button) && !clicks.Length,
+        "Plain Claim text with no green button cannot receive input")
+    scenario := "wrong-news"
+    Need(!UM14_StartupOverlay(UM14_ConnectionSnapshot()) && !clicks.Length,
+        "One heading and a red X are not enough to close the Update Log")
+    scenario := "reward-hidden-on-hover", hover := [0,0]
+    ctx := UM14_ConnectionSnapshot(), overlay := UM14_StartupOverlay(ctx)
+    Need(IsObject(overlay.button) && !UM14_ClickStartupOverlay(ctx,overlay) && !clicks.Length,
+        "A different screen under the pointer never receives a Claim click")
+    for size in ["login-reward","compact-reward"] {
+        scenario := size, clicks := []
+        ctx := UM14_ConnectionSnapshot(), overlay := UM14_StartupOverlay(ctx)
+        Need(IsObject(overlay.button) && UM14_ClickStartupOverlay(ctx,overlay) && clicks.Length = 1
+            && clicks[1][1] = ctx.w/2 && (size != "compact-reward" || clicks[1][2] > ctx.h*.95),
+            "Verified Claim is clickable in the " size " viewport")
+    }
+    scenario := "startup-stack", clicks := [], hover := [0,0]
+    Need(UM14_WaitSetupLobby(5000) && clicks.Length = 2 && clicks[1][1] = 770 && clicks[2][1] = 500,
+        "Close update notes before claiming a reward underneath")
+    scenario := "startup-retry", clicks := []
+    Need(UM14_WaitSetupLobby(5000) && clicks.Length = 2,
+        "One missed press gets exactly one independently verified retry")
+    scenario := "startup-stuck", clicks := [], stopped := false
+    try UM14_WaitSetupLobby(3900)
+    catch as e
+        stopped := InStr(e.Message,"Login Rewards is still open")
+    Need(stopped && clicks.Length = 2, "An unchanged reward never gets a third press or a relaunch")
+    scenario := "startup-dismiss", clicks := []
+    Need(UM14_WaitSetupLobby(7500) && clicks.Length = 3 && clicks[3][1] = 850 && clicks[3][2] < 53,
+        "A stuck reward can be dismissed using the separately verified Login control")
     clicks := []
     scenario := "map-purchase", blocked := false
     try UM14_MapOverrideSearch(UM14_ConnectionSnapshot())
@@ -167,6 +233,17 @@ try {
         blocked := InStr(e.Message,"purchase prompt")
     Need(blocked && !clicks.Length && !UM14_MapPurchaseText("Current map vote"),
         "A Roblox purchase prompt never becomes a map-search click")
+    scenario := "map-wrong-screen"
+    Need(!UM14_MapOverrideSearch(UM14_ConnectionSnapshot()), "Search text outside the map vote is not a field")
+    scenario := "map-vip", ctx := UM14_ConnectionSnapshot()
+    field := UM14_MapOverrideSearch(ctx)
+    Need(IsObject(field) && field.x > 358 && field.y = 220, "Map search clicks inside the dark field, away from its label")
+    scenario := "map-query-suffix"
+    Need(!UM14_MapOverrideCard(ctx,field,"Dead Ahead"), "A different query cannot select a map card")
+    scenario := "map-query"
+    card := UM14_MapOverrideCard(ctx,field,"Dead Ahead")
+    Need(IsObject(card) && card.x < field.x && card.y > field.y && UM14_MapOverrideReceipt(ctx,"Dead Ahead") = "changed",
+        "A verified filtered card is followed by the matching TDS receipt")
     scenario := "ready-nongreen"
     Need(!UM14_ReadyButton(UM14_ConnectionSnapshot()) && !clicks.Length,
         "Plain Ready text without its button background is not clickable")
@@ -241,7 +318,7 @@ try {
         rejected := InStr(e.Message, "Map vote screen")
     }
     Need(rejected && !clicks.Length && hover[1] = 0, "No modifier input without the vote screen")
-    FileAppend("PASS: Fallen, Frost, moved-window abort, and guarded modifier hover`n", "*")
+    FileAppend("PASS: verified startup overlays, mode selection, Ready, map and modifier guards`n", "*")
     ExitApp(0)
 } catch as e {
     FileAppend("FAIL: " e.Message "`n", "**")

@@ -106,3 +106,9 @@ Native files copied verbatim from the 1.3.3a release: `lib/ImageSearch/*.dll`,
 ## AHK 1.4.0.41 (build `1.3.3a-um14.27-ahk3`)
 
 - A22: verify login claim, Survival mode captions and in-match Ready against the selected Roblox client. Stop at an unverified map-override or purchase prompt instead of sending further input.
+
+## AHK 1.4.0.41 startup compatibility (build `1.3.3a-um14.28-ahk3`)
+
+- A23: recognize the TDS Update Log and the compact Login Rewards dialog before starting a match. Retry only the same verified control once.
+- A24: verify the visible map search field and typed query, then require TDS to confirm the requested map before match setup continues.
+- A25: ignore strategy comments before inspecting any operation, and group upgrades only when their path and flags agree.
