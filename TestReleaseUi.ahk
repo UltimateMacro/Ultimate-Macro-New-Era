@@ -15,6 +15,17 @@ class UiProbe {
 }
 try {
     Store.settings := Store.Defaults()
+    timing := Store.DEFAULT_RUNTIME.Clone()
+    timing.Delete("extraUiWait"), timing.Delete("preJoinDelay"), timing.Delete("keyDelayMs")
+    timing := Store.ValidRuntime(timing)
+    Need(timing["extraUiWait"] = 0 && timing["preJoinDelay"] = 0 && timing["keyDelayMs"] = 20,
+        "Existing profiles keep the default timing after migration")
+    timing["extraUiWait"] := 91
+    rejected := false
+    try Store.ValidRuntime(timing)
+    catch
+        rejected := true
+    Need(rejected, "Out-of-range UI wait cannot reach the engine")
     popup := PopupList({labels:["OFF","1.5x","2x"],index:3},28)
     popup.h := 84
     popup.Scroll(1)

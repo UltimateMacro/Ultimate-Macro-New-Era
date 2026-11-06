@@ -2,10 +2,15 @@
 #Warn All, Off
 #NoTrayIcon
 #Include engine\lib\UM14Features.ahk
+#Include engine\lib\UM14Click.ahk
 
 global scenario := "", wheelCount := 0, clicks := [], probes := 0, activeDifficulty := "", hover := [0, 0]
-Click(x, y) => clicks.Push([x, y])
-MouseMove(x, y) {
+Click(x, y := unset) {
+    if (x = "Up")
+        return
+    clicks.Push(IsSet(y) ? [x, y] : hover.Clone())
+}
+MouseMove(x, y, *) {
     global hover := [x, y]
 }
 MouseGetPos(&x, &y) {
@@ -13,12 +18,18 @@ MouseGetPos(&x, &y) {
 }
 SendEvent(keys) {
     global wheelCount
-    if (keys != "{WheelDown}")
+    if (keys != "{WheelDown 2}")
         throw Error("Unexpected input")
     wheelCount++
 }
 LogToConsole(*) => 0
 UM14_RequireReadyFocus() => 0
+UM14_RequireInputPoint(identity,x,y,*) {
+    if (!UM14_ConnectionSame(identity) || x < 0 || y < 0 || x >= identity.w || y >= identity.h)
+        throw Error("Fixture input point invalid")
+}
+global SettingsFile := "fixture"
+IniRead(file, section, key, fallback := "") => fallback
 UM14_Fatal(message) {
     throw Error(message)
 }
@@ -69,6 +80,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
     global probes
+    if (scenario = "restart" && path = "Resources/Restart.png" && !clicks.Length)
+        return {status:"success", score:.94, x:x+220, y:y+90}
     if (path = "Resources/Ready.png" && (scenario = "modifier" || scenario = "modifier-compact" || scenario = "map-prompt"))
         return {status:"success", score:.9, x:x+100, y:y+50}
     if (path = "Resources/Survival.png" && (scenario = "sidebar" || scenario = "easy"))
@@ -97,6 +110,12 @@ Need(ok, text) {
         throw Error(text)
 }
 try {
+    scenario := "restart"
+    Need(UM14_ClickResult("Restart.png","Restart") && clicks.Length = 1,
+        "Restart is rechecked after hover, clicked once, then verified gone")
+    clicks := []
+    Need(UM14_BestRestart({status:"failed",score:.99},{status:"success",score:.71}) = "Restart2.png",
+        "A failed template cannot beat a valid Restart match")
     Need(UM14_MapCaption("Wretched`nFront", "Wretched Front")
         && !UM14_MapCaption("Wrecked Battlefield", "Wretched Front")
         && !UM14_MapCaption("Wretched Frontier", "Wretched Front"), "Exact map words do not match a different map")

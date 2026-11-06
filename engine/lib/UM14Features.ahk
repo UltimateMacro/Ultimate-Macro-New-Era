@@ -2,14 +2,116 @@
 ; Original GPLv3/contributor notices continue to apply. No fork updater is used.
 UM14_InputRootMatches(actual, expected) => IsInteger(actual) && actual != 0 && actual = expected
 
-UM14_RequireInputPoint(identity, x, y) {
-    if !UM14_ConnectionSame(identity)
-        UM14_Fatal("Roblox changed before inventory input.")
-    point := (identity.x+x) & 0xFFFFFFFF | ((identity.y+y) << 32)
-    under := DllCall("WindowFromPoint","Int64",point,"Ptr")
-    root := under ? DllCall("GetAncestor","Ptr",under,"UInt",2,"Ptr") : 0
-    if !UM14_InputRootMatches(root ? root : under,identity.root)
-        UM14_Fatal("Inventory input is covered by another window or pinned overlay. Move or close that overlay, or resize Roblox, then retry. No click was sent.")
+UM14_InventoryImageFact(value) {
+    fact := {status:"missing",score:"unknown"}
+    if (!IsObject(value))
+        return fact
+    fact.status := "unknown"
+    if (value.HasOwnProp("status") && Type(value.status) = "String") {
+        switch value.status {
+            case "success":
+                fact.status := "success"
+            case "error", "failed":
+                fact.status := "failed"
+        }
+    }
+    if (value.HasOwnProp("score") && (Type(value.score) = "Integer" || Type(value.score) = "Float") && value.score >= 0 && value.score <= 1)
+        fact.score := Round(value.score,3)
+    return fact
+}
+
+UM14_InventoryMenuFailure(attempts, items, close, itemsOcrTried := false) {
+    itemsFact := UM14_InventoryImageFact(items), closeFact := UM14_InventoryImageFact(close)
+    attempts := Type(attempts) = "Integer" && attempts >= 1 && attempts <= 3 ? attempts : 0
+    context := 0
+    try context := IsObject(UM14_ConnectionSnapshot()) ? 1 : 0
+    LogToConsole("Inventory menu failed: attempts=" attempts
+        " itemsStatus=" itemsFact.status " itemsScore=" itemsFact.score
+        " closeStatus=" closeFact.status " closeScore=" closeFact.score
+        " context=" context " capture=" (itemsOcrTried ? "items-label-attempted" : "not-requested"))
+    UM14_Fatal("Inventory menu could not be confirmed after the bounded attempts. Open the inventory and retry. No later tower or match was started.")
+}
+
+UM14_ExtraUiWait() {
+    global SettingsFile
+    extra := IniRead(SettingsFile, "Options", "ExtraUiWait", "0")
+    return RegExMatch(extra,"^\d{1,2}$") ? Min(90,Integer(extra))*1000 : 0
+}
+
+UM14_WaitSetupLobby(timeout := 12000, allowResultsRelaunch := false) {
+    start := A_TickCount
+    deadline := timeout + UM14_ExtraUiWait()
+    Loop {
+        UM14_RequireReadyFocus()
+        if UM14_LobbyOrInventory()
+            return true
+        if (allowResultsRelaunch && UM14_VerifiedResults()) {
+            LogToConsole("Rejoining TDS from the confirmed match-results screen.")
+            return RunRoblox()
+        }
+        if A_TickCount-start >= deadline
+            UM14_LobbyFailure("the TDS lobby (Play button or the open inventory with Auto Equip on)")
+        Sleep(350)
+    }
+}
+
+UM14_VerifiedResults() {
+    identity := UM14_ConnectionSnapshot()
+    if !IsObject(identity)
+        return false
+    for result in ["Triumph", "Loss"] {
+        if !UM14_MatchScreenEvidence(result,identity.w,identity.h)
+            continue
+        Sleep(400)
+        if (UM14_ConnectionSame(identity) && UM14_MatchScreenEvidence(result,identity.w,identity.h))
+            return UM14_ConnectionSame(identity)
+    }
+    return false
+}
+
+UM14_BestRestart(normal, alternate) {
+    a := normal.status = "success" && normal.score > .64
+    b := alternate.status = "success" && alternate.score > .64
+    return b && (!a || alternate.score > normal.score) ? "Restart2.png" : a ? "Restart.png" : ""
+}
+
+UM14_ResultButton(identity, image) {
+    region := UM14_Region(0,Round(identity.h*.5),identity.w,
+        identity.h-Round(identity.h*.5),identity.w,identity.h)
+    button := UM14_MenuImagePair(identity,region,image,.65)
+    if (!IsObject(button) && (image = "Restart.png" || image = "Restart2.png"))
+        button := UM14_MenuImagePair(identity,region,image = "Restart.png" ? "Restart2.png" : "Restart.png",.65)
+    return button
+}
+
+UM14_ClickResult(image, label) {
+    UM14_RequireReadyFocus()
+    identity := UM14_ConnectionSnapshot()
+    if !IsObject(identity)
+        UM14_LobbyFailure(label " on the match-results screen")
+    button := UM14_ResultButton(identity,image)
+    if !IsObject(button)
+        UM14_LobbyFailure(label " on the match-results screen")
+    Loop 2 {
+        if !UM14_HeldClick(identity,button.x,button.y,label,150,
+            () => UM14_ButtonStillAt(button,UM14_ResultButton(identity,image)))
+            UM14_LobbyFailure(label " after moving the pointer")
+        Sleep(500)
+        fresh := UM14_ResultButton(identity,image)
+        if !UM14_ConnectionSame(identity)
+            UM14_Fatal(label " input ended because Roblox changed or lost focus.")
+        if !IsObject(fresh) {
+            Sleep(250)
+            fresh := UM14_ResultButton(identity,image)
+            if !UM14_ConnectionSame(identity)
+                UM14_Fatal(label " input ended because Roblox changed or lost focus.")
+            if !IsObject(fresh)
+                return true
+        }
+        if !UM14_ButtonStillAt(button,fresh)
+            break
+    }
+    UM14_LobbyFailure(label " transition after clicking")
 }
 
 UM14_ApplyGameInput() {
@@ -63,18 +165,35 @@ UM14_SearchText(value, minimumDelay := 60, direct := false) {
 }
 
 UM14_ClearPlacementPanel() {
-    global LastOpenedTowerID, unfocusX, unfocusY
+    global LastOpenedTowerID, unfocusX, unfocusY, CancelPlacementKey
     UM14_RequireReadyFocus()
     ; A visible DJ/previous-tower menu is not evidence that the NEXT tower was
     ; placed. Establish a closed-menu boundary before selecting the next slot.
     if (waitForTowerUI(&oldV2, &oldV1, 120)) {
-        Loop 2 {
+        identity := UM14_ConnectionSnapshot()
+        if !IsObject(identity)
+            UM14_Fatal("Roblox changed before clearing the previous tower menu.")
+        Loop 3 {
             UM14_RequireReadyFocus()
-            Click(ScaleX(unfocusX), ScaleY(unfocusY))
-            Sleep(120)
-            if (!waitForTowerUI(&oldV2, &oldV1, 120)) {
-                LastOpenedTowerID := ""
-                return
+            if (A_Index = 1) {
+                SendEvent("{" CancelPlacementKey "}")
+            } else {
+                UM14_HeldClick(identity, ScaleX(unfocusX), ScaleY(unfocusY), "Close tower menu")
+            }
+            Sleep(180)
+            clear := 0
+            start := A_TickCount
+            Loop {
+                if !UM14_ConnectionSame(identity)
+                    UM14_Fatal("Roblox changed while clearing the previous tower menu.")
+                clear := waitForTowerUI(,,120) ? 0 : clear+1
+                if (clear >= 2) {
+                    LastOpenedTowerID := ""
+                    return
+                }
+                if (A_TickCount-start >= 750)
+                    break
+                Sleep(90)
             }
         }
         UM14_Fatal("The previous tower menu would not close. No new placement was accepted; send the Output log and a screenshot.")
@@ -341,7 +460,7 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
         UM14_RequireReadyFocus()
         if (!UM14_ConnectionSame(identity))
             return false
-        Click(navigation.x,navigation.y)
+        UM14_HeldClick(identity,navigation.x,navigation.y,"Survival tab")
         Sleep(300)
     }
     region := UM14_Region(cardX,Round(identity.h*.10),
@@ -361,7 +480,7 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
             UM14_RequireReadyFocus()
             if (!UM14_ConnectionSame(identity))
                 return false
-            Click(card.x,card.y)
+            UM14_HeldClick(identity,card.x,card.y,"Difficulty selection")
             LogToConsole("Mode selection: currentMenu=1 confirmed=1")
             return true
         }
@@ -375,14 +494,32 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
                 || !IsObject(UM14_MenuWordPair(identity,survivalTab,"Survival")))))
             return false
         UM14_RequireReadyFocus()
-        MouseMove(Round(identity.w*.5),Round(identity.h*.5))
+        x := Round(identity.w*.5), y := Round(identity.h*.5)
+        UM14_RequireInputPoint(identity,x,y,"Difficulty list")
+        MouseMove(x,y)
         UM14_RequireReadyFocus()
         if (!UM14_ConnectionSame(identity))
             return false
-        SendEvent("{WheelDown}")
-        Sleep(200)
+        notches := A_Index = 1 ? UM14_InitialScrollNotches() : 2
+        UM14_RequireInputPoint(identity,x,y,"Difficulty list")
+        SendEvent("{WheelDown " notches "}")
+        Sleep(240)
     }
     return false
+}
+
+UM14_InitialScrollNotches() {
+    global SettingsFile
+    if (IniRead(SettingsFile,"Options","ScrollDownForMap","0") != "1")
+        return 2
+    ; Small steps keep Fallen/Frost and Hardcore in view; allow slower clients
+    ; more time to settle without skipping whole rows in one wheel burst.
+    delay := IniRead(SettingsFile,"Options","ScrollDelay","0")
+    if RegExMatch(delay,"^\d{1,4}$")
+        Sleep(Min(Integer(delay),5000))
+    UM14_RequireReadyFocus()
+    notches := IniRead(SettingsFile,"Options","ScrollDownAmount","5")
+    return RegExMatch(notches,"^\d{1,2}$") ? Max(2,Min(4,Integer(notches))) : 2
 }
 
 UM14_SquadCard(name) {

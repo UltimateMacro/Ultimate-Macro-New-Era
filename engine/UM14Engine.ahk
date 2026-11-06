@@ -29,6 +29,8 @@ SetTitleMatchMode(1)
 #Include lib\UM14WindowOCR.ahk
 #Include lib\UM14Loadout.ahk
 #Include lib\UM14Timescale.ahk
+#Include lib\UM14Click.ahk
+#Include lib\UM14InputPoint.ahk
 UM14_Init()
 
 if (RegExMatch(A_ScriptDir, "i)\.(zip|rar)")) {
@@ -2192,7 +2194,6 @@ StartStrategy(*) {
     MainGui.Hide()
     RunningStrategy := true
     UM14_BeginStats()
-    UM14_BeginMatchRun()
     UM14_State("running")
 
     time := FormatTime(, "HH:mm:ss")
@@ -4227,7 +4228,6 @@ RunStrategy(stratFile := "", skipRestart := false) {
     IniWrite(CurrentRunCount, StateFile, "State", "CurrentRunCount")
 
     KillSubmacros()
-    startWatchdog()
 
     LastOpenedTowerID := ""
 
@@ -4261,22 +4261,7 @@ RunStrategy(stratFile := "", skipRestart := false) {
         if (!skipRestart) {
             CheckRestart()
         } else {
-            getRobloxPos(,,&w,&h)
-            closeRoblox_ := true
-            if (GetRobloxHWND()){
-                ActivateRoblox()
-                Loop 5 {
-                    if UM14_LobbyOrInventory() {
-                        closeRoblox_ := false
-                        break
-                    } 
-                    Sleep 400
-                }
-            }
-            
-            if (closeRoblox_) {
-                RunRoblox()
-            }
+            UM14_WaitSetupLobby()
 
             if (AutoEquip) {
                 EquipTowers(RequiredTowers)
@@ -4285,23 +4270,7 @@ RunStrategy(stratFile := "", skipRestart := false) {
         }
     } else {
 
-        closeRoblox_ := true
-        if (GetRobloxHWND()){
-            ActivateRoblox()
-            Loop 5 {
-                getRobloxPos(,,&w,&h)
-                if UM14_LobbyOrInventory() {
-                    closeRoblox_ := false
-                    break
-                } 
-                Sleep 400
-            }
-        }
-        
-        if (closeRoblox_) {
-            RunRoblox()
-        }
-
+        UM14_WaitSetupLobby(12000,true)
         EquipTowers(RequiredTowers)
 
         JoinGame()
@@ -4329,7 +4298,9 @@ RunStrategy(stratFile := "", skipRestart := false) {
 PlayStrategy() {
     global canUseAbility, MultiplayerEnabled, StateFile
 
+    UM14_BeginMatchRun()
     IniWrite(A_TickCount, StateFile, "State", "TimeWhenStartedPlaying")
+    startWatchdog()
     SetTimer(UseAbilities, 750)
     if (MultiplayerEnabled) {
         SetTimer(checkCondition, 15000)
@@ -5056,37 +5027,8 @@ EquipTowers(towers) {
 CheckRestart() {
     global IsRestarting, difficulty, UseRestartBtn, UsePlayAgainBtn, CollectPlaytimeRewards, requiredTowers, AutoEquip
 
-    shouldCollectRewards := (CollectPlaytimeRewards = "1" || CollectPlaytimeRewards = 1) && CheckDailyRewardTime() && (AutorunStartTime = 0 || (A_TickCount - AutorunStartTime) > 300000)
     shouldEquip := !Number(IniRead(StateFile, "State", "Equipped", 0))
-
-    if (shouldCollectRewards && !MultiplayerEnabled) {
-        LogToConsole("Navigating to lobby to check playtime rewards...", true, false)
-        IsRestarting := false
-
-        closeRoblox_ := true
-        if (GetRobloxHWND()){
-            ActivateRoblox()
-            getRobloxPos(,,&w,&h)
-            Loop 5 {
-                if UM14_LobbyOrInventory() {
-                    closeRoblox_ := false
-                    break
-                } 
-                Sleep 400
-            }
-        }
-        
-        if (closeRoblox_) {
-            RunRoblox()
-        }
-
-        if (shouldEquip && AutoEquip) {
-            EquipTowers(requiredTowers)
-        }
-        JoinGame()
-        return
-    }
-
+    ; Playtime rewards are checked by JoinGame when we actually reach the lobby.
     KillSubmacros()
 
     if GetRobloxHWND() {
@@ -5117,11 +5059,9 @@ CheckRestart() {
                     Sleep 5000
                 }
 
-                res := resRestart.score > resRestart2.score ? resRestart : resRestart2
-                IsRestarting := true
-                LogToConsole("Restarting the match")
+                image := UM14_BestRestart(resRestart, resRestart2)
                 if !(MultiplayerEnabled) { 
-                    Click(res.x, res.y)
+                    UM14_ClickResult(image, "Restart")
                 } else {
                     totalPartyMembers := 0
                     Loop Parse, PartyMembers, "," {
@@ -5133,16 +5073,17 @@ CheckRestart() {
                     }
                     if totalPartyMembers = 2 || totalPartyMembers = 3 {
                         if PlayerRole != "Host" {
-                            Click(res.x, res.y)
+                            UM14_ClickResult(image, "Restart")
                         }
                     } else {
                         if PlayerRole = "Host" {
-                            Click(res.x, res.y)
+                            UM14_ClickResult(image, "Restart")
                         }
                     }
                 }
+                IsRestarting := true
+                LogToConsole("Restarting the match")
                 Sleep(150)
-                startWatchdog()
                 return
             }
         }
@@ -5156,91 +5097,33 @@ CheckRestart() {
                     Sleep 5000
                 }
                 if (!MultiplayerEnabled || PlayerRole = "Host") {
-                    Click(resReplay.x, resReplay.y)
+                    UM14_ClickResult("PlayAgain.png", "Play Again")
                 }
                 Sleep(150)
                 WaitForLobbyLoad()
-                startWatchdog()
                 return
             }
         }
     }
 
-    startWatchdog()
     IsRestarting := false
-    RunRoblox()
+    UM14_WaitSetupLobby(12000,true)
     if (shouldEquip && AutoEquip) {
         EquipTowers(requiredTowers)
     }
     JoinGame()
 }
 
-RunRoblox(doReload := true) {
-    global VipLink, UseVipServer
-    PlaceID := "3260590327"
-
-    Loop {
-        if ((UseVipServer = "1" || UseVipServer = 1) && VipLink != "") {
-            if InStr(VipLink, "privateServerLinkCode=") {
-                RegExMatch(VipLink, "privateServerLinkCode=([a-fA-F0-9]+)", &f)
-                DeepLink := "roblox://placeID=" PlaceID "&linkcode=" f[1]
-            } else if InStr(VipLink, "share?code=") {
-                RegExMatch(VipLink, "code=([a-fA-F0-9]+)", &f)
-                DeepLink := "roblox://navigation/share_links?code=" f[1] "&type=Server"
-            } else {
-                DeepLink := "roblox://placeID=" PlaceID
-            }
-        } else {
-            DeepLink := "roblox://placeID=" PlaceID
-        }
-
-        UM14_RequestGameLaunch()
-        robloxopened := false
-        Loop 60 {
-            if WinExist("Roblox ahk_exe RobloxPlayerBeta.exe") {
-                robloxopened := true
-                break
-            }
-            if WinExist("Roblox ahk_exe ApplicationFrameHost.exe") {
-                robloxopened := true
-                break
-            }
-                
-            Sleep(1000)
-        }
-        if (!robloxopened && doReload) {
-            LogToConsole("Roblox not started after 1 minute! Reloading...", true)
-            SafeReload()
-        } else if (!robloxopened && !doReload) {
-            return false
-        }
-        ActivateRoblox()
-        ; The owning launcher has already restored or docked the new client.
-        ; Minimize/maximize here would immediately undo that approved layout.
-
-        SetTimer(CheckPopups, 5000)
-
-        startTime := A_TickCount
-        getRobloxPos(,,&w,&h)
-        Loop {
-            ActivateRoblox()
-
-            if (A_TickCount - startTime > 60000) {
-                if (doReload) {
-                    SafeReload()
-                } else {
-                    return false
-                }
-            }
-
-            if IsObject(UM14_LobbyPlay()) {
-                break
-            } 
-            Sleep(1500)
-        }
-        SendEvent("{sc00F}")
-        return true 
-    }
+RunRoblox() {
+    ; Only a confirmed disconnect or match end can request replacement.
+    ; Disable the watchdog across the full handoff.
+    KillSubmacros()
+    UM14_RequestGameLaunch()
+    ActivateRoblox()
+    SetTimer(CheckPopups, 5000)
+    try UM14_WaitSetupLobby(60000)
+    finally SetTimer(CheckPopups, 0)
+    return true
 }
 
 ExitFullScreen() {
@@ -5254,30 +5137,6 @@ ExitFullScreen() {
         WinRestore "Roblox"
         ActivateRoblox()
     }
-}
-
-CloseRoblox() {
-	
-	if (hwnd := GetRobloxHWND())
-	{
-        getRobloxPos(,,,&windowHeight)
-		GetRobloxClientPos(hwnd)
-		if (windowHeight >= 500) 
-		{
-			ActivateRoblox()
-			PrevKeyDelay := A_KeyDelay
-			SetKeyDelay 500
-			send "{" SC_Esc "}{" SC_L "}{" SC_Enter "}"
-			SetKeyDelay PrevKeyDelay
-		}
-		try WinClose "Roblox"
-		Sleep 500
-		try WinClose "Roblox"
-		Sleep 4500 
-	}
-	
-	for p in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_Process WHERE Name LIKE '%Roblox%' OR CommandLine LIKE '%ROBLOXCORPORATION%'")
-		ProcessClose p.ProcessID
 }
 
 resetCharacter() {
@@ -5334,7 +5193,7 @@ WaitForLobbyLoad() {
     if (difficulty != "Pizza Party" && difficulty != "Badlands II" && difficulty != "Polluted Wasteland II") {
         Sleep(6000)
         Loop {
-            if (A_TickCount - startTime > 60000)
+            if (A_TickCount - startTime > 60000+UM14_ExtraUiWait())
                 UM14_LobbyFailure("map vote / Ready button")
             getRobloxPos(,,&w,&h)
             res := AdvancedImageSearch("Resources/Ready.png", Round(w * 0.25), Round(h * 0.66), Round(w * 0.5), Round(h * 0.34), 0.6, 1.7)
@@ -5359,8 +5218,18 @@ JoinGame() {
     global SendCurrenciesEnabled, WebhookEnabled, difficulty, CollectPlaytimeRewards, PlayerRole, MultiplayerEnabled
     startTime := A_TickCount
     lastPlayRetry := 0
+    extraWait := UM14_ExtraUiWait()
+    delay := IniRead(SettingsFile, "Options", "PreJoinDelay", "0")
+    if (RegExMatch(delay,"^\d{1,2}$") && Integer(delay) > 0) {
+        LogToConsole("Waiting " Min(60,Integer(delay)) " seconds before joining.")
+        Loop Min(60,Integer(delay)) {
+            UM14_RequireReadyFocus()
+            Sleep(1000)
+        }
+        startTime := A_TickCount
+    }
     Loop {
-        if (A_TickCount - startTime > 80000)
+        if (A_TickCount - startTime > 80000+extraWait)
             UM14_LobbyFailure("Play button")
         getRobloxPos(,, &w, &h)
 
@@ -5410,7 +5279,7 @@ JoinGame() {
         getRobloxPos(,, &w, &h)
         Loop {
             getRobloxPos(,, &w, &h)
-            if (A_TickCount - startTime >= 60000)
+            if (A_TickCount - startTime >= 60000+extraWait)
                 UM14_LobbyFailure("mode selection")
             if (A_TickCount - startTime > 20000 && A_TickCount-lastPlayRetry >= 2000) {
                 lastPlayRetry := A_TickCount
@@ -5431,34 +5300,35 @@ JoinGame() {
         Sleep(300)
     }
 
-    currentMenuSeen := false
-    currentModeSelected := UM14_SelectCurrentMode(difficulty,&currentMenuSeen)
-    if (!currentModeSelected && !currentMenuSeen)
-        UM14_ModeScroll()
     startTime := A_TickCount
+    currentMode := !modeImg
+    lastModeRead := -2000
     Loop {
-        if (currentModeSelected)
-            break
         getRobloxPos(,, &w, &h)
-        if (A_TickCount - startTime >= 60000)
+        if (A_TickCount - startTime >= 60000+extraWait)
             UM14_LobbyFailure("difficulty selection: " difficulty)
+        if (currentMode && A_TickCount-lastModeRead >= 2000) {
+            lastModeRead := A_TickCount
+            currentMenuSeen := false
+            if UM14_SelectCurrentMode(difficulty,&currentMenuSeen)
+                break
+            if currentMenuSeen
+                UM14_LobbyFailure("the " difficulty " card in the verified Survival list")
+        }
         if (A_TickCount - startTime > 20000 && A_TickCount-lastPlayRetry >= 2000) {
             lastPlayRetry := A_TickCount
             res := AdvancedImageSearch("Resources\Play.png", Round(w*.25), Round(h*.66), Round(w*.5), Round(h*.34))
             if (res.status == "success" && res.score > 0.7) {
                 Click(res.x, res.y)
                 Sleep(1000)
-                    currentMenuSeen := false
-                    if (UM14_SelectCurrentMode(difficulty, &currentMenuSeen))
-                        break
-                    if (!currentMenuSeen)
-                        UM14_ModeScroll()
             }
         }
-        res := AdvancedImageSearch("Resources/" difficulty ".png", 0, 0, w, h)
-        if (res.status = "success" && res.score >= 0.7) {
-            Click(res.x, res.y)
-            break 
+        if !currentMode {
+            res := AdvancedImageSearch("Resources/" difficulty ".png", 0, 0, w, h)
+            if (res.status = "success" && res.score >= 0.7) {
+                Click(res.x, res.y)
+                break
+            }
         }
         Sleep(100)
     }
@@ -5477,7 +5347,7 @@ JoinGame() {
     startTime := A_TickCount
     Loop {
         getRobloxPos(,, &w, &h)
-        if (A_TickCount - startTime > 40000)
+        if (A_TickCount - startTime > 40000+extraWait)
             UM14_LobbyFailure("squad selection")
         image := squad = "Solo" ? "Solo" : StrLower(squad)
         res := squad = "Solo"
@@ -5758,7 +5628,7 @@ AcceptInvite(x, y) {
 }
 
 checkCondition(*) {
-    global LeaveCondition, PartyMembers
+    global LeaveCondition, PartyMembers, RunningStrategy
 
     totalPartyMembers := 0
     Loop Parse, PartyMembers, "," {
@@ -5769,8 +5639,9 @@ checkCondition(*) {
         totalPartyMembers++
     }
 
-    ActivateRoblox()
-    getRobloxPos(&rX, &rY, &w,&h)
+    identity := UM14_ConnectionSnapshot()
+    if (!RunningStrategy || !IsObject(identity))
+        return
 
     img := ""
     if (LeaveCondition = "All") {
@@ -5788,19 +5659,16 @@ checkCondition(*) {
     if (img = "")
         return
 
-    result := AdvancedImageSearch(img ".png", Round(w*0.5), rY, w, h)
-    if (result.score > 0.8) {
-        if (LeaveCondition = "All") {
-            LogToConsole("All players are gone! Closing roblox and reloading the macro...", true)
-            CloseRoblox()
-            SafeReload()
+    ; A missed full-party template is not evidence that somebody left.
+    maxRemaining := LeaveCondition = "All" ? 1 : Min(3,totalPartyMembers)
+    Loop maxRemaining {
+        region := UM14_Region(Round(identity.w*.5),0,identity.w-Round(identity.w*.5),
+            Round(identity.h*.45),identity.w,identity.h)
+        if IsObject(UM14_MenuImagePair(identity,region,"(" A_Index ".png",.85)) {
+            SetTimer(checkCondition, 0)
+            UM14_LobbyFailure("the configured party size after a confirmed member-count change")
         }
-    } else {
-        LogToConsole("Someone has just left! Closing roblox and reloading the macro...", true)
-        CloseRoblox()
-        SafeReload()
     }
-
 }
 
 SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
@@ -6230,7 +6098,7 @@ UM14_RequireReadyFocus() {
 waitReady() {
     global readyX, readyY, MultiplayerEnabled, PlayerRole
     start := A_TickCount
-    wt := (MultiplayerEnabled && PlayerRole = "Member") ? 90000 : 40000
+    wt := ((MultiplayerEnabled && PlayerRole = "Member") ? 90000 : 40000) + UM14_ExtraUiWait()
     KillSubmacros()
     Loop {
         UM14_RequireReadyFocus()
@@ -6246,7 +6114,6 @@ waitReady() {
         }
         Sleep(50)
     }
-    startWatchdog()
 }
 
 activateTimescale() {
@@ -6367,9 +6234,7 @@ SpawnTower(X, Y, slotNumber, towerID) {
         placeAttempts++
 
         if (A_TickCount - startTime > 300000) {
-            LogToConsole("Tower placement timed out (5+ minutes). Reloading the macro...")
-            SafeReload()
-            return
+            UM14_LobbyFailure("placement of tower " towerID " after 5 minutes")
         }
 
         ActivateRoblox()
@@ -6685,23 +6550,14 @@ UpgradeTower(towerID, skipOpen := false, totalUpgrades := 1, path := 0, pathLeve
 }
 
 isDisconnected() {
-    UM14_CheckDisconnection()
+    if UM14_VerifiedDisconnect()
+        TryReconnect()
 }
 
 TryReconnect() {
-    attempts := 0
-    Loop {
-        attempts++
-        LogToConsole("Reconnecting... Attempt " attempts ".", true, false)
-        KillSubmacros()
-        if (RunRoblox(false) == false) {
-            continue
-        } else {
-            LogToConsole("Reconnect successful after " attempts " attempts!", true, false)
-            startWatchdog()
-            break
-        }
-    }
+    LogToConsole("Confirmed disconnect. Trying one reconnect.", true, false)
+    RunRoblox()
+    UM14_Fatal("Roblox returned to the lobby after a disconnect. The old match stopped; press Start for a new run.")
 }
 
 CheckPopups(*) {
@@ -8221,7 +8077,7 @@ waitForTowerUI(&resV2 := "", &resV1 := "", timeout := 0) {
         X1_v2 := Round(w * 0.02)
         Y1_v2 := Round(h/2.5)
         W_v2 := Round(w * 0.22) - X1_v2
-        H_v2 := Round(w * 0.95) - Y1_v2
+        H_v2 := Round(h * 0.95) - Y1_v2
 
         resV2 := AdvancedImageSearch("Resources\TowerUI\Variant2.png", X1_v2, Y1_v2, W_v2, H_v2, ,,0.05)
 

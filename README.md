@@ -71,7 +71,7 @@ The macro includes resolution-aware detection, but the recommended display and i
 1. Download from **[ultmacro.xyz/download](https://ultmacro.xyz/download)** or the official **[GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases)** page. Avoid reuploads from strangers.
 2. Extract the entire ZIP to a normal folder, such as **Documents\Ultimate Macro**. Keep its `app`, `ui`, `engine`, and `assets` folders alongside `Main.ahk`.
 3. Install **[AutoHotkey v2](https://www.autohotkey.com/v2/)** if needed. The macro's source requires version 2, not version 1.
-4. Open the extracted folder and run **`Main.ahk`**. If Windows asks which program to use, select your AutoHotkey v2 installation.
+4. Open the extracted folder and double-click **`Main.ahk`** (shown as **Main** if extensions are hidden). If Windows asks which program to use, select your AutoHotkey v2 installation.
 
 **Important:** don't run `Main.ahk` from inside the ZIP. The macro needs its bundled files to work.
 
@@ -84,6 +84,25 @@ The macro includes resolution-aware detection, but the recommended display and i
 5. Start playback using the macro's controls. Watch the first run to make sure map selection, tower placement, and upgrades behave as expected.
 
 Strategies are not universal. They can depend on a particular game update, loadout, difficulty, and map. A strategy failing does not automatically mean your installation is broken.
+
+### Strategy details and timing
+
+- Select any imported or bundled strategy on **Run** to see its map, difficulty,
+  required slots, and modifiers. These describe the file; they do not certify
+  that the strategy works with the current TDS update.
+- In a required loadout, name a Golden tower explicitly, for example
+  `Golden Minigunner` or `G Minigunner`. Auto Equip only equips towers you own.
+- Open **Settings → Advanced settings → Gameplay tuning** for key delay,
+  upgrade delay, extra time to recognize the game UI, or a pause before joining
+  a match. These settings apply when starting the next run.
+- For Suicide Gem / Jugg + Crook EXP, use maximized Roblox with docking off
+  until the docked placement has been verified. Watch the first run.
+
+### Link Discord remote controls
+
+Open **Discord → Link this PC** and follow the pairing prompts. The official
+relay does not need port forwarding or a Windows Firewall exception. Do not
+share pairing codes, invite links, or bot tokens in support chats.
 
 ### Join a private server (1.4.0.39 and later)
 

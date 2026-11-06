@@ -2,6 +2,7 @@
 #Warn All, Off
 #NoTrayIcon
 #Include engine\lib\UM14Timescale.ahk
+#Include engine\lib\UM14Click.ahk
 
 global TimescaleActive := false, TimeScaleMultiplier := 1, UseTimeScale := true
 global TimeScaleMode := "2x", difficulty := "Hardcore", MultiplayerEnabled := false
@@ -22,6 +23,9 @@ UM14_Fatal(message) {
 }
 MouseMove(x,y,*) {
     global pointer := [x,y]
+}
+MouseGetPos(&x,&y) {
+    x := pointer[1], y := pointer[2]
 }
 Click(option := "") {
     global closed
@@ -49,10 +53,11 @@ AdvancedImageSearch(template,*) {
             stable := false
     }
     found := !closed && ((scene = "empty" && InStr(template,"GetMore"))
-        || (scene = "confirm" && checks >= 3 && InStr(template,"confirm"))
+        || ((scene = "confirm" || scene = "moved") && checks >= 3 && InStr(template,"confirm"))
         || (scene = "stuck" && InStr(template,"confirm"))
         || (cancelVisible && scene != "missing" && InStr(template,"cancel")))
-    return found ? {status:"success",score:weak ? .6 : .95,x:InStr(template,"cancel") ? 700 : 600,y:500}
+    return found ? {status:"success",score:weak ? .6 : .95,
+        x:InStr(template,"cancel") ? 700 : scene = "moved" && checks > 3 ? 640 : 600,y:500}
         : {status:"error",score:0}
 }
 Need(ok,message) {
@@ -81,6 +86,10 @@ try {
         "Only a dismissed confirmation counts a ticket and enables speed")
     Need(clicks.Length = 2 && clicks[2][1] = 600, "The exact confirmation is clicked once")
     Need(keys[keys.Length-1] = "{sc02B}" && keys[keys.Length] = "#", "Navigation is closed after confirmation")
+
+    Reset("moved")
+    Need(!UM14_ActivateTimescale() && clicks.Length = 2 && clicks[2][1] = 700
+        && !state.Has("Timescale"), "Moving the confirmation between observation and hover sends only Cancel")
     Reset("confirm"), TimeScaleMode := "1.5x"
     Need(UM14_ActivateTimescale() && TimeScaleMultiplier = 1.5, "The 1.5x choice retains its own speed")
 

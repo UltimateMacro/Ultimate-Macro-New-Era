@@ -4,7 +4,8 @@ class Store {
     static root := "", strategies := "", recordings := "", settingsPath := "", formPath := ""
     static settings := Map(), recovered := false, skipped := [], recordForm := ""
     static DEFAULT_RUNTIME := Map("cancelKey", "Q", "raiseDeadKey", "V", "chainKey", "C", "caravanKey", "J", "beatKey", "B"
-        , "hologramKey", "K", "repositionKey", "L", "enforcerVanKey", "N", "upgradeDelayMs", 200)
+        , "hologramKey", "K", "repositionKey", "L", "enforcerVanKey", "N", "upgradeDelayMs", 200
+        , "keyDelayMs", 20, "extraUiWait", 0, "preJoinDelay", 0)
     static DEFAULT_BINDINGS := Map("align", "Ctrl+T", "place", "F", "upgrade", "Ctrl+U", "sell", "Ctrl+X"
         , "clone", "Ctrl+Alt+H", "targets", "Ctrl+``", "dj", "Ctrl+D")
     static BINDING_ORDER := ["align", "place", "upgrade", "sell", "clone", "targets", "dj"]
@@ -211,6 +212,12 @@ class Store {
         if !IsInteger(d) || d < 20 || d > 999
             throw ValueError("Invalid upgrade delay")
         out["upgradeDelayMs"] := Integer(d)
+        for key, range in Map("keyDelayMs", [20, 250], "extraUiWait", [0, 90], "preJoinDelay", [0, 60]) {
+            value := v.Has(key) ? v[key] : Store.DEFAULT_RUNTIME[key]
+            if !IsInteger(value) || value < range[1] || value > range[2]
+                throw ValueError("Invalid gameplay delay")
+            out[key] := Integer(value)
+        }
         return out
     }
 

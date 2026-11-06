@@ -7,7 +7,7 @@
 ; installation's bundled interpreter are ever terminated.
 
 class Engine {
-    static BUILD := "1.3.3a-um14.26-ahk2"
+    static BUILD := "1.3.3a-um14.26-ahk3"
     static MAPS := ["Abandoned City", "Area 52", "Autumn Falling", "Badlands II", "Black Spot Exchange", "Candy Valley", "Cataclysm", "Chess Board"
         , "Construction Crazy", "Coral Deep", "Crossroads", "Crystal Cave", "Cyber City", "Dead Ahead", "Derelict Outpost", "Deserted Village", "Dusty Bridges"
         , "Enchanted Forest", "Farm Lands", "Forest Camp", "Forgetten Docks", "Four Seasons", "Fungi Island", "Grass Isle", "Happy Home of Robloxia", "Harbor", "Honey Valley"
@@ -74,6 +74,7 @@ class Engine {
             , ["Options", "AutoCloseChat", "1"], ["Options", "DebugConsole", "1"], ["Options", "PotatoMode", "0"], ["Options", "AlwaysOnTop", "1"]
             , ["Options", "LegacyMode", "0"], ["Options", "UseVipServer", "0"], ["Options", "VipLink", ""], ["Options", "TimeScaleMode", "OFF"]
             , ["Options", "UpgradeDelay", "200"], ["Options", "DefaultMouseSpeed", "2"], ["Options", "MouseDelay", "10"], ["Options", "KeyDelay", "20"]
+            , ["Options", "ExtraUiWait", "0"], ["Options", "PreJoinDelay", "0"]
             , ["Hotkeys", "Chain", "C"], ["Hotkeys", "Beat", "B"], ["Hotkeys", "Caravan", "J"], ["Hotkeys", "RaiseTheDead", "V"], ["Hotkeys", "Hologram", "K"]
             , ["Hotkeys", "Repo", "L"], ["Hotkeys", "CancelPlacement", "Q"], ["Hotkeys", "UpgradeTower", "E"], ["Hotkeys", "UpgradeBottom", "Z"]
             , ["RecordingHotkeys", "PlaceTowerKey", "f"], ["RecordingHotkeys", "UpgradeTowerKey", "^u"], ["RecordingHotkeys", "AlignCameraKey", "^t"]
@@ -103,6 +104,9 @@ class Engine {
             , "beatKey", "Beat", "hologramKey", "Hologram", "repositionKey", "Repo")
             s["Hotkeys." dst] := rt[src]
         s["Options.UpgradeDelay"] := String(rt["upgradeDelayMs"])
+        s["Options.KeyDelay"] := String(rt.Has("keyDelayMs") ? rt["keyDelayMs"] : 20)
+        s["Options.ExtraUiWait"] := String(rt.Has("extraUiWait") ? rt["extraUiWait"] : 0)
+        s["Options.PreJoinDelay"] := String(rt.Has("preJoinDelay") ? rt["preJoinDelay"] : 0)
         b := opts.bindings
         for src, dst in Map("align", "AlignCameraKey", "place", "PlaceTowerKey", "upgrade", "UpgradeTowerKey", "sell", "SellTowerKey"
             , "clone", "HoloKey", "targets", "ChangeTargetsKey", "dj", "ChangeDJTrackKey")

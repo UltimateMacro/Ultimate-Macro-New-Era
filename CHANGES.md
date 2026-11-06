@@ -1,5 +1,17 @@
 # AutoHotkey edition
 
+## 1.4.0.40
+
+- Wait for a recognizable TDS screen rather than relaunching a healthy client
+  during setup. A closed client stops playback without a relaunch loop.
+- Recheck Restart, Play Again, and Timescale confirmation before clicking.
+  The tower panel must clear before the next placement.
+- Retry recognition of the current Survival menu and scroll it in small steps.
+- Show modifiers alongside the strategy's map, mode, and required loadout.
+- Add optional extra UI wait, pre-join delay, and key delay in Advanced settings.
+- Let file and update dialogs appear without the main window pinned above them.
+- Signed update installation still requires approval and does not restart the macro.
+
 ## 1.4.0.39
 
 - Reuse the scaled backdrop and drawing buffers so hovering, switching tabs

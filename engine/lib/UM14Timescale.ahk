@@ -10,14 +10,12 @@ UM14_TimescaleButton(identity, name) {
 }
 
 UM14_TimescaleClick(identity, button) {
-    UM14_RequireReadyFocus()
-    UM14_RequireInputPoint(identity, button.x, button.y)
-    MouseMove(button.x, button.y, 0)
-    Sleep(180)
-    UM14_RequireInputPoint(identity, button.x, button.y)
-    Click("Down")
-    try Sleep(100)
-    finally Click("Up")
+    UM14_HeldClick(identity, button.x, button.y, "Timescale", 160)
+}
+
+UM14_TimescaleConfirmAt(identity, button) {
+    return !IsObject(UM14_TimescaleButton(identity,"GetMore"))
+        && UM14_ButtonStillAt(button, UM14_TimescaleButton(identity,"confirm"))
 }
 
 UM14_TimescaleFallback(identity, reason) {
@@ -91,10 +89,12 @@ UM14_ActivateTimescale() {
         }
         if !IsObject(confirm)
             return UM14_TimescaleFallback(identity, "confirmation was not found")
-        UM14_TimescaleClick(identity, confirm)
+        if !UM14_HeldClick(identity,confirm.x,confirm.y,"Timescale confirmation",180,
+            () => UM14_TimescaleConfirmAt(identity,confirm))
+            return UM14_TimescaleFallback(identity,"confirmation changed before the click")
         dismissed := 0
-        Loop 8 {
-            Sleep(150)
+        Loop 12 {
+            Sleep(200)
             if IsObject(UM14_TimescaleButton(identity, "GetMore"))
                 return UM14_TimescaleFallback(identity, "no tickets")
             dismissed := IsObject(UM14_TimescaleButton(identity, "confirm")) ? 0 : dismissed+1

@@ -19,11 +19,15 @@ SetWorkingDir(A_ScriptDir "\..\")
 
 #Include "%A_LineFile%\..\..\lib\UM14Guard.ahk"
 #Include "%A_LineFile%\..\..\lib\UM14Capture.ahk"
+#Include "%A_LineFile%\..\..\lib\UM14Geometry.ahk"
+#Include "%A_LineFile%\..\..\lib\UM14WindowOCR.ahk"
+#Include "%A_LineFile%\..\..\lib\UM14Connection.ahk"
 UM14_GuardInit()
 Opt := UM14.data "\Options"
 SettingsFile := Opt "\Settings.tds"
 global BotSettings := Opt "\Discord-Bot-Settings.ini"
 global StateFile := UM14.data "\state.ini"
+global RunningStrategy := true
 
 global WebhookLink := IniRead(SettingsFile, "Webhook", "Link", "")
 tWebhook := IniRead(SettingsFile, "Webhook", "Enabled", 0)
@@ -92,46 +96,23 @@ Loop {
         if (WebhookEnabled && WebhookLink != "") {
             SendScreenshot(,"Roblox has crashed!")
         }
-        RestartMain()
-        return
+        UM14_GuardGameUnavailable()
+        ExitApp()
     }
 
     if !WinExist("Roblox ahk_exe RobloxPlayerBeta.exe") && !WinExist("Roblox ahk_exe ApplicationFrameHost.exe") {
         if (WebhookEnabled && WebhookLink != "") {
             SendScreenshot(,"Roblox is not running!")
         }
-        RestartMain()
-        return
+        UM14_GuardGameUnavailable()
+        ExitApp()
     }
 
-    if (Mod(loopCounter, 3) == 0) {
-        CoordMode("Pixel", "Screen")
-        
-        sw := A_ScreenWidth
-        sh := A_ScreenHeight
-        
-        try {
-            if ImageSearch(&FoundX, &FoundY, 0, 0, sw, sh, "*26 Resources/Disconnected.png") {
-                CoordMode("Pixel", "Client")
-                if (WebhookEnabled && WebhookLink != "") {
-                    SendScreenshot(, "Disconnected, rejoining")
-                }
-                RestartMain()
-                ExitApp()
-            } else if ImageSearch(&FoundX, &FoundY, 0, 0, sw, sh, "*26 Resources/disconnected2.png") {
-                CoordMode("Pixel", "Client")
-                if (WebhookEnabled && WebhookLink != "") {
-                    SendScreenshot(, "Disconnected, rejoining")
-                }
-                RestartMain()
-                ExitApp()
-            }
-        } catch Error as err {
-            CoordMode("Pixel", "Client")
-        }
-        
-        CoordMode("Pixel", "Client")
-    }
+    ; A desktop-wide match can see a screenshot. Require the actual game
+    ; dialog, and have the relaunched engine verify it again before recovery.
+    if (Mod(loopCounter, 3) = 0 && UM14_VerifiedDisconnect()
+        && IniRead(StateFile,"State","Running","0") = "1")
+        RestartMain()
 
 
     if (Mod(loopCounter, 2) == 0) {
