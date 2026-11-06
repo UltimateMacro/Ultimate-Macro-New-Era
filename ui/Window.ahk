@@ -205,6 +205,7 @@ class MW {
         c.spacing := 9, c.margins[4] := 10
         c.Add(MW.Caption("Tower slots, in the order saved by this strategy"))
         MW.strategyLoadout := c.Add(Label("", "subtitle", true))
+        MW.strategyModifiers := c.Add(MW.Caption(""))
         MW.slotsCard := root.Add(Card("STRATEGY SLOTS"))
         MW.slotsCard.visible := s["rotation"]
         MW.slotNames := [], MW.slotLoadouts := [], MW.slotButtons := []
@@ -528,6 +529,17 @@ class MW {
         MW.runtimeInputs["enforcerVanKey"].tip := "The AutoHotkey engine uses the game's own SWAT Van control; this key is not sent."
         t.Add(Label(_T("Upgrade delay", "Upgrade Delay") " (ms)", "subtitle"))
         MW.upgradeDelay := t.Add(Spin(s["runtime"]["upgradeDelayMs"], 20, 999, "", (*) => MW.SaveRuntime()))
+        MW.runtimeDelays := Map()
+        for delaySpec in [["keyDelayMs", "Key delay (ms)", 20, 250],
+            ["extraUiWait", "Extra game UI wait (seconds)", 0, 90],
+            ["preJoinDelay", "Delay before joining a match (seconds)", 0, 60]] {
+            r := HBox(, 6)
+            r.Add(Label(_T(delaySpec[2]), "subtitle", true), 1)
+            control := Spin(s["runtime"][delaySpec[1]], delaySpec[3], delaySpec[4], "", (*) => MW.SaveRuntime())
+            control.fixedW := 110
+            MW.runtimeDelays[delaySpec[1]] := r.Add(control)
+            t.Add(r)
+        }
         rc := MW.moreFrame.Add(Card("RECORDING SHORTCUTS"))
         MW.bindingInputs := Map()
         for action in Store.BINDING_ORDER {
@@ -844,9 +856,13 @@ class MW {
             MW.updateStatus.SetText("Checking the signed AHK update channel…")
         try {
             MW.UpdateControls()
+            if manual
+                MW.gui.Opt("-AlwaysOnTop")
             status := UpdateHelper.Check(manual)
         } finally {
             MW.updateReviewing := false
+            if (manual && !MW.closing)
+                MW.gui.Opt((Store.settings["topmost"] ? "+" : "-") "AlwaysOnTop")
             MW.UpdateControls()
         }
         if (manual || Store.settings["updatePrompts"]) {
@@ -921,10 +937,12 @@ class MW {
             MW.strategyTitle.SetText(MW.current.title)
             MW.strategyMeta.SetText(MW.current.map " · " MW.current.mode " · " MW.current.steps " steps")
             MW.strategyLoadout.SetText(MW.RequiredLoadout(MW.current))
+            MW.strategyModifiers.SetText(Strategy.ModifierSummary(MW.current))
         } else {
             MW.strategyTitle.SetText(_T("Choose a strategy"))
             MW.strategyMeta.SetText("")
             MW.strategyLoadout.SetText(_T("Choose a strategy to see its required towers."))
+            MW.strategyModifiers.SetText("")
         }
         MW.compactStrategies.Choose(i)
         MW.RefreshSlots(i)
@@ -1010,8 +1028,20 @@ class MW {
         return MW.reasonCache[key] := reason
     }
 
+    static SelectFile(options, start, title, filter) {
+        MW.gui.Opt("-AlwaysOnTop")
+        try {
+            MW.gui.Opt("+OwnDialogs")
+            return FileSelect(options, start, title, filter)
+        } finally {
+            MW.gui.Opt("-OwnDialogs")
+            if !MW.closing
+                MW.gui.Opt((Store.settings["topmost"] ? "+" : "-") "AlwaysOnTop")
+        }
+    }
+
     static ImportStrategy() {
-        path := FileSelect(1, , _T("Add strategy file"), "Strategies (*.strat)")
+        path := MW.SelectFile(1, "", _T("Add strategy file"), "Strategies (*.strat)")
         if (path = "")
             return
         try {
@@ -1093,6 +1123,8 @@ class MW {
         for k, f in MW.runtimeInputs
             v[k] := StrUpper(f.Text)
         v["upgradeDelayMs"] := MW.upgradeDelay.Value
+        for k, f in MW.runtimeDelays
+            v[k] := f.Value
         try {
             v := Store.ValidRuntime(v)
             Store.ValidBindings(Store.settings["recordBindings"], v)
@@ -1162,7 +1194,7 @@ class MW {
             MW.Log("Undock Roblox and stop the macro before importing settings.")
             return
         }
-        path := FileSelect(1, , _T("Import older settings"), "Macro profiles (*.ump; *.json; *.tds)")
+        path := MW.SelectFile(1, "", _T("Import older settings"), "Macro profiles (*.ump; *.json; *.tds)")
         if (path = "")
             return
         try result := LegacyProfile.Read(path, Store.settings)
@@ -1189,6 +1221,8 @@ class MW {
         MW.topmost.SetChecked(c["topmost"]), MW.rotate.SetChecked(c["rotation"]), MW.equip.SetChecked(c["autoEquip"])
         MW.repeat.SetChecked(c["repeat"]), MW.rotationAmount.Value := c["rotationAmount"], MW.rotationUnit.ChooseValue(c["rotationUnit"])
         MW.upgradeDelay.Value := c["runtime"]["upgradeDelayMs"]
+        for k, f in MW.runtimeDelays
+            f.Value := c["runtime"][k]
         for k, f in MW.runtimeInputs
             f.Text := c["runtime"][k]
         for k, f in MW.bindingInputs
@@ -1202,7 +1236,7 @@ class MW {
     }
 
     static ExportLogic() {
-        path := FileSelect("S16", "UltimateMacro-" App.VERSION "-Logic.zip", _T("Export logic source"), "ZIP archive (*.zip)")
+        path := MW.SelectFile("S16", "UltimateMacro-" App.VERSION "-Logic.zip", _T("Export logic source"), "ZIP archive (*.zip)")
         if (path = "")
             return
         if !RegExMatch(path, "i)\.zip$")
@@ -1266,7 +1300,7 @@ class MW {
     }
 
     static ExportOutput() {
-        path := FileSelect("S16", "UltimateMacro-" App.VERSION "-Output.txt", _T("Export Output log"), "Text files (*.txt)")
+        path := MW.SelectFile("S16", "UltimateMacro-" App.VERSION "-Output.txt", _T("Export Output log"), "Text files (*.txt)")
         if (path = "")
             return
         text := "Ultimate Macro " App.VERSION " — Output`n`n"

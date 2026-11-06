@@ -271,6 +271,19 @@ class Strategy {
         return names
     }
 
+    static ModifierSummary(item) {
+        try {
+            names := Strategy.ModifierNames(Strategy.Setting(item.parsed, "modifiers"))
+            if !names.Length
+                return _T("Modifiers: none")
+            text := _T("Modifiers") ": "
+            for i, name in names
+                text .= (i > 1 ? ", " : "") name
+            return text
+        } catch
+            return _T("Modifiers: invalid strategy metadata")
+    }
+
     ; hybrid_client.strategy_requirement: what the AutoHotkey engine can play.
     static Requirement(item) {
         parsed := item.parsed

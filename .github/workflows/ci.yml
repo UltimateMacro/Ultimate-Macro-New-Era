@@ -19,7 +19,7 @@ jobs:
         shell: pwsh
         run: |
           $ahk = (Resolve-Path engine/submacros/AutoHotkey64.exe).Path
-          foreach ($script in @('Main.ahk', 'engine/UM14Engine.ahk')) {
+          foreach ($script in @('Main.ahk', 'engine/UM14Engine.ahk', 'engine/submacros/um14_guard.ahk')) {
             $p = Start-Process $ahk -ArgumentList '/ErrorStdOut', '/validate', $script -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput stdout.txt -RedirectStandardError stderr.txt
             if ($p.ExitCode -ne 0) { Get-Content stdout.txt, stderr.txt; throw "$script failed validation" }
             Write-Host "$script OK"

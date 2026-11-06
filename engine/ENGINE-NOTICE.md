@@ -93,3 +93,12 @@ Native files copied verbatim from the 1.3.3a release: `lib/ImageSearch/*.dll`,
   selections, using a separate point for the narrow docked layout.
 - A17: recognizes exact short modifier names used by 1.3.3.10 and the legacy
   spelling `Commited`.
+
+## AHK 1.4.0.40 (build `1.3.3a-um14.26-ahk3`)
+
+- A19: guard waits for a real match, scopes disconnect recognition to the
+  selected game, and stops if Roblox closes instead of relaunching the engine.
+- A20: wait for the lobby on initial setup; allow automatic game replacement
+  only for a confirmed disconnect or a verified result when rejoining.
+- A21: hold and verify high-impact clicks, wait for the previous tower panel
+  to close, and add bounded UI wait and pre-join tuning.

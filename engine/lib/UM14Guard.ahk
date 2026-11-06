@@ -61,3 +61,12 @@ UM14_GuardSingleMatch(result) {
     IniWrite(UM14.session "|" UM14.guardRun "|" result, StateFile, "State", "MatchCompletion")
     return true
 }
+
+UM14_GuardGameUnavailable() {
+    global UM14, StateFile
+    if (UM14_LauncherAlive() && UM14_SessionCurrent()
+        && RegExMatch(UM14.guardRun, "^[a-f0-9]{32}$")
+        && IniRead(StateFile, "State", "MatchRun", "") = UM14.guardRun
+        && IniRead(StateFile, "State", "Running", "0") = "1")
+        IniWrite(UM14.session "|" UM14.guardRun, StateFile, "State", "GameUnavailable")
+}

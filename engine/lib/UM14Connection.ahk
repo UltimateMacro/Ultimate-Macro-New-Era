@@ -343,7 +343,7 @@ UM14_DisconnectPair(first, second) {
     return elapsed >= 400 && elapsed <= 6000 && Abs(first.x-second.x) <= tolerance && Abs(first.y-second.y) <= tolerance
 }
 
-UM14_CheckDisconnection() {
+UM14_VerifiedDisconnect() {
     try {
         first := UM14_DisconnectObservation()
         if (!IsObject(first))
@@ -355,40 +355,5 @@ UM14_CheckDisconnection() {
     } catch {
         return false
     }
-    ; No observation can be reused after Stop, focus/identity/size/session loss.
-    ; Recovery failures/cancellation must propagate to the engine's normal
-    ; error boundary, never be swallowed and let old gameplay continue.
-    TryReconnect()
     return true
-}
-
-UM14_InventoryImageFact(value) {
-    fact := {status:"missing",score:"unknown"}
-    if (!IsObject(value))
-        return fact
-    fact.status := "unknown"
-    if (value.HasOwnProp("status") && Type(value.status) = "String") {
-        switch value.status {
-            case "success":
-                fact.status := "success"
-            case "error", "failed":
-                fact.status := "failed"
-        }
-    }
-    if (value.HasOwnProp("score") && (Type(value.score) = "Integer" || Type(value.score) = "Float") && value.score >= 0 && value.score <= 1)
-        fact.score := Round(value.score,3)
-    return fact
-}
-
-UM14_InventoryMenuFailure(attempts, items, close, itemsOcrTried := false) {
-    itemsFact := UM14_InventoryImageFact(items), closeFact := UM14_InventoryImageFact(close)
-    attempts := Type(attempts) = "Integer" && attempts >= 1 && attempts <= 3 ? attempts : 0
-    context := 0
-    try context := IsObject(UM14_ConnectionSnapshot()) ? 1 : 0
-    ; Only bounded attempt/score/status data and fresh game-context boolean.
-    LogToConsole("Inventory menu failed: attempts=" attempts
-        " itemsStatus=" itemsFact.status " itemsScore=" itemsFact.score
-        " closeStatus=" closeFact.status " closeScore=" closeFact.score
-        " context=" context " capture=" (itemsOcrTried ? "items-label-attempted" : "not-requested"))
-    UM14_Fatal("Inventory menu could not be confirmed after the bounded attempts. Open the inventory and retry. No later tower or match was started.")
 }

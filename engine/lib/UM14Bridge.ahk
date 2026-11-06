@@ -112,7 +112,7 @@ UM14_Emit(verb, args := "") {
 
 UM14_Hello(resumed) {
     global UM14
-    UM14_Emit("hello", Map("pid", DllCall("GetCurrentProcessId"), "hwnd", A_ScriptHwnd, "build", "1.3.3a-um14.26-ahk2", "resumed", resumed ? 1 : 0))
+    UM14_Emit("hello", Map("pid", DllCall("GetCurrentProcessId"), "hwnd", A_ScriptHwnd, "build", "1.3.3a-um14.26-ahk3", "resumed", resumed ? 1 : 0))
     UM14.helloSent := true
     early := UM14.early
     UM14.early := []
@@ -506,6 +506,7 @@ UM14_BeginMatchRun() {
     Loop 16
         UM14.matchRun .= Format("{:02x}", NumGet(token, A_Index - 1, "UChar"))
     try IniDelete(StateFile, "State", "MatchCompletion")
+    try IniDelete(StateFile, "State", "GameUnavailable")
     IniWrite(UM14.matchRun, StateFile, "State", "MatchRun")
     SetTimer(UM14_CheckMatchCompletion, 500)
 }
@@ -514,8 +515,13 @@ UM14_CheckMatchCompletion() {
     global UM14, StateFile, SettingsFile, RunningStrategy
     if (!IsSet(RunningStrategy) || !IsSet(StateFile) || !IsSet(SettingsFile)
         || !RunningStrategy || !UM14.HasOwnProp("matchRun") || UM14.matchRun == ""
-        || !UM14_LauncherAlive() || !UM14_SessionCurrent()
-        || IniRead(SettingsFile, "Options", "Repeat", "1") != "0")
+        || !UM14_LauncherAlive() || !UM14_SessionCurrent())
+        return
+    if (IniRead(StateFile,"State","GameUnavailable","") == (UM14.session "|" UM14.matchRun)) {
+        try IniDelete(StateFile,"State","GameUnavailable")
+        UM14_Fatal("The Roblox window closed or crashed. The launcher stayed open; rejoin TDS and press Start.")
+    }
+    if (IniRead(SettingsFile, "Options", "Repeat", "1") != "0")
         return
     result := UM14_ValidMatchCompletion(IniRead(StateFile, "State", "MatchCompletion", ""), UM14.session, UM14.matchRun)
     if (result == "")
