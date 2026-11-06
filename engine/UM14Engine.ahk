@@ -5901,13 +5901,15 @@ UM14_ChooseOverrideMap(identity, name) {
             UM14_LobbyFailure("the filtered map query for " name "; no map card was clicked")
         }
 
-        receipt := UM14_MapOverrideReceipt(identity,name,field,titleVerified,beforeGreen)
+        receipt := UM14_MapOverrideReceipt(identity,name,field,titleVerified,beforeGreen,4100,&evidence)
         if (receipt = "changed") {
             LogToConsole("Confirmed map override to " name ".")
             return true
         }
-        if (receipt != "rotation" || pass != 1)
+        if (receipt != "rotation" || pass != 1) {
+            LogToConsole("Map receipt check: " (receipt ? receipt : evidence))
             UM14_LobbyFailure("confirmation that TDS changed the map to " name "; no gameplay input was started")
+        }
         LogToConsole(name " is in the current rotation; retrying the verified veto once.")
         region := UM14_StartupRegion(identity,.54,.55,.88,.93)
         veto := UM14_MapVoteHeading(identity) ? UM14_MenuImagePair(identity,region,"Veto.png",.70) : false

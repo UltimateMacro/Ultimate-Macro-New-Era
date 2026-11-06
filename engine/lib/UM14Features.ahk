@@ -1070,14 +1070,20 @@ UM14_MapHoveredCardName(identity, card, field, name) {
     ; The tile shows its map title only on hover. Match that title in a crop
     ; below the pointer, independently of the text in the search field.
     UM14_RejectMapPurchase(identity)
-    half := Max(38,Min(98,Round(field.height*3.8)))
-    top := card.y+4
-    region := UM14_Region(Max(0,card.x-half),top,half*2,Max(32,Round(field.height*3.2)),identity.w,identity.h)
-    if !IsObject(region)
-        return false
-    text := UM14_ConnectionOCR(identity,region,3.0)
-    return Type(text) = "String" && StrLen(text) <= 160
-        && Trim(RegExReplace(text,"\s+"," ")) = name && UM14_ConnectionSame(identity)
+    half := Max(58,Min(122,Round(field.height*4.6)))
+    height := Max(34,Round(field.height*3.3))
+    ; The hover caption can shift vertically as the tile scales. Inspect
+    ; both halves of this same tile, never the query field or its neighbors.
+    for top in [card.y+2, Max(field.y+30,card.y-Round(height*.6))] {
+        region := UM14_Region(Max(0,card.x-half),top,half*2,height,identity.w,identity.h)
+        if !IsObject(region)
+            continue
+        text := UM14_ConnectionOCR(identity,region,3.2)
+        if (Type(text) = "String" && StrLen(text) <= 160
+            && Trim(RegExReplace(text,"\s+"," ")) = name && UM14_ConnectionSame(identity))
+            return true
+    }
+    return false
 }
 
 UM14_MapReceiptGreen(identity) {
@@ -1098,20 +1104,25 @@ UM14_MapReceiptGreen(identity) {
     }
 }
 
-UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, beforeGreen := false, timeout := 3300) {
+UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, beforeGreen := false, timeout := 4100, &evidence := "") {
     region := UM14_StartupRegion(identity,.23,.21,.77,.34)
     if !IsObject(region)
         return ""
     start := A_TickCount
+    observedGreen := false, observedText := false
     while (A_TickCount-start < timeout && UM14_ConnectionSame(identity)) {
-        appeared := titleVerified && beforeGreen = 0 && IsObject(field) && UM14_MapReceiptGreen(identity) = 1
+        green := UM14_MapReceiptGreen(identity) = 1
+        observedGreen := observedGreen || green
+        appeared := titleVerified && beforeGreen = 0 && IsObject(field) && green
         text := UM14_ConnectionOCR(identity,region,3.3)
+        observedText := observedText || UM14_ConnectionOCRStage() = "success"
         if UM14_MapPurchaseText(text)
             UM14_RejectMapPurchase(identity)
-        if UM14_MapCaption(text,"Map changed to " name)
-            return "changed"
-        if UM14_MapCaption(text,"Map changed to")
-            return "different"
+        if (Type(text) = "String" && StrLen(text) <= 512) {
+            line := Trim(RegExReplace(StrLower(text),"[^a-z0-9']+"," "))
+            if RegExMatch(line,"\bmap changed to (.+)$",&receipt)
+                return receipt[1] = Trim(RegExReplace(StrLower(name),"[^a-z0-9']+"," ")) ? "changed" : "different"
+        }
         if (UM14_MapCaption(text,"already in the current rotation") || UM14_MapCaption(text,"already in current rotation"))
             return "rotation"
         ; Accept the visual toast only after pressing the exact hovered tile,
@@ -1121,6 +1132,8 @@ UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, 
             return "changed"
         Sleep(140)
     }
+    evidence := "hover-title=" (titleVerified ? "exact" : "unverified")
+        . " toast-before=" beforeGreen " toast-after=" Integer(observedGreen) " readable=" Integer(observedText)
     return ""
 }
 

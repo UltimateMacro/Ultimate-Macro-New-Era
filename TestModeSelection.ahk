@@ -92,6 +92,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
         return "All Maps Easy Normal Hard Insane"
     if (scenario = "other-map-receipt" && region.x = 230)
         return "Map changed to Cataclysm"
+    if (scenario = "map-receipt-suffix" && region.x = 230)
+        return "Map changed to Dead Ahead Annex"
     if (scenario = "map-vip" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen") {
         if (region.x = 290 && scenario != "map-wrong-screen")
             return "Vote For A Map"
@@ -154,6 +156,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
             {text:"HARDCORE",raw:"Hardcore",x:225,y:362,w:60,h:12}]
     if (scenario = "locked-voidcore" && region.x = 520 && region.w = 310)
         return "Complete Hardcore to unlock."
+    if (scenario = "all-mode-captions" && (region.x = 210 || region.x = 520))
+        return [{text:StrUpper(activeDifficulty),raw:activeDifficulty,x:region.x+30,y:230,w:65,h:15}]
     return []
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
@@ -289,6 +293,8 @@ try {
     Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,1,160) = "", "Existing green pixels cannot confirm a click")
     scenario := "other-map-receipt"
     Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "different", "A receipt for a different map overrides the green cue")
+    scenario := "map-receipt-suffix"
+    Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "different", "A longer map name sharing the requested prefix is still different")
     scenario := "ready-nongreen"
     Need(!UM14_ReadyButton(UM14_ConnectionSnapshot()) && !clicks.Length,
         "Plain Ready text without its button background is not clickable")
@@ -324,6 +330,14 @@ try {
     catch Error as err
         stopped := InStr(err.Message,"Voidcore is locked")
     Need(stopped && !clicks.Length, "A locked Voidcore card explains the requirement without clicking")
+    scenario := "all-mode-captions"
+    for mode in ["Easy", "Casual", "Intermediate", "Molten", "Fallen", "Frost", "Hardcore", "Voidcore"] {
+        activeDifficulty := mode
+        card := UM14_ModeCard(UM14_ConnectionSnapshot(),{x:210,y:70,w:620,h:588},mode)
+        Need(IsObject(card) && card.x = (mode = "Voidcore" ? 583 : 273), "Select the exact title for " mode)
+        other := mode = "Casual" ? "Easy" : "Casual"
+        Need(!UM14_ModeCard(UM14_ConnectionSnapshot(),{x:210,y:70,w:620,h:588},other), "Do not alias " mode " to " other)
+    }
     clicks := [], wheelCount := 0, probes := 0
     scenario := "sidebar", activeDifficulty := "Fallen"
     Need(UM14_SelectCurrentMode("Fallen", &seen) && seen, "Fallen selected after seeing sidebar icon")
