@@ -6,6 +6,7 @@
 - Update both bundled interpreter copies to the unmodified official AutoHotkey 2.0.31 build.
 - Clear the verified TDS Update Log and handle Login Rewards in compact and full-size windows. If TDS leaves the reward open, close it via the verified Login icon without assuming it was granted.
 - Restore automatic Roblox chat closure during setup, with an on/off switch in Settings → Gameplay. Closed chat is left alone.
+- Show when recording is waiting for camera alignment and explain when placement needs a shortcut rather than a normal click.
 - Confirm the Survival section and distinguish Easy from Casual by its label, not its artwork. Keep Hardcore selection on its own card.
 - Find the current VIP map picker by its visible search label. Check the typed map and the game's confirmation before continuing. Stop at Roblox purchase prompts.
 - Verify the in-match Ready control before clicking and recheck that it cleared before proceeding.

@@ -1448,7 +1448,7 @@ class MW {
 
         r := MW.rec
         req := MW.RecordingRequirement()
-        MW.recordGuidance.SetText(req != "" ? _T(req) : _T("Loadout valid. Check the map and mode below."))
+        MW.recordGuidance.SetText(req != "" ? _T(req) : MW.RecordingGuide(r))
         MW.recordStart.tip := req != "" ? req : "Start recording in the selected Roblox window."
         canStart := enabled && !r.draft && req = ""
         MW.recordStart.Enable(canStart)
@@ -1794,6 +1794,19 @@ class MW {
     ; ======================================================================
     ; recording (engine recorder + launcher draft, recording.py semantics)
     ; ======================================================================
+    static RecordingGuide(r) {
+        keys := Store.settings["recordBindings"]
+        if !r.active
+            return r.draft ? _T("Review your recording before saving it.")
+                : _T("Check the map and mode. To capture normal clicks and keys, turn on Record as you play before starting.")
+        if !r.aligned
+            return _T("Waiting for camera alignment. Join the match, then press") " " keys["align"] "."
+        if r.passive
+            return _T("Capturing supported inputs in Roblox. Play normally, then press F2 or F8 to keep the draft.")
+        return _T("Shortcut recording: use Ctrl+1–5 to choose a slot, then press") " " keys["place"] " "
+            . _T("to record a placement. Regular clicks alone do not record placements.")
+    }
+
     static RecordingMetadata() {
         mods := []
         for k, c in MW.recordModifiers
@@ -1958,7 +1971,10 @@ class MW {
         }
         if (MW.rec.text = "") {
             MW.rec.draft := false
-            MW.Log("Recording stopped with no actions; there is nothing to save.")
+            keys := Store.settings["recordBindings"]
+            MW.Log(!MW.rec.aligned ? "Nothing was recorded. Join the match, then align with " keys["align"] " before taking actions."
+                : !MW.rec.passive ? "Nothing was recorded. Use " keys["place"] " for placements, or enable Record as you play before starting."
+                : "No supported inputs were captured. After aligning, play in the same Roblox window without resizing it.")
         } else {
             MW.rec.draft := true, MW.rec.phase := "Draft"
             if MW.rec.pendingSave {

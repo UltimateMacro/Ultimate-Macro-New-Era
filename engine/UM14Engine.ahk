@@ -5919,12 +5919,16 @@ UM14_ChooseOverrideMap(identity, name) {
             LogToConsole("Confirmed map override to " name ".")
             return true
         }
-        if (receipt = "" && titleVerified && UM14_MapPickerClosed(identity,field,name)) {
+        picker := "not-checked"
+        ; The exact query was already checked again immediately before the
+        ; press. With no receipt, movement to read the board does not vote.
+        if (receipt = "" && UM14_MapPickerClosed(identity,field,name,&picker)) {
+            UM14_RejectMapPurchase(identity)
             LogToConsole("The requested tile was pressed and the picker closed. Checking the active vote board before voting.")
             return false
         }
         if (receipt != "rotation" || pass != 1) {
-            LogToConsole("Map receipt check: " (receipt ? receipt : evidence))
+            LogToConsole("Map receipt check: " (receipt ? receipt : evidence " picker=" picker))
             UM14_LobbyFailure("confirmation that TDS changed the map to " name "; no gameplay input was started")
         }
         LogToConsole(name " is in the current rotation; retrying the verified veto once.")

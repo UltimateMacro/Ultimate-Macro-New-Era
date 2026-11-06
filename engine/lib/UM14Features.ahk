@@ -1193,16 +1193,27 @@ UM14_MapOverrideSearch(identity, &evidence := "") {
     return UM14_ButtonStillAt(first,second,5) ? second : false
 }
 
-UM14_MapPickerClosed(identity, field, name) {
+UM14_MapPickerClosed(identity, field, name, &evidence := "") {
     ; Missing OCR alone doesn't mean it closed. The map-vote overlay must
     ; still be readable, with neither its query nor its filter tabs present.
     Loop 2 {
-        if (!UM14_ConnectionSame(identity) || !UM14_MapVoteHeading(identity)
-            || UM14_MapQueryAt(identity,field,name) || UM14_ConnectionOCRStage() != "success"
-            || UM14_MapSearchTabs(identity,field) || UM14_ConnectionOCRStage() != "success")
+        evidence := "vote overlay"
+        if !UM14_ConnectionSame(identity)
+            return false
+        if !UM14_MapVoteHeading(identity) {
+            readyRegion := UM14_StartupRegion(identity,.32,.57,.68,.93)
+            if !IsObject(UM14_MenuImagePair(identity,readyRegion,"Ready.png",.78))
+                return false
+        }
+        evidence := "search query"
+        if (UM14_MapQueryAt(identity,field,name) || UM14_ConnectionOCRStage() != "success")
+            return false
+        evidence := "filter tabs"
+        if (UM14_MapSearchTabs(identity,field) || UM14_ConnectionOCRStage() != "success")
             return false
         Sleep(100)
     }
+    evidence := "closed"
     return UM14_ConnectionSame(identity)
 }
 
@@ -1382,21 +1393,25 @@ UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, 
         return ""
     start := A_TickCount
     observedGreen := false, observedText := false, lastOther := "", sightings := 0, scaleIndex := 0
+    firstCapture := "not-run"
     while (A_TickCount-start < timeout && UM14_ConnectionSame(identity)) {
         ; Keep the older relative crop as a fallback for compact clients.
         alternate := IsObject(field) && Mod(scaleIndex,2)
         region := alternate ? UM14_MapReceiptBand(identity,false) : anchored
         toast := alternate ? UM14_MapReceiptBand(identity,false,true) : mask
-        ; Capture the short green line first. The selected-window path works
+        ; Probe the legacy color before OCR can wait on a graphics frame.
+        green := UM14_MapReceiptGreen(identity,field) = 1
+        observedGreen := observedGreen || green
+        ; Capture the short green line. The selected-window path works
         ; even when a click-through overlay would invalidate desktop pixels.
         toastFactor := Min(3.3,2500/Max(toast.w,toast.h))
         masked := UM14_ConnectionOCR(identity,toast,toastFactor,"",true,true)
+        if (scaleIndex = 0)
+            firstCapture := UM14_ConnectionOCRStage() " " UM14_ConnectionOCROverlap()
         if (UM14_MapReceiptText(masked,toast,toastFactor,name,&maskedOther) = "changed") {
             UM14_RejectMapPurchase(identity)
             return "changed"
         }
-        green := UM14_MapReceiptGreen(identity,field) = 1
-        observedGreen := observedGreen || green
         appeared := titleVerified && beforeGreen = 0 && IsObject(field) && green
         factor := Min(Mod(scaleIndex++,2) ? 2.8 : 3.5,2500/Max(region.w,region.h))
         recognized := UM14_ConnectionOCR(identity,region,factor,"",true)
@@ -1423,7 +1438,7 @@ UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, 
     }
     evidence := "hover-title=" (titleVerified ? "exact" : "unverified")
         . " toast-before=" beforeGreen " toast-after=" Integer(observedGreen) " readable=" Integer(observedText)
-        . " anchored-y=" anchored.y "–" anchored.y+anchored.h
+        . " anchored-y=" anchored.y "–" anchored.y+anchored.h " first-capture=" firstCapture
     return ""
 }
 
