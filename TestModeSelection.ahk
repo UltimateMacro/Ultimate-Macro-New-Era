@@ -115,8 +115,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
     if (scenario = "easy" && region.x = 210 && region.w = 620)
         return [{text:"EASY",raw:"Easy",x:300,y:200,w:40,h:14},
             {text:"CASUAL",raw:"Casual",x:500,y:200,w:50,h:14}]
-    if (scenario = "map-prompt" && region.x = 270 && region.w = 460)
-        return "Override Map"
+    if (scenario = "map-prompt" && region.x = 190 && region.w = 620)
+        return "E Override Map"
     if (scenario = "squad-compact") {
         if (region.y = 15)
             return "Choose a Squad...`nSelect the maximum..."
