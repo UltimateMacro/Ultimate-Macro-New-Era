@@ -20,6 +20,12 @@ MouseMove(x, y, *) {
 MouseGetPos(&x, &y) {
     x := hover[1], y := hover[2]
 }
+Sleep(duration) {
+    ; Only the deadline fixtures need wall-clock pacing. Frame-based cases
+    ; supply their next observation immediately without waiting on a game.
+    if (SubStr(scenario,1,8) = "startup-" || scenario = "green-receipt")
+        DllCall("Sleep","UInt",duration)
+}
 SendEvent(keys) {
     global wheelCount
     if (keys != "{WheelDown 2}")
@@ -40,6 +46,7 @@ UM14_Fatal(message) {
 UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenario = "hardcore" ? {w:1078, h:995,key:"game"}
     : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" || scenario = "compact-reward" ? {w:800, h:600,key:"game"} : {w:1000, h:700,key:"game"}
 UM14_ConnectionSame(*) => scenario != "moved"
+UM14_ConnectionCaptureClear(*) => scenario != "moved"
 UM14_ConnectionOCRStage() => scenario = "ready-uncertain" ? "overlap" : "success"
 UM14_LobbyOrInventory() => ((scenario = "startup-stack" || scenario = "startup-retry") && clicks.Length = 2)
     || (scenario = "startup-dismiss" && clicks.Length = 3 && A_TickCount-dismissedAt >= 700)
@@ -49,6 +56,10 @@ PixelGetColor(x,y) => (scenario = "startup-stack" && !clicks.Length)
         || scenario = "startup-stuck" || scenario = "startup-dismiss" || scenario = "reward-hidden-on-hover") ? 0x22CA38
         : (scenario = "map-vip" || scenario = "map-template" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen")
             ? (x = hover[1] ? 0xFFFFFF : 0x203329) : 0xB8A9A7
+PixelSearch(&px,&py,x,y,right,bottom,color,*) {
+    px := x+1, py := y+1
+    return (scenario = "green-receipt" || scenario = "other-map-receipt") && color = 0x00EC00
+}
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, factor := 0, *) {
@@ -79,6 +90,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
         return "Buy Robux and item VIP"
     if (scenario = "map-template" && region.y > 220 && region.y < 240)
         return "All Maps Easy Normal Hard Insane"
+    if (scenario = "other-map-receipt" && region.x = 230)
+        return "Map changed to Cataclysm"
     if (scenario = "map-vip" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen") {
         if (region.x = 290 && scenario != "map-wrong-screen")
             return "Vote For A Map"
@@ -263,6 +276,12 @@ try {
         "A verified filtered card is followed by the matching TDS receipt")
     Need(UM14_MapHoveredCardName(ctx,card,field,"Dead Ahead") && !UM14_MapHoveredCardName(ctx,card,field,"Dead Ahead Annex"),
         "The hovered tile's title confirms only the exact selected map")
+    scenario := "green-receipt"
+    Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "changed",
+        "Fresh green receipt can confirm a verified tile with the search closed")
+    Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,1,160) = "", "Existing green pixels cannot confirm a click")
+    scenario := "other-map-receipt"
+    Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "different", "A receipt for a different map overrides the green cue")
     scenario := "ready-nongreen"
     Need(!UM14_ReadyButton(UM14_ConnectionSnapshot()) && !clicks.Length,
         "Plain Ready text without its button background is not clickable")

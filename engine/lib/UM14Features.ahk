@@ -1056,22 +1056,56 @@ UM14_MapHoveredCardName(identity, card, field, name) {
         && Trim(RegExReplace(text,"\s+"," ")) = name && UM14_ConnectionSame(identity)
 }
 
-UM14_MapOverrideReceipt(identity, name) {
-    region := UM14_StartupRegion(identity,.23,.16,.77,.39)
+UM14_MapReceiptGreen(identity) {
+    region := UM14_StartupRegion(identity,.25,.23,.75,.315)
+    if (!IsObject(region) || !UM14_ConnectionSame(identity) || !UM14_ConnectionCaptureClear(identity,region))
+        return -1 ; capture unavailable is not a verified clear baseline
+    try {
+        ; The legacy map-change toast is bright pure green. Find more than
+        ; one glyph-sized patch in its narrow central band, not green terrain.
+        right := region.x+region.w-1, bottom := region.y+region.h-1
+        if !PixelSearch(&x,&y,region.x,region.y,right,bottom,0x00EC00,12)
+            return false
+        if (x+8 > right || !PixelSearch(&x2,&y2,x+8,Max(region.y,y-5),right,Min(bottom,y+8),0x00EC00,12))
+            return false
+        return UM14_ConnectionSame(identity) && UM14_ConnectionCaptureClear(identity,region) ? 1 : -1
+    } catch {
+        return -1
+    }
+}
+
+UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, beforeGreen := false, timeout := 3300) {
+    region := UM14_StartupRegion(identity,.23,.21,.77,.34)
     if !IsObject(region)
         return ""
     start := A_TickCount
-    while (A_TickCount-start < 2600 && UM14_ConnectionSame(identity)) {
-        text := UM14_ConnectionOCR(identity,region,3.0)
+    while (A_TickCount-start < timeout && UM14_ConnectionSame(identity)) {
+        appeared := titleVerified && beforeGreen = 0 && IsObject(field) && UM14_MapReceiptGreen(identity) = 1
+        text := UM14_ConnectionOCR(identity,region,3.3)
         if UM14_MapPurchaseText(text)
             UM14_RejectMapPurchase(identity)
         if UM14_MapCaption(text,"Map changed to " name)
             return "changed"
-        if UM14_MapCaption(text,"already in the current rotation")
+        if UM14_MapCaption(text,"Map changed to")
+            return "different"
+        if (UM14_MapCaption(text,"already in the current rotation") || UM14_MapCaption(text,"already in current rotation"))
             return "rotation"
+        ; Accept the visual toast only after pressing the exact hovered tile,
+        ; and only if the search UI is no longer present in a readable frame.
+        if (appeared && !UM14_MapQueryAt(identity,field,name)
+            && UM14_ConnectionOCRStage() = "success" && UM14_ConnectionSame(identity))
+            return "changed"
         Sleep(140)
     }
     return ""
+}
+
+UM14_MapCardBeforePress(identity, card, field, name, &evidence, &titleVerified, &beforeGreen) {
+    titleVerified := UM14_MapHoveredCardName(identity,card,field,name)
+    if (!titleVerified && !UM14_ButtonStillAt(card,UM14_MapOverrideCard(identity,field,name,&evidence,1)))
+        return false
+    beforeGreen := UM14_MapReceiptGreen(identity)
+    return UM14_ConnectionSame(identity)
 }
 
 UM14_ReadyButton(identity, &readable := false) {

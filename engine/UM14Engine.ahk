@@ -5894,14 +5894,14 @@ UM14_ChooseOverrideMap(identity, name) {
         card := UM14_MapOverrideCard(identity,field,name,&evidence)
         ; Two exact query reads located the candidate. Recheck against the
         ; title shown on hover or a fresh query before any card press.
+        titleVerified := false, beforeGreen := false
         if (!IsObject(card) || !UM14_HeldClick(identity,card.x,card.y,"Filtered map card",160,
-            () => UM14_MapHoveredCardName(identity,card,field,name)
-                || UM14_ButtonStillAt(card,UM14_MapOverrideCard(identity,field,name,&evidence,1)))) {
+            () => UM14_MapCardBeforePress(identity,card,field,name,&evidence,&titleVerified,&beforeGreen))) {
             LogToConsole("Map query check: " evidence)
             UM14_LobbyFailure("the filtered map query for " name "; no map card was clicked")
         }
 
-        receipt := UM14_MapOverrideReceipt(identity,name)
+        receipt := UM14_MapOverrideReceipt(identity,name,field,titleVerified,beforeGreen)
         if (receipt = "changed") {
             LogToConsole("Confirmed map override to " name ".")
             return true
