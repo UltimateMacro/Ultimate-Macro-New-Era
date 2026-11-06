@@ -112,9 +112,14 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
     if ((scenario = "ready-green" || scenario = "ready-uncertain" || scenario = "ready-nongreen")
         && region.x = 290 && !clicks.Length)
         return [{text:"READY",raw:"READY",x:480,y:145,w:40,h:16}]
-    if (scenario = "easy" && region.x = 210 && region.w = 620)
-        return [{text:"EASY",raw:"Easy",x:300,y:200,w:40,h:14},
-            {text:"CASUAL",raw:"Casual",x:500,y:200,w:50,h:14}]
+    if (scenario = "easy" && region.x = 210 && region.w = 620) {
+        captions := []
+        if (hover[1] != 320)
+            captions.Push({text:"EASY",raw:"Easy",x:300,y:200,w:40,h:14})
+        if (hover[1] != 525)
+            captions.Push({text:"CASUAL",raw:"Casual",x:500,y:200,w:50,h:14})
+        return captions
+    }
     if (scenario = "map-prompt" && region.x = 190 && region.w = 620)
         return "E Override Map"
     if (scenario = "squad-compact") {
@@ -147,6 +152,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
     if (scenario = "hardcore-title" && region.x = 210 && region.w = 310)
         return [{text:"HARDCORE",raw:"Hardcore",x:225,y:340,w:67,h:16},
             {text:"HARDCORE",raw:"Hardcore",x:225,y:362,w:60,h:12}]
+    if (scenario = "locked-voidcore" && region.x = 520 && region.w = 310)
+        return "Complete Hardcore to unlock."
     return []
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
@@ -299,10 +306,10 @@ try {
     Need(IsObject(item) && item.x = 105 && !clicks.Length,
         "A current Items label uses two exact observations at the requested scale")
     scenario := "easy", activeDifficulty := "Easy"
-    Need(UM14_SelectCurrentMode("Easy", &seen) && clicks.Length = 2 && clicks[2][1] = 320,
-        "Easy never aliases to Casual")
+    Need(UM14_SelectCurrentMode("Easy", &seen) && clicks.Length = 2 && clicks[2][1] = 354,
+        "Easy never aliases to Casual and its label remains visible under hover")
     clicks := [], activeDifficulty := "Casual"
-    Need(UM14_SelectCurrentMode("Casual", &seen) && clicks.Length = 2 && clicks[2][1] = 525,
+    Need(UM14_SelectCurrentMode("Casual", &seen) && clicks.Length = 2 && clicks[2][1] = 564,
         "Casual retains its own card")
     scenario := "misleading-easy-art", clicks := []
     Need(!UM14_ModeCard(UM14_ConnectionSnapshot(),{x:210,y:70,w:620,h:588},"Easy") && !clicks.Length,
@@ -312,6 +319,11 @@ try {
     scenario := "hardcore-title"
     card := UM14_ModeCard(UM14_ConnectionSnapshot(),{x:210,y:70,w:620,h:588},"Hardcore")
     Need(IsObject(card) && card.y = 348, "Hardcore title wins only over its smaller aligned subtitle")
+    scenario := "locked-voidcore", clicks := [], stopped := false
+    try UM14_ModeCard(UM14_ConnectionSnapshot(),{x:210,y:70,w:620,h:588},"Voidcore")
+    catch Error as err
+        stopped := InStr(err.Message,"Voidcore is locked")
+    Need(stopped && !clicks.Length, "A locked Voidcore card explains the requirement without clicking")
     clicks := [], wheelCount := 0, probes := 0
     scenario := "sidebar", activeDifficulty := "Fallen"
     Need(UM14_SelectCurrentMode("Fallen", &seen) && seen, "Fallen selected after seeing sidebar icon")

@@ -713,7 +713,8 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
             UM14_RequireReadyFocus()
             if (!UM14_ConnectionSame(identity))
                 return false
-            if !UM14_HeldClick(identity,card.x,card.y,"Difficulty selection",180,
+            point := UM14_ModeClickPoint(card,cardRegion)
+            if !UM14_HeldClick(identity,point.x,point.y,"Difficulty selection",180,
                 () => UM14_ButtonStillAt(card,UM14_ModeCard(identity,cardRegion,difficulty)))
                 return false
             LogToConsole("Mode selection: currentMenu=1 confirmed=1")
@@ -743,6 +744,18 @@ UM14_SelectCurrentMode(difficulty, &seenMenu := false) {
     return false
 }
 
+UM14_ModeClickPoint(card, region) {
+    ; A Roblox hand cursor covers short card captions (especially Easy).
+    ; Press the adjoining interior on the same row so the exact caption can
+    ; still be read again after the mouse moves. Image matches retain center.
+    if (card.HasOwnProp("left") && card.HasOwnProp("height")) {
+        x := Round(2*card.x-card.left+Max(12,Min(24,card.height)))
+        if UM14_StartupPointIn(region,x,card.y)
+            return {x:x,y:card.y}
+    }
+    return {x:card.x,y:card.y}
+}
+
 UM14_ModeCard(identity, region, difficulty) {
     ; Artwork is not an identifier: Easy and Casual share scenery and the
     ; Hardcore / Voidcore art can share effects. Prefer the actual label.
@@ -755,6 +768,8 @@ UM14_ModeCard(identity, region, difficulty) {
             half,region.h,identity.w,identity.h)
         if !IsObject(region)
             return false
+        if (difficulty = "Voidcore" && UM14_MapCaption(UM14_ConnectionOCR(identity,region,2.4),"Complete Hardcore to unlock"))
+            UM14_Fatal("Voidcore is locked on this Roblox account. Complete Hardcore in TDS before running a Voidcore strategy.")
     }
     card := UM14_MenuWordPair(identity,region,difficulty,true,false,0,difficulty = "Hardcore")
     if (!IsObject(card) && (difficulty = "Easy" || difficulty = "Casual" || twoCards))
