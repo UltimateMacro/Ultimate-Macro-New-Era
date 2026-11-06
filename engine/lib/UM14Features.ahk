@@ -219,63 +219,84 @@ UM14_StartupOverlay(identity, &evidence := "", underPointer := false) {
 UM14_StartupPointIn(region, x, y) => IsObject(region)
     && x >= region.x && y >= region.y && x < region.x+region.w && y < region.y+region.h
 
-UM14_ChatInk(x, y, scale) {
-    rgb := PixelGetColor(Round(x*scale),Round(y*scale))
+UM14_ChatInk(rgb) {
     r := (rgb>>16)&255, g := (rgb>>8)&255, b := rgb&255
     return Min(r,g,b) >= 146 && Max(r,g,b)-Min(r,g,b) <= 78
 }
 
-UM14_ChatIcon(identity, scale) {
+UM14_ChatIcon(identity, scale, &evidence := "") {
     band := UM14_Region(Round(119*scale),Round(13*scale),Round(42*scale),Round(40*scale),identity.w,identity.h)
-    if (!IsObject(band) || !UM14_ConnectionCaptureClear(identity,band))
+    evidence := "chat control not readable"
+    targetOnly := false
+    if !IsObject(band)
         return ""
-    edge := 0, dark := 0, left := 0, right := 0
+    static grid := [[140,29], [131,27],[131,30],[131,33],[131,36],[131,38],
+        [144,27],[144,30],[144,33],[144,36],[144,38], [128,28],[128,32],[128,35],[128,37],
+        [133,25],[138,25],[142,25],[148,33],[148,36], [121,23],[156,23],[122,44],[138,48]]
+    points := [], colors := []
+    for point in grid
+        points.Push([Round(point[1]*scale),Round(point[2]*scale)])
     try {
-        ; A Roblox chat bubble has a light outline when closed and a filled
-        ; body when open. The tabs can fade even while the panel is open.
-        ; Check both sides of the interior, away from the two text strokes.
-        for y in [27,30,33,36,38] {
-            left += UM14_ChatInk(131,y,scale)
-            right += UM14_ChatInk(144,y,scale)
+        if !UM14_ConnectionCaptureClear(identity,band,true,&targetOnly) {
+            evidence .= " (" UM14_ConnectionOCROverlap() ")"
+            return ""
         }
-        for xy in [[128,28],[128,32],[128,35],[128,37],[133,25],[138,25],[142,25],[148,33],[148,36]]
-            edge += UM14_ChatInk(xy[1],xy[2],scale)
-        for xy in [[121,23],[156,23],[122,44],[138,48]] {
-            rgb := PixelGetColor(Round(xy[1]*scale),Round(xy[2]*scale))
-            if Max((rgb>>16)&255,(rgb>>8)&255,rgb&255) <= 118
-                dark++
-        }
+        if targetOnly
+            colors := UM14_TargetWindowPixels(identity,points)
+        else
+            for point in points
+                colors.Push(PixelGetColor(point[1],point[2]))
+        if (colors.Length != grid.Length || !UM14_ConnectionSame(identity)
+            || !UM14_ConnectionCaptureClear(identity,band,targetOnly))
+            return ""
     } catch {
         return ""
     }
-    if (edge < 4 || dark < 3 || !UM14_ConnectionSame(identity))
+    ; Use 1.3.3.10's open-bubble pixel, confirmed by the outline and dark
+    ; margins. The left interior stays visible even under the Roblox cursor.
+    center := UM14_ChatInk(colors[1]), edge := 0, dark := 0, left := 0, right := 0
+    for i,rgb in colors {
+        if (i >= 2 && i <= 6)
+            left += UM14_ChatInk(rgb)
+        else if (i >= 7 && i <= 11)
+            right += UM14_ChatInk(rgb)
+        else if (i >= 12 && i <= 20)
+            edge += UM14_ChatInk(rgb)
+        else if (i >= 21 && Max((rgb>>16)&255,(rgb>>8)&255,rgb&255) <= 118)
+            dark++
+    }
+    evidence := (targetOnly ? "window" : "desktop") " filled=" Integer(center) " body=" left "/" right " outline=" edge " margins=" dark
+    if (edge < 3 || dark < 2)
         return ""
-    if (left >= 4 && right >= 4)
+    if (left >= 3 && (center || right >= 3))
         return "open"
-    if (left <= 2 && right <= 2)
+    if (!center && left <= 2)
         return "closed"
     return ""
 }
 
-UM14_CloseRobloxChat(identity) {
+UM14_CloseRobloxChat(identity, &evidence := "") {
     scale := 1, dpi := 0
     if identity.HasOwnProp("hwnd")
         try dpi := DllCall("GetDpiForWindow","Ptr",identity.hwnd,"UInt")
     options := dpi >= 110 && dpi <= 192 ? [1,dpi/96] : [1]
     for scale in options {
-        state := UM14_ChatIcon(identity,scale)
-        if (state = "closed")
+        state := UM14_ChatIcon(identity,scale,&evidence)
+        if (state = "closed") {
+            evidence := ""
             return false
+        }
         if (state != "open")
             continue
         MouseGetPos(&oldX,&oldY)
-        closed := 0, x := Round(155*scale), y := Round(42*scale)
+        closed := 0, x := Round(140*scale), y := Round(35*scale)
         try {
             if !UM14_HeldClick(identity,x,y,"Close Roblox chat",150,() => UM14_ChatIcon(identity,scale) = "open")
                 return false
+            MouseMove(Round(114*scale),Round(57*scale),0)
             Loop 4 {
                 Sleep(140)
-                closed := UM14_ChatIcon(identity,scale) = "closed" ? closed+1 : 0
+                closed := UM14_ChatIcon(identity,scale,&evidence) = "closed" ? closed+1 : 0
                 if (closed >= 2)
                     break
             }
@@ -1252,6 +1273,8 @@ UM14_MapOverrideCard(identity, anchor, name, &evidence := "", samples := 2) {
     }
     if (confirmed < samples) {
         evidence := "query=" (confirmed ? "unstable" : UM14_ConnectionOCRStage())
+        if (UM14_ConnectionOCRStage() = "overlap")
+            evidence .= " " UM14_ConnectionOCROverlap()
         return false
     }
     ; With the exact typed query confirmed in the field, the first filtered
@@ -1286,10 +1309,10 @@ UM14_MapHoveredCardName(identity, card, field, name) {
 UM14_MapReceiptBand(identity, field, masked := false) {
     left := masked ? .28 : .23, right := masked ? .72 : .77
     if IsObject(field) {
-        ; The banner sits above the picker, not at a fixed percent of client
-        ; height. In a maximized client, the old crop began below the banner.
-        top := Max(0,field.y-Max(93,Round(field.height*5.5)))
-        bottom := Min(identity.h,field.y-Max(8,Round(field.height*.55)))
+        ; The short green banner appears below the search line when the
+        ; picker closes. Keep it separate from the top vote instructions.
+        top := Max(0,field.y+Max(10,Round(field.height*.9)))
+        bottom := Min(identity.h,field.y+Max(72,Round(field.height*4.8)))
         x := Round(identity.w*left), w := Round(identity.w*right)-x
         anchored := UM14_Region(x,top,w,bottom-top,identity.w,identity.h)
         if IsObject(anchored)

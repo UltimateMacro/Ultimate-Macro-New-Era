@@ -7321,8 +7321,12 @@ HasGlobal(varName) {
 
 closeChat() {
     global AutoCloseChat
-    if (AutoCloseChat && IsObject(identity := UM14_ConnectionSnapshot()) && UM14_CloseRobloxChat(identity))
+    if (!AutoCloseChat || !IsObject(identity := UM14_ConnectionSnapshot()))
+        return
+    if UM14_CloseRobloxChat(identity,&evidence)
         LogToConsole("Closed Roblox chat.")
+    else if (evidence != "")
+        UM14_Emit("log",Map("text","Roblox chat was left unchanged: " evidence "."))
 }
 
 

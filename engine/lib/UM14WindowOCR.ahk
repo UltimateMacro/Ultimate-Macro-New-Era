@@ -3,6 +3,45 @@
 ; a title lookup, another process, a desktop screenshot or downloaded code.
 #Include "%A_LineFile%\..\UM14Toast.ahk"
 
+; Sample only the small native chat control; never OCR or retain messages.
+UM14_TargetWindowPixels(expected, points) {
+    if (!UM14_ConnectionSame(expected) || points.Length > 32)
+        return []
+    bitmap := UM14_WindowOCR.Capture(expected.hwnd)
+    try {
+        ComCall(6,bitmap,"Int*",&format:=0)
+        if (format != 87 && format != 30)
+            return []
+        ComCall(15,bitmap,"Int",0,"Ptr*",locked:=ComValue(13,0)) ; read only
+        plane := Buffer(16,0)
+        ComCall(7,locked,"Int",0,"Ptr",plane)
+        start := NumGet(plane,0,"Int"), w := NumGet(plane,4,"Int"), h := NumGet(plane,8,"Int"), stride := NumGet(plane,12,"Int")
+        if (start < 0 || w < 1 || h < 1 || stride < w*4)
+            return []
+        memory := ComObjQuery(locked,"{fbc4dd2a-245b-11e4-af98-689423260cf8}")
+        ComCall(6,memory,"Ptr*",ref:=ComValue(13,0))
+        access := ComObjQuery(ref,"{5b0d3235-4dba-4d44-865e-8f1d0e4fd04d}")
+        ComCall(3,access,"Ptr*",&data:=0,"UInt*",&size:=0)
+        result := []
+        try {
+            if (!data || start+(h-1)*stride+w*4 > size)
+                return []
+            for point in points {
+                x := expected.x+point[1]-bitmap.x, y := expected.y+point[2]-bitmap.y
+                if (x < 0 || x >= w || y < 0 || y >= h)
+                    return []
+                rgb := NumGet(data+start+y*stride+x*4,0,"UInt") & 0xFFFFFF
+                result.Push(format = 87 ? rgb : ((rgb&255)<<16)|(rgb&0xFF00)|(rgb>>16))
+            }
+            return UM14_ConnectionSame(expected) ? result : []
+        } finally {
+            access := "", ref := "", memory := "", locked := ""
+        }
+    } finally {
+        try UM14_WindowOCR.CloseIClosable(bitmap)
+    }
+}
+
 UM14_TargetWindowOCR(expected, region, factor, greenToast := false) {
     if (!UM14_ConnectionSame(expected))
         throw Error("Selected game changed before target capture")

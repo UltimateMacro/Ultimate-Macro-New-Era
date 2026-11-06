@@ -54,7 +54,17 @@ UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenar
     : scenario = "map-anchored-receipt" ? {w:1920,h:1009,key:"game"}
     : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" || scenario = "compact-reward" ? {w:800, h:600,key:"game"} : {w:1000, h:700,key:"game"}
 UM14_ConnectionSame(*) => scenario != "moved"
-UM14_ConnectionCaptureClear(*) => scenario != "moved" && scenario != "chat-overlap"
+UM14_ConnectionOCROverlap() => "fixture"
+UM14_ConnectionCaptureClear(identity,region,allowTargetOnly := false,&targetOnly := false) {
+    targetOnly := scenario = "chat-window-capture"
+    return scenario != "moved" && scenario != "chat-overlap" && (!targetOnly || allowTargetOnly)
+}
+UM14_TargetWindowPixels(identity,points) {
+    colors := []
+    for point in points
+        colors.Push(ChatFixturePixel(point[1],point[2]))
+    return colors
+}
 UM14_ConnectionOCRStage() => scenario = "ready-uncertain" ? "overlap" : "success"
 UM14_LobbyOrInventory() => ((scenario = "startup-stack" || scenario = "startup-retry") && clicks.Length = 2)
     || (scenario = "startup-dismiss" && clicks.Length = 3 && A_TickCount-dismissedAt >= 700)
@@ -64,12 +74,13 @@ ChatFixturePixel(x,y) {
         return dark
     if (scenario = "chat-unrelated")
         return light
-    if (scenario = "chat-obscured-after-move" && hover[1] = 155)
+    if (scenario = "chat-obscured-after-move" && hover[1] = 140)
         return dark
     if (x = 121 || x = 156 || x = 122 || y = 48)
         return dark
-    if (x = 131 || x = 144)
-        return scenario = "chat-closed" || (clicks.Length && scenario != "chat-no-close") ? dark : light
+    if (x = 131 || x = 144 || x = 140)
+        return scenario = "chat-unread" ? (x = 144 ? light : dark)
+            : scenario = "chat-closed" || (clicks.Length && scenario != "chat-no-close") ? dark : light
     return light
 }
 PixelGetColor(x,y) => SubStr(scenario,1,5) = "chat-"
@@ -87,7 +98,7 @@ PixelSearch(&px,&py,x,y,right,bottom,color,*) {
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, factor := 0, *) {
-    if (scenario = "map-anchored-receipt" && region.x = 538 && region.y <= 156 && region.y+region.h >= 174)
+    if (scenario = "map-anchored-receipt" && region.x = 538 && region.y <= 256 && region.y+region.h >= 277 && region.h < 76)
         return "Map changed to Dead Ahead"
     if (SubStr(scenario,1,10) = "map-board-") {
         if (region.x = 290)
@@ -350,7 +361,7 @@ try {
     Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,false,-1) = "changed", "Target-only green text can confirm without desktop pixels or hovered title")
     scenario := "map-anchored-receipt", full := UM14_ConnectionSnapshot()
     Need(UM14_MapOverrideReceipt(full,"Dead Ahead",{x:890,y:217,left:719,height:18},true,-1) = "changed",
-        "The maximized banner above the legacy proportional crop is readable from its picker anchor")
+        "The maximized banner is isolated beneath its picker anchor")
     scenario := "map-board-right"
     Need(UM14_MapPickerClosed(ctx,field,"Dead Ahead") && UM14_MapVoteBoard(ctx,{x:500,y:330},"Dead Ahead"),
         "If the picker closed, the exact map can be confirmed separately at the active board")
@@ -365,10 +376,13 @@ try {
         && NumGet(pixels,0,"UInt") = 0xFF000000 && NumGet(pixels,48,"UInt") = 0xFFFFFFFF,
         "The receipt mask isolates green glyphs from bright terrain and white HUD text")
     scenario := "chat-open", clicks := [], hover := [300,260]
-    Need(UM14_CloseRobloxChat(UM14_ConnectionSnapshot()) && clicks.Length = 1 && clicks[1][1] = 155
-        && clicks[1][2] = 42 && hover[1] = 300 && hover[2] = 260,
+    Need(UM14_CloseRobloxChat(UM14_ConnectionSnapshot()) && clicks.Length = 1 && clicks[1][1] = 140
+        && clicks[1][2] = 35 && hover[1] = 300 && hover[2] = 260,
         "Verified chat closes once even without visible tabs, and restores the pointer")
-    for mode in ["chat-closed", "chat-unrelated", "chat-icon-missing", "chat-overlap", "chat-obscured-after-move"] {
+    scenario := "chat-window-capture", clicks := []
+    Need(UM14_CloseRobloxChat(UM14_ConnectionSnapshot(),&chatEvidence) && clicks.Length = 1
+        && InStr(chatEvidence,"window filled=0"), "Click-through overlap uses only the selected Roblox window for recognition")
+    for mode in ["chat-closed", "chat-unread", "chat-unrelated", "chat-icon-missing", "chat-overlap", "chat-obscured-after-move"] {
         scenario := mode, clicks := []
         Need(!UM14_CloseRobloxChat(UM14_ConnectionSnapshot()) && !clicks.Length && hover[1] = 300,
             "Closed chat, unrecognized controls and overlays never trigger a toggle")
