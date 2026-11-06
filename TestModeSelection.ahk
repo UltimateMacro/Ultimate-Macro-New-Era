@@ -4,6 +4,7 @@
 #SingleInstance Off
 #Include engine\lib\UM14Features.ahk
 #Include engine\lib\UM14Click.ahk
+#Include engine\lib\UM14Toast.ahk
 
 global scenario := "", wheelCount := 0, clicks := [], probes := 0, activeDifficulty := "", hover := [0, 0], dismissedAt := 0
 global cancelInputs := 0
@@ -113,6 +114,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
         return "Map changed to Dead Ahead Annex"
     if (scenario = "map-receipt-mixed" && region.x = 230)
         return {Text:"Map changed to Dead Ahead HUD title", Lines:[{Text:"Map changed to Dead Ahead"},{Text:"HUD title"}]}
+    if (scenario = "map-receipt-masked" && region.x = 280)
+        return "Map changed to Dead Ahead"
     if (scenario = "map-vip" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen") {
         if (region.x = 290 && scenario != "map-wrong-screen")
             return "Vote For A Map"
@@ -316,6 +319,14 @@ try {
     Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "different", "A longer map name sharing the requested prefix is still different")
     scenario := "map-receipt-mixed"
     Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "changed", "A separate HUD line cannot be mistaken for a map-name suffix")
+    scenario := "map-receipt-masked"
+    Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,false,-1) = "changed", "Target-only green text can confirm without desktop pixels or hovered title")
+    pixels := Buffer(16*10*4,0)
+    Loop 160
+        NumPut("UInt", A_Index <= 12 ? 0xFF00EC00 : A_Index <= 50 ? 0xFF99B123 : 0xFFFFFFFF,pixels,(A_Index-1)*4)
+    Need(UM14_MaskGreenToast(pixels.Ptr,16*4,16,10) = 12
+        && NumGet(pixels,0,"UInt") = 0xFF000000 && NumGet(pixels,48,"UInt") = 0xFFFFFFFF,
+        "The receipt mask isolates green glyphs from bright terrain and white HUD text")
     scenario := "ready-nongreen"
     Need(!UM14_ReadyButton(UM14_ConnectionSnapshot()) && !clicks.Length,
         "Plain Ready text without its button background is not clickable")

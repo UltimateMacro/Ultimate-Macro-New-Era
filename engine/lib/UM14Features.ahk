@@ -1224,11 +1224,20 @@ UM14_MapReceiptText(recognized, region, factor, name, &other) {
 
 UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, beforeGreen := false, timeout := 4100, &evidence := "") {
     region := UM14_StartupRegion(identity,.23,.21,.77,.34)
-    if !IsObject(region)
+    toast := UM14_StartupRegion(identity,.28,.22,.72,.315)
+    if (!IsObject(region) || !IsObject(toast))
         return ""
     start := A_TickCount
     observedGreen := false, observedText := false, lastOther := "", sightings := 0, scaleIndex := 0
     while (A_TickCount-start < timeout && UM14_ConnectionSame(identity)) {
+        ; Capture the short green line first. The selected-window path works
+        ; even when a click-through overlay would invalidate desktop pixels.
+        toastFactor := Min(3.3,2500/Max(toast.w,toast.h))
+        masked := UM14_ConnectionOCR(identity,toast,toastFactor,"",true,true)
+        if (UM14_MapReceiptText(masked,toast,toastFactor,name,&maskedOther) = "changed") {
+            UM14_RejectMapPurchase(identity)
+            return "changed"
+        }
         green := UM14_MapReceiptGreen(identity) = 1
         observedGreen := observedGreen || green
         appeared := titleVerified && beforeGreen = 0 && IsObject(field) && green
@@ -1240,6 +1249,8 @@ UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, 
             UM14_RejectMapPurchase(identity)
         if (receipt = "changed" || receipt = "rotation")
             return receipt
+        if (maskedOther != "")
+            other := maskedOther
         if (other != "") {
             sightings := other = lastOther ? sightings+1 : 1
             lastOther := other

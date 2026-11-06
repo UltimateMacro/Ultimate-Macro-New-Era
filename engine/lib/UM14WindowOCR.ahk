@@ -1,7 +1,9 @@
 ﻿; Target-HWND OCR for input-transparent compositor overlays. GPLv3 bridge.
 ; Reuses the bundled source-owned OCR/WinRT implementation, not PrintWindow,
 ; a title lookup, another process, a desktop screenshot or downloaded code.
-UM14_TargetWindowOCR(expected, region, factor) {
+#Include "%A_LineFile%\..\UM14Toast.ahk"
+
+UM14_TargetWindowOCR(expected, region, factor, greenToast := false) {
     if (!UM14_ConnectionSame(expected))
         throw Error("Selected game changed before target capture")
     bitmap := UM14_WindowOCR.Capture(expected.hwnd)
@@ -14,6 +16,8 @@ UM14_TargetWindowOCR(expected, region, factor) {
         transformed := UM14_WindowOCR.TransformSoftwareBitmap(bitmap,&width,&height,
             factor,0,0,x,y,region.w,region.h)
         try {
+            if (greenToast && !UM14_WindowOCR.MaskToast(transformed,width,height))
+                return false
             result := UM14_WindowOCR(transformed,{lang:"en-US",scale:1,grayscale:1})
             if (!UM14_ConnectionSame(expected))
                 throw Error("Selected game changed during target capture")
@@ -27,6 +31,26 @@ UM14_TargetWindowOCR(expected, region, factor) {
 }
 
 class UM14_WindowOCR extends OCR {
+    static MaskToast(bitmap, w, h) {
+        ComCall(6,bitmap,"Int*",&format:=0) ; BitmapPixelFormat
+        if (format != 87 && format != 30) ; Bgra8 / Rgba8; green channel matches
+            return false
+        ComCall(15,bitmap,"Int",1,"Ptr*",locked:=ComValue(13,0)) ; ReadWrite
+        plane := Buffer(16,0)
+        ComCall(7,locked,"Int",0,"Ptr",plane) ; GetPlaneDescription
+        start := NumGet(plane,0,"Int"), stride := NumGet(plane,12,"Int")
+        if (start < 0 || NumGet(plane,4,"Int") != w || NumGet(plane,8,"Int") != h || stride < w*4)
+            return false
+        memory := ComObjQuery(locked,"{fbc4dd2a-245b-11e4-af98-689423260cf8}")
+        ComCall(6,memory,"Ptr*",ref:=ComValue(13,0))
+        access := ComObjQuery(ref,"{5b0d3235-4dba-4d44-865e-8f1d0e4fd04d}")
+        ComCall(3,access,"Ptr*",&data:=0,"UInt*",&size:=0)
+        try return start+(h-1)*stride+w*4 <= size && data && UM14_MaskGreenToast(data+start,stride,w,h)
+        finally {
+            access := "", ref := "", memory := "", locked := ""
+        }
+    }
+
     static TransformSoftwareBitmap(bitmap,&outputWidth,&outputHeight,scale := 1,
         rotate := 0,flip := 0,x := 0,y := 0,width := 0,height := 0) {
         if (rotate || flip || !IsNumber(scale) || scale < .125 || scale > 4)

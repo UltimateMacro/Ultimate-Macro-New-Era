@@ -244,7 +244,7 @@ UM14_ConnectionWordText(result, region, band, factor) {
     return text
 }
 
-UM14_ConnectionOCR(expected, region, scale := 0, band := "", structured := false) {
+UM14_ConnectionOCR(expected, region, scale := 0, band := "", structured := false, greenToast := false) {
     bitmap := 0, resized := 0, hBitmap := 0
     UM14_ConnectionOCRStage("context")
     UM14_ConnectionOCROverlap("none")
@@ -264,10 +264,14 @@ UM14_ConnectionOCR(expected, region, scale := 0, band := "", structured := false
         factor := Min(scale = 0 ? 2.0 : scale, 2500/Max(region.w,region.h))
         if (targetOnly) {
             UM14_ConnectionOCRStage("window")
-            recognized := UM14_TargetWindowOCR(expected,region,factor)
+            recognized := UM14_TargetWindowOCR(expected,region,factor,greenToast)
+            if !IsObject(recognized)
+                return ""
         } else {
             bitmap := Gdip_BitmapFromScreen((expected.x+region.x) "|" (expected.y+region.y) "|" region.w "|" region.h)
             if (!bitmap)
+                return ""
+            if (greenToast && !UM14_MaskGreenToastGdi(bitmap,region.w,region.h))
                 return ""
             UM14_ConnectionOCRStage("resize")
             resized := Gdip_ResizeBitmap(bitmap, Max(1,Round(region.w*factor)), Max(1,Round(region.h*factor)), 7)
