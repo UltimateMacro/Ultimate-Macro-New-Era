@@ -1185,30 +1185,70 @@ UM14_MapReceiptGreen(identity) {
     }
 }
 
+UM14_MapReceiptText(recognized, region, factor, name, &other) {
+    other := "", text := "", lines := []
+    if IsObject(recognized) {
+        try {
+            text := recognized.Text
+            for line in recognized.Lines {
+                if (lines.Length >= 24)
+                    break
+                lines.Push(line.Text)
+            }
+        }
+    } else if (Type(recognized) = "String") {
+        text := recognized, lines := StrSplit(text,"`n","`r")
+    }
+    if UM14_MapPurchaseText(text)
+        return "purchase"
+    if (UM14_MapCaption(text,"already in the current rotation") || UM14_MapCaption(text,"already in current rotation"))
+        return "rotation"
+    expected := Trim(RegExReplace(StrLower(name),"[^a-z0-9']+"," "))
+    for line in lines {
+        if (Type(line) != "String" || StrLen(line) > 160)
+            continue
+        clean := Trim(RegExReplace(StrLower(line),"[^a-z0-9']+"," "))
+        if RegExMatch(clean,"^map changed to (.+)$",&receipt) {
+            if (receipt[1] = expected)
+                return "changed"
+            other := receipt[1]
+        }
+    }
+    ; Whole-frame Text can join adjacent HUD text to a short green toast.
+    ; Verify that the exact words are on the same line with no extra word
+    ; attached; a longer map name sharing the same prefix isn't accepted.
+    if IsObject(UM14_MapSearchWords(UM14_OCRWords(recognized,region,factor),"Map changed to " name))
+        return "changed"
+    return ""
+}
+
 UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, beforeGreen := false, timeout := 4100, &evidence := "") {
     region := UM14_StartupRegion(identity,.23,.21,.77,.34)
     if !IsObject(region)
         return ""
     start := A_TickCount
-    observedGreen := false, observedText := false
+    observedGreen := false, observedText := false, lastOther := "", sightings := 0, scaleIndex := 0
     while (A_TickCount-start < timeout && UM14_ConnectionSame(identity)) {
         green := UM14_MapReceiptGreen(identity) = 1
         observedGreen := observedGreen || green
         appeared := titleVerified && beforeGreen = 0 && IsObject(field) && green
-        text := UM14_ConnectionOCR(identity,region,3.3)
+        factor := Min(Mod(scaleIndex++,2) ? 2.8 : 3.5,2500/Max(region.w,region.h))
+        recognized := UM14_ConnectionOCR(identity,region,factor,"",true)
         observedText := observedText || UM14_ConnectionOCRStage() = "success"
-        if UM14_MapPurchaseText(text)
+        receipt := UM14_MapReceiptText(recognized,region,factor,name,&other)
+        if (receipt = "purchase")
             UM14_RejectMapPurchase(identity)
-        if (Type(text) = "String" && StrLen(text) <= 512) {
-            line := Trim(RegExReplace(StrLower(text),"[^a-z0-9']+"," "))
-            if RegExMatch(line,"\bmap changed to (.+)$",&receipt)
-                return receipt[1] = Trim(RegExReplace(StrLower(name),"[^a-z0-9']+"," ")) ? "changed" : "different"
+        if (receipt = "changed" || receipt = "rotation")
+            return receipt
+        if (other != "") {
+            sightings := other = lastOther ? sightings+1 : 1
+            lastOther := other
+            if (sightings >= 2)
+                return "different"
         }
-        if (UM14_MapCaption(text,"already in the current rotation") || UM14_MapCaption(text,"already in current rotation"))
-            return "rotation"
         ; Accept the visual toast only after pressing the exact hovered tile,
         ; and only if the search UI is no longer present in a readable frame.
-        if (appeared && !UM14_MapQueryAt(identity,field,name)
+        if (appeared && lastOther = "" && !UM14_MapQueryAt(identity,field,name)
             && UM14_ConnectionOCRStage() = "success" && UM14_ConnectionSame(identity))
             return "changed"
         Sleep(140)

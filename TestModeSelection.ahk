@@ -111,6 +111,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
         return "Map changed to Cataclysm"
     if (scenario = "map-receipt-suffix" && region.x = 230)
         return "Map changed to Dead Ahead Annex"
+    if (scenario = "map-receipt-mixed" && region.x = 230)
+        return {Text:"Map changed to Dead Ahead HUD title", Lines:[{Text:"Map changed to Dead Ahead"},{Text:"HUD title"}]}
     if (scenario = "map-vip" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen") {
         if (region.x = 290 && scenario != "map-wrong-screen")
             return "Vote For A Map"
@@ -312,6 +314,8 @@ try {
     Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "different", "A receipt for a different map overrides the green cue")
     scenario := "map-receipt-suffix"
     Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "different", "A longer map name sharing the requested prefix is still different")
+    scenario := "map-receipt-mixed"
+    Need(UM14_MapOverrideReceipt(ctx,"Dead Ahead",field,true,0) = "changed", "A separate HUD line cannot be mistaken for a map-name suffix")
     scenario := "ready-nongreen"
     Need(!UM14_ReadyButton(UM14_ConnectionSnapshot()) && !clicks.Length,
         "Plain Ready text without its button background is not clickable")
