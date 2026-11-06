@@ -57,7 +57,7 @@ UM14_ConnectionOCRStage() => scenario = "ready-uncertain" ? "overlap" : "success
 UM14_LobbyOrInventory() => ((scenario = "startup-stack" || scenario = "startup-retry") && clicks.Length = 2)
     || (scenario = "startup-dismiss" && clicks.Length = 3 && A_TickCount-dismissedAt >= 700)
 PixelGetColor(x,y) => (scenario = "startup-stack" && !clicks.Length)
-    ? (x = 770 || y = 106 ? 0xF82736 : 0xFFFFFF) : (scenario = "ready-green" || scenario = "ready-uncertain" || scenario = "ready-image" || scenario = "login-reward" || scenario = "compact-reward"
+    ? (x = 770 || y = 106 ? 0xF82736 : 0xFFFFFF) : (scenario = "ready-green" || scenario = "ready-uncertain" || scenario = "ready-image" || scenario = "restart" || scenario = "login-reward" || scenario = "compact-reward"
         || scenario = "unrelated-claim" || scenario = "startup-stack" || scenario = "startup-retry"
         || scenario = "startup-stuck" || scenario = "startup-dismiss" || scenario = "reward-hidden-on-hover") ? 0x22CA38
         : (scenario = "map-vip" || scenario = "map-template" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen")
@@ -183,8 +183,8 @@ AdvancedImageSearch(path, x, y, w, h, *) {
         return {status:"success",score:.91,x:310,y:220,w:125,h:13}
     if (path = "Resources/close.png" && ((scenario = "startup-stack" && !clicks.Length && hover[1] != 770) || scenario = "wrong-news"))
         return {status:"success",score:.96,x:x+110,y:y+60}
-    if (scenario = "restart" && path = "Resources/Restart.png" && !clicks.Length)
-        return {status:"success", score:.94, x:x+220, y:y+90}
+    if (scenario = "restart" && path = "Resources/Restart.png" && !clicks.Length && hover[1] != 220)
+        return {status:"success", score:.94, x:x+220, y:y+90,w:90,h:23}
     if ((scenario = "ready-image" || scenario = "ready-uncertain") && path = "Resources/ready_gs.png" && !clicks.Length)
         return {status:"success",score:.90,x:500,y:153}
     if (path = "Resources/Ready.png" && (scenario = "modifier" || scenario = "modifier-compact" || scenario = "map-prompt"))
@@ -218,7 +218,7 @@ Need(ok, text) {
 }
 try {
     scenario := "restart"
-    Need(UM14_ClickResult("Restart.png","Restart") && clicks.Length = 1,
+    Need(UM14_ClickResult("Restart.png","Restart") && clicks.Length = 1 && clicks[1][1] = 273,
         "Restart is rechecked after hover, clicked once, then verified gone")
     clicks := []
     Need(UM14_BestRestart({status:"failed",score:.99},{status:"success",score:.71}) = "Restart2.png",

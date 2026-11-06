@@ -315,8 +315,15 @@ UM14_ClickResult(image, label) {
     button := UM14_ResultButton(identity,image)
     if !IsObject(button)
         UM14_LobbyFailure(label " on the match-results screen")
+    region := UM14_StartupRegion(identity,.17,.50,.83,.94)
     Loop 2 {
-        if !UM14_HeldClick(identity,button.x,button.y,label,150,
+        ; The current Restart Match image is just the caption. In compact
+        ; mode the hand covers its letters, so use the verified green margin.
+        ; Keep the exact Restart/Play Again template; never match Restart Wave.
+        point := IsObject(region) ? UM14_ReadyPressPoint(identity,button,region) : false
+        if !IsObject(point)
+            point := button
+        if !UM14_HeldClick(identity,point.x,point.y,label,150,
             () => UM14_ButtonStillAt(button,UM14_ResultButton(identity,image)))
             UM14_LobbyFailure(label " after moving the pointer")
         Sleep(500)
