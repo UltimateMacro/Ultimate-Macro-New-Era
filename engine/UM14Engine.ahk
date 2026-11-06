@@ -5899,7 +5899,8 @@ UM14_ChooseOverrideMap(identity, name) {
         }
         Sleep(150)
         UM14_RejectMapPurchase(identity)
-        UM14_SearchText(name)
+        if !UM14_EnterNewMapQuery(identity,name)
+            UM14_LobbyFailure("a stable game client during map search")
         parkX := Round(identity.w*.5), parkY := Max(0,field.y-24)
         UM14_RequireInputPoint(identity,parkX,parkY,"Read map search query")
         MouseMove(parkX,parkY,0)

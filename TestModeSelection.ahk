@@ -8,6 +8,7 @@
 
 global scenario := "", wheelCount := 0, clicks := [], probes := 0, activeDifficulty := "", hover := [0, 0], dismissedAt := 0
 global cancelInputs := 0
+global literalMapInput := []
 Click(x, y := unset) {
     global dismissedAt
     if (x = "Up")
@@ -38,6 +39,7 @@ SendEvent(keys) {
         throw Error("Unexpected input")
     wheelCount++
 }
+SendText(value) => literalMapInput.Push(value)
 waitForTowerUI(*) => scenario = "placement-open" || (scenario = "placement-late" && cancelInputs = 1)
 LogToConsole(*) => 0
 UM14_RequireReadyFocus() => 0
@@ -347,6 +349,12 @@ try {
         "Unreadable outlined title/placeholder can use the map filter tabs plus two stable search images")
     scenario := "map-query-suffix"
     Need(!UM14_MapOverrideCard(ctx,field,"Dead Ahead"), "A different query cannot select a map card")
+    scenario := "map-query"
+    Need(UM14_EnterNewMapQuery(ctx,"Dead Ahead") && literalMapInput.Length = 1 && literalMapInput[1] = "Dead Ahead",
+        "A fresh map search uses only literal text like the modified reference")
+    scenario := "moved"
+    Need(!UM14_EnterNewMapQuery(ctx,"Dead Ahead") && literalMapInput.Length = 1,
+        "Map search never types into a changed window")
     scenario := "map-query"
     card := UM14_MapOverrideCard(ctx,field,"Dead Ahead")
     Need(IsObject(card) && card.x < field.x && card.y > field.y && UM14_MapOverrideReceipt(ctx,"Dead Ahead") = "changed",

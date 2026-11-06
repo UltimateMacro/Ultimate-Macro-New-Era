@@ -1197,6 +1197,20 @@ UM14_MapOverrideSearch(identity, &evidence := "") {
     return UM14_ButtonStillAt(first,second,5) ? second : false
 }
 
+UM14_EnterNewMapQuery(identity, name) {
+    ; The verified field showed its empty placeholder. Match 1.3.3.10's
+    ; literal text entry: don't send A/D, Ctrl+A, or Backspace here. If focus
+    ; was missed, those keys could move the avatar and close the picker.
+    if (StrLen(name) < 1 || StrLen(name) > 128 || RegExMatch(name,"[\x00-\x1f\x7f]"))
+        UM14_Fatal("Invalid game map search text.")
+    if !UM14_ConnectionSame(identity)
+        return false
+    UM14_RequireReadyFocus()
+    SendText(name)
+    Sleep(250)
+    return UM14_ConnectionSame(identity)
+}
+
 UM14_MapPickerClosed(identity, field, name, &evidence := "") {
     ; Missing OCR alone doesn't mean it closed. The map-vote overlay must
     ; still be readable, with neither its query nor its filter tabs present.
@@ -1398,6 +1412,8 @@ UM14_MapOverrideReceipt(identity, name, field := false, titleVerified := false, 
     start := A_TickCount
     observedGreen := false, observedText := false, lastOther := "", sightings := 0, scaleIndex := 0
     firstCapture := "not-run"
+    ; Let the release be rendered before capturing the short confirmation.
+    Sleep(160)
     while (A_TickCount-start < timeout && UM14_ConnectionSame(identity)) {
         ; Keep the older relative crop as a fallback for compact clients.
         alternate := IsObject(field) && Mod(scaleIndex,2)
