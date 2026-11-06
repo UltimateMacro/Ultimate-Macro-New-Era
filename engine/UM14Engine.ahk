@@ -6163,6 +6163,16 @@ SpawnTower(X, Y, slotNumber, towerID) {
         identity := UM14_ConnectionSnapshot()
         if !IsObject(identity)
             UM14_Fatal("Roblox changed before tower placement.")
+        counter := UM14_PlacementCounter(identity)
+        ; A neighboring registered tower could own the hover tooltip.
+        ; In that case accept only the original panel-based confirmation.
+        margin := Max(6,Round(identity.h*.022))
+        for id, prior in Towers {
+            if (Abs(prior.x-X) <= margin && Abs(prior.y-Y) <= margin) {
+                counter := false
+                break
+            }
+        }
         
         if UseNumbersForHotbar {
             Send("{" slotNumber "}")
@@ -6177,14 +6187,12 @@ SpawnTower(X, Y, slotNumber, towerID) {
         UM14_RequireInputPoint(identity, X, Y)
         MouseClick()
         Sleep(100)
-        SendEvent("{" CancelPlacementKey "}")
-
-        placedSuccessfully := waitForTowerUI(&resV2)
+        placedSuccessfully := UM14_ConfirmPlacementPanel(identity,CancelPlacementKey,X,Y,counter,&panelOpen)
 
         if (placedSuccessfully) {
             Towers[towerID] := {x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0, target: "First Enemy"}
             LogToConsole("Tower " towerID " placed successfully")
-            LastOpenedTowerID := towerID
+            LastOpenedTowerID := panelOpen ? towerID : ""
             break
         } else {
             LogToConsole("Tower " towerID " placement failed, retrying...")

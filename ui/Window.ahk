@@ -2065,17 +2065,18 @@ class MW {
                         MW.gui.Restore()
                         MW.dockRestoreMax := true
                     }
+                    ; The poll timer may settle the asynchronous move before
+                    ; Attach returns. Announce first so we don't hide success.
+                    MW.Log("Waiting for Windows to apply the window layout.")
                     result := Docking.Attach(game, MW.gui.Hwnd)
-                    if (result = "pending")
-                        MW.Log("Waiting for Windows to apply the window layout.")
-                    else
+                    if (result != "pending")
                         MW.DockResult(result)
                 }
             } else {
-                result := Docking.Detach()
-                if (result = "pending")
+                if Docking.active
                     MW.Log("Waiting for Windows to restore the original layout.")
-                else
+                result := Docking.Detach()
+                if (result != "pending")
                     MW.DockRestoreFinished(result)
             }
         } catch as e {

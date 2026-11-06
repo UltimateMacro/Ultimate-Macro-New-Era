@@ -424,6 +424,80 @@ UM14_ClearPlacementPanel() {
     LastOpenedTowerID := ""
 }
 
+UM14_PlacementCounter(identity) {
+    ; The unit counter sits just past the last hotbar slot. Its horizontal
+    ; distance from center scales with height, even when Roblox is docked.
+    x := Round(identity.w*.5 + identity.h*.20), y := Round(identity.h*.935)
+    region := UM14_Region(x,y,Min(identity.w-x,Round(identity.h*.18)),identity.h-y-1,identity.w,identity.h)
+    if !IsObject(region)
+        return false
+    for scale in [3.0,3.8] {
+        text := UM14_ConnectionOCR(identity,region,scale)
+        if (Type(text) != "String" || StrLen(text) > 128
+            || !RegExMatch(text,"(?<![\d/])(\d{1,3})\s*/\s*(\d{1,3})(?![\d/])",&count)
+            || RegExMatch(text,"\d\s*/\s*\d",,count.Pos(0)+count.Len(0)))
+            continue
+        used := Integer(count[1]), cap := Integer(count[2])
+        if (cap >= 10 && cap <= 500 && used <= cap && UM14_ConnectionSame(identity))
+            return {used:used,cap:cap}
+    }
+    return false
+}
+
+UM14_OwnedNewTower(identity, x, y) {
+    h := identity.h, left := Max(0,x-Round(h*.25)), top := Max(0,y-Round(h*.14))
+    right := Min(identity.w,x+Round(h*.30)), bottom := Min(h,y+Round(h*.035))
+    region := UM14_Region(left,top,right-left,bottom-top,identity.w,h)
+    if !IsObject(region)
+        return false
+    text := UM14_ConnectionOCR(identity,region,3.2)
+    return Type(text) = "String" && StrLen(text) <= 512 && UM14_MapCaption(text,"Your Tower")
+        && RegExMatch(text,"i)\b(?:lvl?|level)\s*[.:-]*\s*0\b") && UM14_ConnectionSame(identity)
+}
+
+UM14_NewPlacementProof(identity, x, y, before) {
+    if !IsObject(before)
+        return false
+    after := UM14_PlacementCounter(identity)
+    return IsObject(after) && after.cap = before.cap && after.used = before.used+1
+        && UM14_OwnedNewTower(identity,x,y)
+}
+
+UM14_ConfirmPlacementPanel(identity, cancelKey, x := 0, y := 0, before := false, &panelOpen := false) {
+    ; A successful click can open the new tower panel immediately. The
+    ; legacy cancel key can also close that panel, losing the only placement
+    ; receipt and causing a second purchase. Look for it before cancelling.
+    UM14_RequireReadyFocus()
+    if !UM14_ConnectionSame(identity)
+        UM14_Fatal("Roblox changed while confirming tower placement.")
+    panelOpen := false
+    if waitForTowerUI(,,650) {
+        if !UM14_ConnectionSame(identity)
+            UM14_Fatal("Roblox changed while confirming tower placement.")
+        return panelOpen := true
+    }
+    UM14_RequireReadyFocus()
+    if !UM14_ConnectionSame(identity)
+        UM14_Fatal("Roblox changed while confirming tower placement.")
+    SendEvent("{" cancelKey "}")
+    ; Older clients can reveal the panel only after clearing the ghost.
+    panelOpen := waitForTowerUI()
+    if !UM14_ConnectionSame(identity)
+        UM14_Fatal("Roblox changed while confirming tower placement.")
+    if panelOpen
+        return true
+    ; Newer TDS can place the tower without opening its upgrade panel.
+    ; Only a fresh +1 counter and the owned Lv.0 tooltip at that same point
+    ; distinguish this from a failed click. No second slot key is sent.
+    if !UM14_NewPlacementProof(identity,x,y,before)
+        return false
+    if UM14_HeldClick(identity,x,y,"Select placed tower",150,() => UM14_OwnedNewTower(identity,x,y))
+        panelOpen := waitForTowerUI(,,1300)
+    if !UM14_ConnectionSame(identity)
+        UM14_Fatal("Roblox changed while confirming tower placement.")
+    return true ; the purchase was confirmed, even if its panel still isn't open
+}
+
 UM14_ModifierButton(result, region, factor) {
     words := UM14_OCRWords(result,region,factor), found := false
     for left in words {
@@ -1183,9 +1257,17 @@ UM14_ReadyBackground(identity, label) {
 }
 
 UM14_ClickMatchReady(identity, button) {
+    region := UM14_StartupRegion(identity,.29,.035,.71,.415)
+    if !IsObject(region)
+        return false
     Loop 3 {
-        if !UM14_HeldClick(identity,button.x,button.y,"In-match Ready",180,
+        ; The hand cursor overlaps the short Ready caption if placed at its
+        ; center. Press an adjacent point inside the same verified button.
+        point := UM14_ReadyPressPoint(identity,button,region)
+        if (!IsObject(point)
+            || !UM14_HeldClick(identity,point.x,point.y,"In-match Ready",180,
             () => UM14_ButtonStillAt(button,UM14_ReadyButton(identity)))
+        )
             return false
         gone := 0
         Loop 4 {
@@ -1199,6 +1281,20 @@ UM14_ClickMatchReady(identity, button) {
         }
         if !UM14_ButtonStillAt(button,fresh)
             return false
+    }
+    return false
+}
+
+UM14_ReadyPressPoint(identity, button, region) {
+    point := UM14_ModeClickPoint(button,region)
+    ; The legacy image is a crop of the *label*, not the button. Step past
+    ; the label and require green button pixels at the new press location.
+    dx := button.HasOwnProp("w") && button.w >= 20 ? Floor(button.w/2)+8 : Max(20,point.x-button.x)
+    for x in [button.x+dx,button.x-dx,button.x+dx-4] {
+        for y in [button.y,button.y-5] {
+            if UM14_StartupPointIn(region,x,y) && UM14_ReadyBackground(identity,{x:x,y:y})
+                return {x:x,y:y}
+        }
     }
     return false
 }

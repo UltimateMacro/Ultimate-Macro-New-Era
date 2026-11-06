@@ -6,6 +6,7 @@
 #Include engine\lib\UM14Click.ahk
 
 global scenario := "", wheelCount := 0, clicks := [], probes := 0, activeDifficulty := "", hover := [0, 0], dismissedAt := 0
+global cancelInputs := 0
 Click(x, y := unset) {
     global dismissedAt
     if (x = "Up")
@@ -27,11 +28,16 @@ Sleep(duration) {
         DllCall("Sleep","UInt",duration)
 }
 SendEvent(keys) {
-    global wheelCount
+    global wheelCount, cancelInputs
+    if (keys = "{Q}" && SubStr(scenario,1,10) = "placement-") {
+        cancelInputs++
+        return
+    }
     if (keys != "{WheelDown 2}")
         throw Error("Unexpected input")
     wheelCount++
 }
+waitForTowerUI(*) => scenario = "placement-open" || (scenario = "placement-late" && cancelInputs = 1)
 LogToConsole(*) => 0
 UM14_RequireReadyFocus() => 0
 UM14_RequireInputPoint(identity,x,y,*) {
@@ -51,7 +57,7 @@ UM14_ConnectionOCRStage() => scenario = "ready-uncertain" ? "overlap" : "success
 UM14_LobbyOrInventory() => ((scenario = "startup-stack" || scenario = "startup-retry") && clicks.Length = 2)
     || (scenario = "startup-dismiss" && clicks.Length = 3 && A_TickCount-dismissedAt >= 700)
 PixelGetColor(x,y) => (scenario = "startup-stack" && !clicks.Length)
-    ? (x = 770 || y = 106 ? 0xF82736 : 0xFFFFFF) : (scenario = "ready-green" || scenario = "login-reward" || scenario = "compact-reward"
+    ? (x = 770 || y = 106 ? 0xF82736 : 0xFFFFFF) : (scenario = "ready-green" || scenario = "ready-uncertain" || scenario = "ready-image" || scenario = "login-reward" || scenario = "compact-reward"
         || scenario = "unrelated-claim" || scenario = "startup-stack" || scenario = "startup-retry"
         || scenario = "startup-stuck" || scenario = "startup-dismiss" || scenario = "reward-hidden-on-hover") ? 0x22CA38
         : (scenario = "map-vip" || scenario = "map-template" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen")
@@ -63,6 +69,17 @@ PixelSearch(&px,&py,x,y,right,bottom,color,*) {
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, factor := 0, *) {
+    if (SubStr(scenario,1,10) = "placement-") {
+        if (region.y = Round(identity.h*.935)) {
+            if (scenario = "placement-ambiguous")
+                return "1/50 2/50"
+            if (scenario = "placement-unchanged")
+                return "0 / 50"
+            return cancelInputs ? "1 / 50" : "0 / 50"
+        }
+        if (factor = 3.2)
+            return scenario = "placement-other" ? "Another Tower Elf Camp Lv. 0" : "Your Tower Elf Camp Lv. 0"
+    }
     if (scenario = "hardcore" && region.x = Floor(identity.w*.3307))
         return "Wretched`nFront"
     if (scenario = "items" && factor = 3.0)
@@ -112,7 +129,7 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
             return "Dead Ahead"
     }
     if ((scenario = "ready-green" || scenario = "ready-uncertain" || scenario = "ready-nongreen")
-        && region.x = 290 && !clicks.Length)
+        && region.x = 290 && !clicks.Length && (scenario != "ready-green" || hover[1] != 500))
         return [{text:"READY",raw:"READY",x:480,y:145,w:40,h:16}]
     if (scenario = "easy" && region.x = 210 && region.w = 620) {
         captions := []
@@ -298,14 +315,35 @@ try {
     scenario := "ready-nongreen"
     Need(!UM14_ReadyButton(UM14_ConnectionSnapshot()) && !clicks.Length,
         "Plain Ready text without its button background is not clickable")
-    scenario := "ready-green"
+    scenario := "ready-green", hover := [0,0]
     ctx := UM14_ConnectionSnapshot(), button := UM14_ReadyButton(ctx)
-    Need(IsObject(button) && UM14_ClickMatchReady(ctx,button) && clicks.Length = 1,
-        "Green Ready is rechecked before input and accepted on two readable frames")
+    Need(IsObject(button) && UM14_ClickMatchReady(ctx,button) && clicks.Length = 1 && clicks[1][1] = 536,
+        "Green Ready is rechecked off the caption and accepted on two readable frames")
     scenario := "ready-uncertain", clicks := []
     ctx := UM14_ConnectionSnapshot(), button := UM14_ReadyButton(ctx)
     Need(IsObject(button) && !UM14_ClickMatchReady(ctx,button) && clicks.Length = 1,
         "A capture failure after Ready does not count as a transition or cause a blind retry")
+    scenario := "placement-open", cancelInputs := 0
+    Need(UM14_ConfirmPlacementPanel(UM14_ConnectionSnapshot(),"Q") && cancelInputs = 0,
+        "A fresh placement panel is accepted without closing it or clicking again")
+    scenario := "placement-late", cancelInputs := 0
+    Need(UM14_ConfirmPlacementPanel(UM14_ConnectionSnapshot(),"Q") && cancelInputs = 1,
+        "A delayed panel still uses the legacy cancel-and-confirm path once")
+    scenario := "placement-failed", cancelInputs := 0
+    Need(!UM14_ConfirmPlacementPanel(UM14_ConnectionSnapshot(),"Q") && cancelInputs = 1,
+        "No panel is not accepted as a placement")
+    scenario := "placement-proof", cancelInputs := 0, clicks := [], panelOpen := true
+    ctx := UM14_ConnectionSnapshot(), before := UM14_PlacementCounter(ctx)
+    Need(IsObject(before) && before.used = 0 && before.cap = 50,
+        "Capture the actual tower counter before selecting the slot")
+    Need(UM14_ConfirmPlacementPanel(ctx,"Q",320,310,before,&panelOpen) && !panelOpen
+        && cancelInputs = 1 && clicks.Length = 1 && clicks[1][1] = 320 && clicks[1][2] = 310,
+        "A new owned tower is reselected once, with no second purchase or false open-panel flag")
+    for mode in ["placement-other", "placement-unchanged", "placement-ambiguous"] {
+        scenario := mode, cancelInputs := 1, clicks := []
+        Need(!UM14_NewPlacementProof(ctx,320,310,before) && !clicks.Length,
+            "Reject tower proof without an unambiguous new count and own tooltip")
+    }
     clicks := []
     scenario := "items"
     item := UM14_MenuWordPair({w:1000,h:700},{x:0,y:250,w:168,h:130},"ITEMS",false,false,3.0)
