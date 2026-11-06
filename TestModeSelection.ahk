@@ -1,14 +1,18 @@
 #Requires AutoHotkey v2.0
 #Warn All, Off
 #NoTrayIcon
+#SingleInstance Off
 #Include engine\lib\UM14Features.ahk
 #Include engine\lib\UM14Click.ahk
 
-global scenario := "", wheelCount := 0, clicks := [], probes := 0, activeDifficulty := "", hover := [0, 0]
+global scenario := "", wheelCount := 0, clicks := [], probes := 0, activeDifficulty := "", hover := [0, 0], dismissedAt := 0
 Click(x, y := unset) {
+    global dismissedAt
     if (x = "Up")
         return
     clicks.Push(IsSet(y) ? [x, y] : hover.Clone())
+    if (scenario = "startup-dismiss" && clicks.Length = 3)
+        dismissedAt := A_TickCount
 }
 MouseMove(x, y, *) {
     global hover := [x, y]
@@ -38,12 +42,13 @@ UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenar
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_ConnectionOCRStage() => scenario = "ready-uncertain" ? "overlap" : "success"
 UM14_LobbyOrInventory() => ((scenario = "startup-stack" || scenario = "startup-retry") && clicks.Length = 2)
-    || (scenario = "startup-dismiss" && clicks.Length = 3)
+    || (scenario = "startup-dismiss" && clicks.Length = 3 && A_TickCount-dismissedAt >= 700)
 PixelGetColor(x,y) => (scenario = "startup-stack" && !clicks.Length)
     ? (x = 770 || y = 106 ? 0xF82736 : 0xFFFFFF) : (scenario = "ready-green" || scenario = "login-reward" || scenario = "compact-reward"
         || scenario = "unrelated-claim" || scenario = "startup-stack" || scenario = "startup-retry"
         || scenario = "startup-stuck" || scenario = "startup-dismiss" || scenario = "reward-hidden-on-hover") ? 0x22CA38
-        : (scenario = "map-vip" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen") ? 0x203329 : 0xB8A9A7
+        : (scenario = "map-vip" || scenario = "map-template" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen")
+            ? (x = hover[1] ? 0xFFFFFF : 0x203329) : 0xB8A9A7
 UM14_Region(x, y, w, h, *) => {x:x, y:y, w:w, h:h}
 UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, factor := 0, *) {
@@ -72,20 +77,24 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
     }
     if (scenario = "map-purchase" && region.x = 220 && region.y = 154)
         return "Buy Robux and item VIP"
+    if (scenario = "map-template" && region.y > 220 && region.y < 240)
+        return "All Maps Easy Normal Hard Insane"
     if (scenario = "map-vip" || scenario = "map-query" || scenario = "map-query-suffix" || scenario = "map-wrong-screen") {
-        if (region.x = 210 && scenario != "map-wrong-screen")
+        if (region.x = 290 && scenario != "map-wrong-screen")
             return "Vote For A Map"
-        if (region.x = 120 || region.x = 235) {
+        if (region.x = 240 && scenario = "map-query")
+            return "A Dead Ahead"
+        if (region.x = 240 && scenario = "map-query-suffix")
+            return "Dead Ahead Annex"
+        if (region.x = 120) {
             if (scenario = "map-vip" || scenario = "map-wrong-screen")
                 return [{text:"SEARCH",x:250,y:213,w:46,h:13},{text:"FOR",x:300,y:213,w:22,h:13},
                     {text:"MAPS",x:326,y:213,w:32,h:13}]
-            labels := [{text:"DEAD",x:250,y:213,w:36,h:13},{text:"AHEAD",x:291,y:213,w:47,h:13}]
-            if (scenario = "map-query-suffix")
-                labels.Push({text:"ANNEX",x:344,y:213,w:40,h:13})
-            return labels
         }
         if (region.x = 230 && scenario = "map-query")
             return "Map changed to Dead Ahead"
+        if (region.y >= 300 && scenario = "map-query")
+            return "Dead Ahead"
     }
     if ((scenario = "ready-green" || scenario = "ready-uncertain" || scenario = "ready-nongreen")
         && region.x = 290 && !clicks.Length)
@@ -129,6 +138,8 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
 }
 AdvancedImageSearch(path, x, y, w, h, *) {
     global probes
+    if (scenario = "map-template" && path = "Resources/searchbar.png")
+        return {status:"success",score:.91,x:310,y:220,w:125,h:13}
     if (path = "Resources/close.png" && ((scenario = "startup-stack" && !clicks.Length && hover[1] != 770) || scenario = "wrong-news"))
         return {status:"success",score:.96,x:x+110,y:y+60}
     if (scenario = "restart" && path = "Resources/Restart.png" && !clicks.Length)
@@ -224,8 +235,8 @@ try {
         stopped := InStr(e.Message,"Login Rewards is still open")
     Need(stopped && clicks.Length = 2, "An unchanged reward never gets a third press or a relaunch")
     scenario := "startup-dismiss", clicks := []
-    Need(UM14_WaitSetupLobby(7500) && clicks.Length = 3 && clicks[3][1] = 850 && clicks[3][2] < 53,
-        "A stuck reward can be dismissed using the separately verified Login control")
+    Need(UM14_WaitSetupLobby(3500) && clicks.Length = 3 && clicks[3][1] = 850 && clicks[3][2] < 53,
+        "A late verified Login dismiss gets time to transition instead of triggering an immediate timeout")
     clicks := []
     scenario := "map-purchase", blocked := false
     try UM14_MapOverrideSearch(UM14_ConnectionSnapshot())
@@ -238,12 +249,20 @@ try {
     scenario := "map-vip", ctx := UM14_ConnectionSnapshot()
     field := UM14_MapOverrideSearch(ctx)
     Need(IsObject(field) && field.x > 358 && field.y = 220, "Map search clicks inside the dark field, away from its label")
+    hover := [field.x,field.y]
+    Need(UM14_ButtonStillAt(field,UM14_MapOverrideSearch(ctx)), "The live I-beam cannot hide the whole textbox")
+    scenario := "map-template"
+    current := UM14_MapOverrideSearch(ctx)
+    Need(IsObject(current) && current.x > 372 && current.y = 220,
+        "Unreadable outlined title/placeholder can use the map filter tabs plus two stable search images")
     scenario := "map-query-suffix"
     Need(!UM14_MapOverrideCard(ctx,field,"Dead Ahead"), "A different query cannot select a map card")
     scenario := "map-query"
     card := UM14_MapOverrideCard(ctx,field,"Dead Ahead")
     Need(IsObject(card) && card.x < field.x && card.y > field.y && UM14_MapOverrideReceipt(ctx,"Dead Ahead") = "changed",
         "A verified filtered card is followed by the matching TDS receipt")
+    Need(UM14_MapHoveredCardName(ctx,card,field,"Dead Ahead") && !UM14_MapHoveredCardName(ctx,card,field,"Dead Ahead Annex"),
+        "The hovered tile's title confirms only the exact selected map")
     scenario := "ready-nongreen"
     Need(!UM14_ReadyButton(UM14_ConnectionSnapshot()) && !clicks.Length,
         "Plain Ready text without its button background is not clickable")

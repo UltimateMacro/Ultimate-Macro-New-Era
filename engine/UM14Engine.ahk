@@ -5873,7 +5873,7 @@ UM14_ChooseOverrideMap(identity, name) {
     Loop 2 {
         pass := A_Index, field := false, evidence := "context"
         Loop 4 {
-            field := UM14_MapOverrideSearch(identity,"Search for Maps",false,&evidence)
+            field := UM14_MapOverrideSearch(identity,&evidence)
             if (IsObject(field) && UM14_HeldClick(identity,field.x,field.y,"Map override search",180,
                 () => UM14_ButtonStillAt(field,UM14_MapOverrideSearch(identity))))
                 break
@@ -5887,11 +5887,19 @@ UM14_ChooseOverrideMap(identity, name) {
         Sleep(150)
         UM14_RejectMapPurchase(identity)
         UM14_SearchText(name)
+        parkX := Round(identity.w*.5), parkY := Max(0,field.y-24)
+        UM14_RequireInputPoint(identity,parkX,parkY,"Read map search query")
+        MouseMove(parkX,parkY,0)
         Sleep(200)
-        card := UM14_MapOverrideCard(identity,field,name)
+        card := UM14_MapOverrideCard(identity,field,name,&evidence)
+        ; Two exact query reads located the candidate. Recheck against the
+        ; title shown on hover or a fresh query before any card press.
         if (!IsObject(card) || !UM14_HeldClick(identity,card.x,card.y,"Filtered map card",160,
-            () => UM14_ButtonStillAt(card,UM14_MapOverrideCard(identity,field,name))))
+            () => UM14_MapHoveredCardName(identity,card,field,name)
+                || UM14_ButtonStillAt(card,UM14_MapOverrideCard(identity,field,name,&evidence,1)))) {
+            LogToConsole("Map query check: " evidence)
             UM14_LobbyFailure("the filtered map query for " name "; no map card was clicked")
+        }
 
         receipt := UM14_MapOverrideReceipt(identity,name)
         if (receipt = "changed") {

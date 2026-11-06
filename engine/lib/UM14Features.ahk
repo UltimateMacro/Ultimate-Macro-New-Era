@@ -75,7 +75,7 @@ UM14_ExtraUiWait() {
 
 UM14_WaitSetupLobby(timeout := 12000, allowResultsRelaunch := false) {
     start := A_TickCount
-    deadline := timeout + UM14_ExtraUiWait()
+    deadline := start+timeout+UM14_ExtraUiWait(), transitionUntil := start
     nextOverlayCheck := start, attempts := Map(), blocking := false, evidence := "context"
     rewardSince := 0, rewardDismissed := false
     Loop {
@@ -94,13 +94,16 @@ UM14_WaitSetupLobby(timeout := 12000, allowResultsRelaunch := false) {
                     && UM14_ClickStartupOverlay(identity,blocking)) {
                     attempts[blocking.kind] := {count:IsObject(previous) ? previous.count+1 : 1,
                         at:A_TickCount, key:identity.key, button:blocking.button}
+                    transitionUntil := A_TickCount+2200
                     LogToConsole("Pressed verified " blocking.action "; waiting for the lobby.")
                 }
                 if (reward && !rewardDismissed && ((IsObject(previous) && previous.count >= 2 && A_TickCount-previous.at >= 1250)
                     || (!IsObject(blocking.button) && A_TickCount-rewardSince >= 1600))) {
                     rewardDismissed := UM14_DismissStalledReward(identity)
-                    if rewardDismissed
+                    if rewardDismissed {
+                        transitionUntil := A_TickCount+2200
                         LogToConsole("Login Rewards stayed open. Pressed verified Login to dismiss it; no reward was confirmed.")
+                    }
                 }
                 if (!rewardDismissed && !IsObject(blocking.button))
                     UM14_ClearStartupHover(identity,blocking.region)
@@ -111,7 +114,9 @@ UM14_WaitSetupLobby(timeout := 12000, allowResultsRelaunch := false) {
             LogToConsole("Rejoining TDS from the confirmed match-results screen.")
             return RunRoblox()
         }
-        if A_TickCount-start >= deadline {
+        ; Even a verified press near the normal deadline must get a chance to
+        ; finish animating. The one-retry and one-dismiss caps bound the grace.
+        if A_TickCount >= Max(deadline,transitionUntil) {
             LogToConsole("Lobby startup check: " evidence)
             if IsObject(blocking)
                 UM14_Fatal(blocking.name " is still open. Close it in Roblox and press Start again. No match was started.")
@@ -866,8 +871,29 @@ UM14_RejectMapPurchase(identity) {
 }
 
 UM14_MapVoteHeading(identity) {
-    region := UM14_StartupRegion(identity,.21,.004,.79,.155)
-    return IsObject(region) && UM14_MapCaption(UM14_ConnectionOCR(identity,region,2.6),"Vote For A Map")
+    ; The large title is adjacent to Roblox's top bar and a second flashing
+    ; prompt. Read its own line instead of mixing both with clipped HUD icons.
+    region := UM14_StartupRegion(identity,.29,.014,.75,.105)
+    if !IsObject(region)
+        return false
+    for scale in [1.7,2.6] {
+        text := UM14_ConnectionOCR(identity,region,scale)
+        if (Type(text) = "String" && RegExMatch(text,"i)\bVote\s+for\s+a\s*Map\b"))
+            return true
+    }
+    return false
+}
+
+UM14_MapSearchTabs(identity, field) {
+    ; If the title's outlined font is unreadable, these adjacent map-filter
+    ; labels still identify the picker independently from its textbox.
+    x := Max(0,Round(field.left-field.height*3)), y := Round(field.y+field.height*.85)
+    region := UM14_Region(x,y,Round(identity.w*.49),Max(27,Round(field.height*3.2)),identity.w,identity.h)
+    if !IsObject(region)
+        return false
+    text := UM14_ConnectionOCR(identity,region,3.2)
+    return UM14_MapCaption(text,"All Maps") && (UM14_MapCaption(text,"Normal")
+        || UM14_MapCaption(text,"Insane") || UM14_MapCaption(text,"Hard"))
 }
 
 UM14_MapSearchWords(words, phrase) {
@@ -911,16 +937,15 @@ UM14_MapSearchWords(words, phrase) {
     return found
 }
 
-UM14_MapSearchField(identity, phrase, anchor := false, &evidence := "") {
-    region := IsObject(anchor) ? UM14_Region(Max(0,Round(anchor.left-15)),Max(0,Round(anchor.y-13)),
-        Round(identity.w*.45),26,identity.w,identity.h) : UM14_StartupRegion(identity,.12,.155,.76,.51)
+UM14_MapSearchField(identity, &evidence := "") {
+    region := UM14_StartupRegion(identity,.12,.155,.76,.51)
     if !IsObject(region)
         return false
-    factor := Min(IsObject(anchor) ? 3.6 : 3.0,2500/Max(region.w,region.h))
+    factor := Min(3.0,2500/Max(region.w,region.h))
     words := UM14_OCRWords(UM14_ConnectionOCR(identity,region,factor,"",true),region,factor)
-    label := UM14_MapSearchWords(words,phrase)
+    label := UM14_MapSearchWords(words,"Search for Maps")
     evidence := "label=" (IsObject(label) ? "found" : UM14_ConnectionOCRStage())
-    if (!IsObject(label) && !IsObject(anchor) && phrase = "Search for Maps") {
+    if !IsObject(label) {
         ; The compact placeholder is gray on a translucent background. Reuse
         ; its two-frame image match, but keep the pointer off the label itself.
         image := UM14_MenuImagePair(identity,region,"searchbar.png",.72)
@@ -939,43 +964,96 @@ UM14_MapSearchField(identity, phrase, anchor := false, &evidence := "") {
     if !UM14_StartupPointIn(region,x,label.y)
         return false
     darker := 0
-    for offset in [-5,0,5] {
-        try {
-            rgb := PixelGetColor(x,label.y+offset)
-            if Max((rgb>>16)&255,(rgb>>8)&255,rgb&255) <= 140
-                darker++
+    ; Roblox draws a light I-beam and hover glow exactly at the pointer.
+    ; Sample the continuation of the same textbox past the caret, not the
+    ; pointer pixels that otherwise invalidate a correct field on hover.
+    for across in [14,24,34] {
+        for down in [-5,5] {
+            if !UM14_StartupPointIn(region,x+across,label.y+down)
+                continue
+            try {
+                rgb := PixelGetColor(x+across,label.y+down)
+                if Max((rgb>>16)&255,(rgb>>8)&255,rgb&255) <= 140
+                    darker++
+            }
         }
     }
-    evidence .= " field=" (darker >= 2 ? "dark" : "unverified")
-    if (darker < 2 || !UM14_ConnectionSame(identity))
+    evidence .= " field=" (darker >= 3 ? "dark" : "unverified")
+    if (darker < 3 || !UM14_ConnectionSame(identity))
         return false
     return {x:x,y:label.y,left:label.left,height:label.height}
 }
 
-UM14_MapOverrideSearch(identity, phrase := "Search for Maps", anchor := false, &evidence := "") {
+UM14_MapOverrideSearch(identity, &evidence := "") {
     UM14_RejectMapPurchase(identity)
-    if !UM14_MapVoteHeading(identity) {
-        evidence := "vote=" UM14_ConnectionOCRStage()
-        return false
-    }
-    first := UM14_MapSearchField(identity,phrase,anchor,&evidence)
+    first := UM14_MapSearchField(identity,&evidence)
     if !IsObject(first)
         return false
+    if !UM14_MapVoteHeading(identity) && !UM14_MapSearchTabs(identity,first) {
+        evidence .= " vote-context=unverified"
+        return false
+    }
     Sleep(100)
-    second := UM14_MapSearchField(identity,phrase,anchor,&evidence)
+    second := UM14_MapSearchField(identity,&evidence)
     return UM14_ButtonStillAt(first,second,5) ? second : false
 }
 
-UM14_MapOverrideCard(identity, anchor, name) {
-    query := UM14_MapOverrideSearch(identity,name,anchor)
-    if (!IsObject(query) || Abs(query.left-anchor.left) > 14 || Abs(query.y-anchor.y) > 6)
+UM14_MapQueryAt(identity, anchor, name) {
+    x := Max(0,Round(anchor.left-10)), y := Max(0,anchor.y-13)
+    width := Min(Round(identity.w*.49),Max(120,Round((StrLen(name)+4)*Max(9,anchor.height*.9))))
+    region := UM14_Region(x,y,width,26,identity.w,identity.h)
+    if !IsObject(region)
         return false
+    name := StrLower(Trim(RegExReplace(name,"\s+"," ")))
+    for scale in [2.6,3.5] {
+        readback := UM14_ConnectionOCR(identity,region,scale)
+        if (Type(readback) != "String" || StrLen(readback) > 160)
+            continue
+        line := StrLower(Trim(RegExReplace(readback,"\s+"," ")))
+        ; At the far left, WinRT sometimes includes the small translate icon.
+        if (line = name || line = "a " name)
+            return UM14_ConnectionSame(identity)
+    }
+    return false
+}
+
+UM14_MapOverrideCard(identity, anchor, name, &evidence := "", samples := 2) {
+    UM14_RejectMapPurchase(identity)
+    confirmed := 0
+    Loop samples+1 {
+        if !UM14_ConnectionSame(identity)
+            return false
+        if UM14_MapQueryAt(identity,anchor,name)
+            confirmed++
+        if (confirmed >= samples)
+            break
+        Sleep(100)
+    }
+    if (confirmed < samples) {
+        evidence := "query=" (confirmed ? "unstable" : UM14_ConnectionOCRStage())
+        return false
+    }
     ; With the exact typed query confirmed in the field, the first filtered
     ; tile is below its left edge. Only continue after the exact map receipt.
-    x := Round(query.left+Max(17,anchor.height*1.55))
-    y := query.y+Max(73,Min(155,Round(anchor.height*6.5)))
+    x := Round(anchor.left+Max(17,anchor.height*1.55))
+    y := anchor.y+Max(73,Min(155,Round(anchor.height*6.5)))
     tiles := UM14_StartupRegion(identity,.10,.27,.75,.76)
+    evidence := "query=verified"
     return UM14_StartupPointIn(tiles,x,y) ? {x:x,y:y} : false
+}
+
+UM14_MapHoveredCardName(identity, card, field, name) {
+    ; The tile shows its map title only on hover. Match that title in a crop
+    ; below the pointer, independently of the text in the search field.
+    UM14_RejectMapPurchase(identity)
+    half := Max(38,Min(98,Round(field.height*3.8)))
+    top := card.y+4
+    region := UM14_Region(Max(0,card.x-half),top,half*2,Max(32,Round(field.height*3.2)),identity.w,identity.h)
+    if !IsObject(region)
+        return false
+    text := UM14_ConnectionOCR(identity,region,3.0)
+    return Type(text) = "String" && StrLen(text) <= 160
+        && Trim(RegExReplace(text,"\s+"," ")) = name && UM14_ConnectionSame(identity)
 }
 
 UM14_MapOverrideReceipt(identity, name) {
