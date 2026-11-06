@@ -51,7 +51,7 @@ UM14_Fatal(message) {
     throw Error(message)
 }
 UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenario = "hardcore" ? {w:1078, h:995,key:"game"}
-    : scenario = "map-anchored-receipt" ? {w:1920,h:1009,key:"game"}
+    : scenario = "map-anchored-receipt" || scenario = "map-prompt-max" ? {w:1920,h:1009,key:"game"}
     : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" || scenario = "compact-reward" ? {w:800, h:600,key:"game"} : {w:1000, h:700,key:"game"}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_ConnectionOCROverlap() => "fixture"
@@ -184,6 +184,12 @@ UM14_ConnectionOCR(identity, region, factor := 0, *) {
     }
     if (scenario = "map-prompt" && region.x = 190 && region.w = 620)
         return "E Override Map"
+    if (scenario = "map-prompt-max") {
+        if (region.x = 557)
+            return "Vote For A Map"
+        if (region.x = 672 && region.y = 484)
+            return "E Override Map"
+    }
     if (scenario = "squad-compact") {
         if (region.y = 15)
             return "Choose a Squad...`nSelect the maximum..."
@@ -479,6 +485,8 @@ try {
     Need(!UM14_SquadCard("Duo"), "Compact fallback rejects a different squad label")
     scenario := "map-prompt"
     Need(IsObject(UM14_MapOverridePrompt()), "Visible map-vote controls and exact Override Map label verify the prompt")
+    scenario := "map-prompt-max"
+    Need(IsObject(UM14_MapOverridePrompt()), "The maximized Override Map caption is read in its local crop")
     scenario := "no-vote"
     Need(!UM14_MapOverridePrompt(), "No map override input outside the vote screen")
     scenario := "moved", activeDifficulty := "Fallen", seen := false, wheelCount := 0, clicks := []

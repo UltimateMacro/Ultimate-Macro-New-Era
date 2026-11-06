@@ -1029,21 +1029,25 @@ UM14_MapOverridePrompt() {
     ready := UM14_Region(Round(w*.32),Round(h*.55),Round(w*.36),Round(h*.37),w,h)
     if !UM14_MapVoteHeading(identity) && !IsObject(UM14_MenuImagePair(identity,ready,"Ready.png",.76))
         return false
-    ; Roblox keeps a near-fixed caption size on compact clients. The old
-    ; percentage crop cut both ends off "Override Map" at 800 pixels wide.
-    prompt := UM14_StartupRegion(identity,.19,.39,.81,.76)
-    if !IsObject(prompt)
-        return false
-    Loop 2 {
-        text := UM14_ConnectionOCR(identity,prompt,2.8)
-        ; WinRT can flatten the separate E glyph and the caption. Match the
-        ; complete label in this bounded vote crop, not an entire OCR line.
-        if (!UM14_MapCaption(text,"Override Map") || !UM14_ConnectionSame(identity))
-            return false
-        if (A_Index = 1)
+    ; Read the caption near the character first. On a large client a single
+    ; wide crop downscales the label and mixes it with scenery. The compact
+    ; fallback still covers the full-width label at smaller viewports.
+    for bounds in [[.35,.48,.66,.67],[.19,.39,.81,.76]] {
+        prompt := UM14_StartupRegion(identity,bounds[1],bounds[2],bounds[3],bounds[4])
+        if !IsObject(prompt)
+            continue
+        found := 0
+        Loop 3 {
+            text := UM14_ConnectionOCR(identity,prompt,3.3)
+            if !UM14_ConnectionSame(identity)
+                return false
+            found := UM14_MapCaption(text,"Override Map") ? found+1 : 0
+            if (found >= 2)
+                return identity
             Sleep(100)
+        }
     }
-    return UM14_ConnectionSame(identity) ? identity : false
+    return false
 }
 
 UM14_MapPurchaseText(text) {
