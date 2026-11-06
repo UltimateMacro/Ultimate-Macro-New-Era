@@ -5864,7 +5864,7 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         if !overrideConfirmed {
             LogToConsole("Checking the active map vote board for " gamemap ".")
             if !UM14_MapVoteBoard(overrideIdentity,e_pr,gamemap)
-                UM14_LobbyFailure("the exact map name at the vote board; no vote or gameplay input was sent")
+                UM14_LobbyFailure("the exact map name at the vote board; no vote or strategy placements were sent")
             LogToConsole("Confirmed the active vote board for " gamemap ".")
             if (modifiers != "") {
                 ApplyModifiers()
@@ -5905,9 +5905,9 @@ UM14_ChooseOverrideMap(identity, name) {
         UM14_RequireInputPoint(identity,parkX,parkY,"Read map search query")
         MouseMove(parkX,parkY,0)
         Sleep(200)
-        card := UM14_MapOverrideCard(identity,field,name,&evidence)
-        ; Two exact query reads located the candidate. Recheck against the
-        ; title shown on hover or a fresh query before any card press.
+        card := UM14_MapOverrideCard(identity,field,name,&evidence,1)
+        ; One exact read locates the candidate without pressing it. Require
+        ; the exact hovered title or a second query read before any press.
         titleVerified := false, beforeGreen := false
         if (!IsObject(card) || !UM14_HeldClick(identity,card.x,card.y,"Filtered map card",160,
             () => UM14_MapCardBeforePress(identity,card,field,name,&evidence,&titleVerified,&beforeGreen))) {
@@ -5921,8 +5921,8 @@ UM14_ChooseOverrideMap(identity, name) {
             return true
         }
         picker := "not-checked"
-        ; The exact query was already checked again immediately before the
-        ; press. With no receipt, movement to read the board does not vote.
+        ; The exact query or the hovered title was verified before pressing.
+        ; With no receipt, movement to read the board does not vote.
         if (receipt = "" && UM14_MapPickerClosed(identity,field,name,&picker)) {
             UM14_RejectMapPurchase(identity)
             LogToConsole("The requested tile was pressed and the picker closed. Checking the active vote board before voting.")

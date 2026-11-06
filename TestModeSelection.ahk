@@ -53,7 +53,7 @@ UM14_Fatal(message) {
     throw Error(message)
 }
 UM14_ConnectionSnapshot() => scenario = "docked" || scenario = "squad" || scenario = "hardcore" ? {w:1078, h:995,key:"game"}
-    : scenario = "map-anchored-receipt" || scenario = "map-prompt-max" ? {w:1920,h:1009,key:"game"}
+    : scenario = "map-anchored-receipt" || scenario = "map-prompt-max" || scenario = "map-query-max" ? {w:1920,h:1009,key:"game"}
     : scenario = "horizontal" || scenario = "squad-compact" || scenario = "modifier-compact" || scenario = "compact-reward" ? {w:800, h:600,key:"game"} : {w:1000, h:700,key:"game"}
 UM14_ConnectionSame(*) => scenario != "moved"
 UM14_ConnectionOCROverlap() => "fixture"
@@ -102,6 +102,8 @@ UM14_OCRWords(recognized, *) => IsObject(recognized) ? recognized : []
 UM14_ConnectionOCR(identity, region, factor := 0, *) {
     if (scenario = "map-anchored-receipt" && region.x = 538 && region.y <= 256 && region.y+region.h >= 277 && region.h < 76)
         return "Map changed to Dead Ahead"
+    if (scenario = "map-query-max" && region.x = 720 && region.y <= 210 && region.y+region.h >= 228)
+        return "Dead Ahead"
     if (SubStr(scenario,1,10) = "map-board-") {
         if (region.x = 290)
             return "Vote For A Map"
@@ -349,6 +351,9 @@ try {
         "Unreadable outlined title/placeholder can use the map filter tabs plus two stable search images")
     scenario := "map-query-suffix"
     Need(!UM14_MapOverrideCard(ctx,field,"Dead Ahead"), "A different query cannot select a map card")
+    scenario := "map-query-max"
+    Need(UM14_MapQueryAt(UM14_ConnectionSnapshot(),{left:722,y:227,height:15},"Dead Ahead"),
+        "A slightly low placeholder anchor still keeps the full typed text in the crop")
     scenario := "map-query"
     Need(UM14_EnterNewMapQuery(ctx,"Dead Ahead") && literalMapInput.Length = 1 && literalMapInput[1] = "Dead Ahead",
         "A fresh map search uses only literal text like the modified reference")

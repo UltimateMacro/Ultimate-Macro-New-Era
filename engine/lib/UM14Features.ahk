@@ -1270,19 +1270,21 @@ UM14_MapVoteBoard(identity, prompt, name) {
 }
 
 UM14_MapQueryAt(identity, anchor, name) {
-    x := Max(0,Round(anchor.left-10)), y := Max(0,anchor.y-13)
-    width := Min(Round(identity.w*.49),Max(120,Round((StrLen(name)+4)*Max(9,anchor.height*.9))))
-    region := UM14_Region(x,y,width,26,identity.w,identity.h)
-    if !IsObject(region)
-        return false
-    name := StrLower(Trim(RegExReplace(name,"\s+"," ")))
-    for scale in [2.6,3.5] {
-        readback := UM14_ConnectionOCR(identity,region,scale)
+    want := StrLower(Trim(RegExReplace(name,"\s+"," ")))
+    ; The fallback template can locate the empty row a little below the
+    ; actual text. Read the whole typed line without including the tabs.
+    for bounds in [[2,22,15,3.1],[10,13,13,3.5]] {
+        x := Max(0,Round(anchor.left-bounds[1])), y := Max(0,anchor.y-bounds[2])
+        width := Min(Round(identity.w*.49),Max(150,Round((StrLen(want)+5)*Max(11,anchor.height))))
+        region := UM14_Region(x,y,width,anchor.y+bounds[3]-y,identity.w,identity.h)
+        if !IsObject(region)
+            continue
+        readback := UM14_ConnectionOCR(identity,region,bounds[4])
         if (Type(readback) != "String" || StrLen(readback) > 160)
             continue
         line := StrLower(Trim(RegExReplace(readback,"\s+"," ")))
         ; At the far left, WinRT sometimes includes the small translate icon.
-        if (line = name || line = "a " name)
+        if (line = want || line = "a " want)
             return UM14_ConnectionSame(identity)
     }
     return false
