@@ -28,7 +28,7 @@
   "A25-compatible-strategy-replay"
  ],
  "files": {
-  "ENGINE-NOTICE.md": "66048114798780f196a2da11b649cdeda55888b5d02acb63257b5efac15aed95",
+  "ENGINE-NOTICE.md": "3f1c42794e8d05a857f8fa36e89f11cb5ee94399725e8c90f33a1a8337a4d367",
   "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
   "README.md": "d605f5446b9b909fec4e16a953a6ced3b19ae2a0a3c5b57a3bec185a1eed1cb2",
   "Resources/(1.png": "91fadbeb93f6a3b6e91f9f49c1e9686d14ffd314e306e3ab5ec78acff83415a4",
@@ -194,8 +194,8 @@
   "lib/UM14Shared.ahk": "2a736bdd5f7a5be5aac52750ccc5b2b404e4485807563a50dddc4416e0b676ad",
   "lib/UM14Stats.ahk": "06ac30ea003b9c740e06dfd1f658c9223df79f9fb053257a43736b841e34a694",
   "lib/UM14WindowOCR.ahk": "2a2906561b0e3eb9053428d65ace186175b7a2c77f06a0c49dde4ae963535d58",
-  "submacros/AutoHotkey64.exe": "37ff15a23a98f0a658298e21f1873ca896a05208810bf796f90ca212ee07c7b1",
-  "submacros/UM14Tools64.exe": "37ff15a23a98f0a658298e21f1873ca896a05208810bf796f90ca212ee07c7b1",
+  "submacros/AutoHotkey64.exe": "5073ee85da091653c7c6ce32cacda3a0b4bfb51649823c10015ba0bd71acb73c",
+  "submacros/UM14Tools64.exe": "5073ee85da091653c7c6ce32cacda3a0b4bfb51649823c10015ba0bd71acb73c",
   "submacros/auto_coa.ahk": "aa8e06e6d46602eb18dc1dbae04ac86fa87d2ca30e5eb74a9e685fc34c9166cb",
   "submacros/auto_open_consumable.ahk": "bd1c47e92aa0b721196c4648249912db5034f8b06ae3e23b1c7a683304c752a1",
   "submacros/auto_spin.ahk": "bab0d29f11804d81ed15e57699caf70f576fcb0fd4e61ec8a4523de66b6f875c",

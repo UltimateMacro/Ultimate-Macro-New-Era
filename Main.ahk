@@ -36,7 +36,11 @@ A_MaxHotkeysPerInterval := 9999
 #Include app\Roblox.ahk
 #Include app\Docking.ahk
 #Include app\Discord.ahk
+#Include app\Dashboard.ahk
 #Include app\Passive.ahk
+
+DashboardDevelopmentOrigin := ""
+#Include *i app\DashboardDevelopment.local.ahk
 
 class App {
     static VERSION := "1.4.0.41-ahk"
@@ -48,6 +52,7 @@ class App {
     static mutex := 0
 
     static Main() {
+        global DashboardDevelopmentOrigin
         if RegExMatch(A_ScriptDir, "i)\.(zip|rar|7z)(\\|$)") {
             MsgBox("You are running Ultimate Macro from inside a ZIP file.`n`nExtract the whole folder first, then run Main.ahk from the extracted folder.", "Running From ZIP", 0x10)
             ExitApp()
@@ -73,6 +78,7 @@ class App {
             ExitApp()
         if (!Store.settings["languageChosen"] && !FirstUse.Language())
             ExitApp()
+        Dashboard.Init(Store.root, App.UPDATE_VERSION, DashboardDevelopmentOrigin)
         Engine.Init()
         ; Temporary draft paths are an implementation detail, not a saved strategy.
         Engine.onLog := (text) => InStr(text, "\UMDraft-") ? 0 : MW.Log(text)
@@ -89,6 +95,7 @@ class App {
         }
         Hotkeys.Install()
         MW.Show()
+        Dashboard.Restore()
         UpdateHelper.Arm(4500)
     }
 
@@ -100,6 +107,7 @@ class App {
     }
 
     static Cleanup(reason, code) {
+        try Dashboard.Stop()
         ; No queued paint may touch fonts, brushes or buffers after shutdown.
         try UI_Uninstall()
         try {

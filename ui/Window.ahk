@@ -456,6 +456,17 @@ class MW {
         u.Add(MW.Caption("Installation keeps your current folder and never restarts the app automatically."))
         u.Add(Button("Open update folder", (*) => MW.OpenUpdateFolder()))
 
+        d := root.Add(Card("Connect to Dashboard"))
+        d.Add(MW.Caption("Enter the one-time code from the Ultimate Macro website. Pairing does not control macro runs."))
+        MW.dashboardCode := d.Add(Field("", "Dashboard code (XXXX-XXXX)", {password: true, maxLength: 24}))
+        actions := HBox(, 6)
+        MW.dashboardConnect := actions.Add(Button(_T("Connect"), (*) => MW.ConnectDashboard()), 1)
+        MW.dashboardDisconnect := actions.Add(Button(_T("Disconnect"), (*) => Dashboard.Disconnect()), 1)
+        d.Add(actions)
+        MW.dashboardStatus := d.Add(MW.Caption(Dashboard.message))
+        Dashboard.onChange := () => MW.RefreshDashboard()
+        MW.RefreshDashboard()
+
         l := root.Add(Card("LANGUAGE"))
         MW.language := l.Add(Select())
         for item in Locale.Available()
@@ -557,6 +568,23 @@ class MW {
         MW.moreFrame.Add(Button(_T("Third-party notices"), (*) => MW.OpenNotices()))
         MW.moreFrame.Add(Button(_T("Terms & conditions ↗"), (*) => Run(FirstUse.TERMS_URL)))
         MW.moreFrame.Add(Button(_T("Privacy policy ↗"), (*) => Run(FirstUse.PRIVACY_URL)))
+    }
+
+    static ConnectDashboard() {
+        if !Dashboard.CanConnect
+            return
+        code := MW.dashboardCode.Text
+        MW.dashboardCode.Clear()
+        if MW.dashboardCode.ctrl
+            try SendMessage(0xCD, 0, 0, MW.dashboardCode.ctrl) ; clear native undo buffer
+        Dashboard.Connect(code)
+    }
+
+    static RefreshDashboard() {
+        MW.dashboardCode.Enable(Dashboard.CanConnect)
+        MW.dashboardConnect.Enable(Dashboard.CanConnect)
+        MW.dashboardDisconnect.Enable(Dashboard.CanDisconnect)
+        MW.dashboardStatus.SetText(_T(Dashboard.message))
     }
 
     static ToggleSection(button, section) {

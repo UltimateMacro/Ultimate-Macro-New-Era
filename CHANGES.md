@@ -2,6 +2,8 @@
 
 ## 1.4.0.41
 
+- Add Settings → Connect to Dashboard, with an encrypted link, connection status, and explicit Disconnect. Dashboard pairing does not control the macro.
+- Update both bundled interpreter copies to the unmodified official AutoHotkey 2.0.31 build.
 - Clear the verified TDS Update Log and handle Login Rewards in compact and full-size windows. If TDS leaves the reward open, close it via the verified Login icon without assuming it was granted.
 - Confirm the Survival section and distinguish Easy from Casual by its label, not its artwork. Keep Hardcore selection on its own card.
 - Find the current VIP map picker by its visible search label. Check the typed map and the game's confirmation before continuing. Stop at Roblox purchase prompts.
