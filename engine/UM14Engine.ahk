@@ -5217,6 +5217,7 @@ JoinGame() {
         res := UM14_LobbyPlay()
         if IsObject(res) {
             ActivateRoblox()
+            closeChat()
             if (CollectPlaytimeRewards = "1" || CollectPlaytimeRewards = 1) {
                 claimPlaytimeRewards()
             }
@@ -5811,9 +5812,9 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         SendEvent("{sc012 up}")
         Sleep(500)
 
-        UM14_ChooseOverrideMap(overrideIdentity,gamemap)
+        overrideConfirmed := UM14_ChooseOverrideMap(overrideIdentity,gamemap)
 
-        if (modifiers != "")
+        if (modifiers != "" && overrideConfirmed)
             ApplyModifiers()
 
         Sleep(200)
@@ -5860,6 +5861,18 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             }
         }
 
+        if !overrideConfirmed {
+            LogToConsole("Checking the active map vote board for " gamemap ".")
+            if !UM14_MapVoteBoard(overrideIdentity,e_pr,gamemap)
+                UM14_LobbyFailure("the exact map name at the vote board; no vote or gameplay input was sent")
+            LogToConsole("Confirmed the active vote board for " gamemap ".")
+            if (modifiers != "") {
+                ApplyModifiers()
+                if !UM14_MapVoteBoard(overrideIdentity,e_pr,gamemap)
+                    UM14_LobbyFailure("the exact map name after setting modifiers")
+            }
+        }
+        UM14_RequireReadyFocus()
         SendEvent("{sc012 down}") 
         Sleep(800)
         SendEvent("{sc012 up}")
@@ -5905,6 +5918,10 @@ UM14_ChooseOverrideMap(identity, name) {
         if (receipt = "changed") {
             LogToConsole("Confirmed map override to " name ".")
             return true
+        }
+        if (receipt = "" && titleVerified && UM14_MapPickerClosed(identity,field,name)) {
+            LogToConsole("The requested tile was pressed and the picker closed. Checking the active vote board before voting.")
+            return false
         }
         if (receipt != "rotation" || pass != 1) {
             LogToConsole("Map receipt check: " (receipt ? receipt : evidence))
@@ -7304,13 +7321,8 @@ HasGlobal(varName) {
 
 closeChat() {
     global AutoCloseChat
-    static reminded := false
-    if (!AutoCloseChat || reminded)
-        return
-    ; The old white-pixel test now overlaps other Roblox topbar controls.
-    ; Keep the preference, but send no click until a chat close is identifiable.
-    reminded := true
-    LogToConsole("Close Roblox chat manually if it covers the game. The retired topbar click is disabled.")
+    if (AutoCloseChat && IsObject(identity := UM14_ConnectionSnapshot()) && UM14_CloseRobloxChat(identity))
+        LogToConsole("Closed Roblox chat.")
 }
 
 

@@ -219,6 +219,76 @@ UM14_StartupOverlay(identity, &evidence := "", underPointer := false) {
 UM14_StartupPointIn(region, x, y) => IsObject(region)
     && x >= region.x && y >= region.y && x < region.x+region.w && y < region.y+region.h
 
+UM14_ChatOpen(identity, scale, &readable := false) {
+    readable := false
+    ; Read only the panel tabs. Don't OCR or retain chat messages or drafts.
+    width := Min(identity.w-Round(8*scale),Max(Round(344*scale),Round(identity.h*.29+186*scale)))
+    header := UM14_Region(Round(8*scale),Round(66*scale),width,Round(33*scale),identity.w,identity.h)
+    if !IsObject(header)
+        return false
+    text := UM14_ConnectionOCR(identity,header,2.7)
+    readable := UM14_ConnectionOCRStage() = "success" && UM14_ConnectionSame(identity)
+    return readable && Type(text) = "String" && StrLen(text) <= 100
+        && RegExMatch(text,"i)\bHere\b[^a-z]{0,7}\bGlobal\b[^a-z]{0,7}\bFriends\b")
+}
+
+UM14_ChatToggle(identity, scale) {
+    if !UM14_ChatOpen(identity,scale)
+        return false
+    band := UM14_Region(Round(119*scale),Round(13*scale),Round(42*scale),Round(40*scale),identity.w,identity.h)
+    if (!IsObject(band) || !UM14_ConnectionCaptureClear(identity,band))
+        return false
+    bright := 0, dark := 0
+    try {
+        ; The chat bubble is light in the upper-left native topbar segment.
+        ; Count a few pixels instead of relying on the old single white dot.
+        for xy in [[131,28],[135,28],[139,27],[144,28],[147,28],[130,33],[134,32],[141,31],[144,32]] {
+            rgb := PixelGetColor(Round(xy[1]*scale),Round(xy[2]*scale))
+            r := (rgb>>16)&255, g := (rgb>>8)&255, b := rgb&255
+            if (Min(r,g,b) >= 150 && Max(r,g,b)-Min(r,g,b) <= 90)
+                bright++
+        }
+        for xy in [[121,23],[156,23],[122,44]] {
+            rgb := PixelGetColor(Round(xy[1]*scale),Round(xy[2]*scale))
+            if Max((rgb>>16)&255,(rgb>>8)&255,rgb&255) <= 118
+                dark++
+        }
+    } catch {
+        return false
+    }
+    if (bright < 3 || dark < 2 || !UM14_ConnectionSame(identity))
+        return false
+    return {x:Round(146*scale),y:Round(41*scale)}
+}
+
+UM14_CloseRobloxChat(identity) {
+    scale := 1, dpi := 0
+    if identity.HasOwnProp("hwnd")
+        try dpi := DllCall("GetDpiForWindow","Ptr",identity.hwnd,"UInt")
+    options := dpi >= 110 && dpi <= 192 ? [1,dpi/96] : [1]
+    for scale in options {
+        button := UM14_ChatToggle(identity,scale)
+        if !IsObject(button)
+            continue
+        MouseGetPos(&oldX,&oldY)
+        if !UM14_HeldClick(identity,button.x,button.y,"Close Roblox chat",150,
+            () => UM14_ButtonStillAt(button,UM14_ChatToggle(identity,scale)))
+            return false
+        closed := 0
+        Loop 4 {
+            Sleep(180)
+            open := UM14_ChatOpen(identity,scale,&readable)
+            closed := readable && !open ? closed+1 : 0
+            if (closed >= 2)
+                break
+        }
+        if (oldX >= 0 && oldX < identity.w && oldY >= 0 && oldY < identity.h && UM14_ConnectionSame(identity))
+            MouseMove(oldX,oldY,0)
+        return closed >= 2 ; never retry a toggle and accidentally reopen it
+    }
+    return false
+}
+
 UM14_StartupHoveredButton(identity, previous, kind, region, color) {
     ; Roblox draws its cursor over the icon/text and tints the hovered button.
     ; Only an already verified button can use the surrounding color here, and
@@ -1101,6 +1171,53 @@ UM14_MapOverrideSearch(identity, &evidence := "") {
     Sleep(100)
     second := UM14_MapSearchField(identity,&evidence)
     return UM14_ButtonStillAt(first,second,5) ? second : false
+}
+
+UM14_MapPickerClosed(identity, field, name) {
+    ; Missing OCR alone doesn't mean it closed. The map-vote overlay must
+    ; still be readable, with neither its query nor its filter tabs present.
+    Loop 2 {
+        if (!UM14_ConnectionSame(identity) || !UM14_MapVoteHeading(identity)
+            || UM14_MapQueryAt(identity,field,name) || UM14_ConnectionOCRStage() != "success"
+            || UM14_MapSearchTabs(identity,field) || UM14_ConnectionOCRStage() != "success")
+            return false
+        Sleep(100)
+    }
+    return UM14_ConnectionSame(identity)
+}
+
+UM14_MapVoteBoard(identity, prompt, name) {
+    if (!IsObject(prompt) || !UM14_ConnectionSame(identity) || !UM14_MapVoteHeading(identity))
+        return false
+    halfW := Max(102,Round(identity.h*.18)), halfH := Max(68,Round(identity.h*.15))
+    left := Max(0,prompt.x-halfW), top := Max(0,prompt.y-halfH)
+    right := Min(identity.w,prompt.x+halfW), bottom := Min(identity.h,prompt.y+halfH)
+    region := UM14_Region(left,top,right-left,bottom-top,identity.w,identity.h)
+    if !IsObject(region)
+        return false
+    factor := Min(3.4,2500/Max(region.w,region.h)), exact := 0
+    Loop 3 {
+        ocr := UM14_ConnectionOCR(identity,region,factor,"",true)
+        matched := false
+        if IsObject(ocr) {
+            try {
+                for line in ocr.Lines {
+                    title := Trim(RegExReplace(line.Text,"\s+"," "))
+                    if (title = name || title = "E " name) {
+                        matched := true
+                        break
+                    }
+                }
+            }
+        } else if (Type(ocr) = "String") {
+            matched := Trim(ocr) = name || Trim(ocr) = "E " name
+        }
+        exact := matched && UM14_ConnectionSame(identity) ? exact+1 : 0
+        if (exact >= 2)
+            return true
+        Sleep(150)
+    }
+    return false
 }
 
 UM14_MapQueryAt(identity, anchor, name) {

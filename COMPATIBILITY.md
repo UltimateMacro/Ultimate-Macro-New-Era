@@ -7,7 +7,7 @@ The supplied TDS-Modified-Macro reference identifies itself as 1.3.3.10 in
 | --- | --- | --- |
 | Auto-equip | Uses template matching, action-button colors and timed menu clicks. Its wide-window unequip sweep uses the column at 61% of the client width. | Retains the reference search, action templates, colors and 10/20 ms input defaults. Current whole labels, live-row geometry and bounded read retries handle newer inventory and docked layouts. A click must change its own button before continuing. Unknown slot order stops playback instead of silently selecting the wrong tower. |
 | Modes and modifiers | Offers configurable mode-list scroll and votes once after selecting all modifiers. | Keeps the 1.4 mode navigation, separates Easy from Casual, and uses the reference one-click modifier vote sequence with docked coordinates. |
-| Chat | Clicks a fixed topbar position after checking one white pixel. | Sends no retired topbar click, since that position can select shop or voice controls. Close chat manually if it covers the game. |
+| Chat | Clicks a fixed topbar position after checking one white pixel. | Closes a recognized open Roblox chat panel before setup or camera alignment. Unrecognized or already-closed chat is left alone. |
 | Settings | Uses legacy INI files and retains settings and statistics across its updater. | Uses an independent AppData profile. Failed Python-profile imports retry without overwriting files already copied. |
 | Updates | Resolves GitLab tags or GitHub releases and offers to apply the downloaded archive. | Downloads a verified ZIP in the background. An explicit confirmation extracts it into a new folder; launch remains manual. |
 
