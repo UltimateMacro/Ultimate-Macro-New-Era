@@ -235,7 +235,12 @@ class StrategyList extends W {
             this.hoverRow := r
             this.Invalidate()
         }
-        this.tip := r ? this.rows[r].item.title "`n" this.rows[r].item.map " · " this.rows[r].item.mode : ""
+        if r {
+            item := this.rows[r].item
+            SplitPath(item.path, &file)
+            this.tip := item.title "`n" file "`n" item.map " · " item.mode
+        } else
+            this.tip := ""
     }
     OnLeave() {
         this.hoverRow := 0
@@ -297,7 +302,10 @@ class StrategyList extends W {
                 Gfx.Text(row.slots, right - bw, ry + 13, bw, 22, mf, Theme.C("accent"), 1, 1)
                 right -= bw + 8
             }
-            Gfx.Text(row.item.title, left, ry + 5, right - left, 19, tf, Theme.C("text"), 0, 1)
+            caption := row.HasOwnProp("caption") ? row.caption : row.item.title
+            if (caption != row.item.title)
+                caption := Gfx.Elide(caption, tf, right-left, true)
+            Gfx.Text(caption, left, ry + 5, right - left, 19, tf, Theme.C("text"), 0, 1)
             Gfx.Text(row.item.map " · " row.item.mode, left, ry + 26, right - left, 17, mf, Theme.C("muted"), 0, 1)
             i += 1
         }

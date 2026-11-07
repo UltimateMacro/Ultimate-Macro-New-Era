@@ -437,7 +437,7 @@ class Store {
 }
 
 ; UTF-8 (no BOM) write through a temporary file and an atomic replace.
-AtomicWrite(path, text, encoding := "UTF-8-RAW") {
+AtomicWrite(path, text, encoding := "UTF-8-RAW", replace := true) {
     SplitPath(path, , &dir)
     DirCreate(dir)
     tmp := dir "\.um14-" A_TickCount "-" Random(1000, 9999) ".tmp"
@@ -446,9 +446,9 @@ AtomicWrite(path, text, encoding := "UTF-8-RAW") {
         throw OSError("Could not write " path)
     f.Write(text)
     f.Close()
-    if !DllCall("MoveFileExW", "WStr", tmp, "WStr", path, "UInt", 0x1 | 0x8) {
+    if !DllCall("MoveFileExW", "WStr", tmp, "WStr", path, "UInt", (replace ? 0x1 : 0) | 0x8) {
         try FileDelete(tmp)
-        throw OSError("Could not replace " path)
+        throw OSError("Could not write " path)
     }
 }
 

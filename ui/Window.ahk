@@ -10,6 +10,8 @@ class MW {
     static run := {active: false, phase: "idle", matches: 0}
     static rec := {active: false, draft: false, text: "", steps: 0, aligned: false, passive: false, incomplete: false, pendingSave: false, phase: "Draft"}
     static repeatBeforeRotation := "", loadoutCache := Map(), reasonCache := Map(), compact := false
+    static libraryTitleCounts := Map(), libraryFileCounts := Map(), libraryFileOrdinals := Map()
+    static featureFinder := ""
     static dockAutoPending := false, dockRestoreMax := false, launcherWaiting := false, updateReviewing := false
     static hotkeyConflict := false, lastMatches := 0, wasRunning := false, removeTarget := ""
     static NAV_PAGES := [1, 2, 3, 5, 6, 4]
@@ -65,7 +67,12 @@ class MW {
                 MW.maxBtn := b
         }
 
-        MW.compactStrategies := Select(, 1, (sel, i) => MW.ChooseVisible(i))
+        importAction := (*) => MW.ImportStrategy()
+        searchChanged := (widget) => MW.LibrarySearchChanged(widget)
+        MW.compactLibrary := HBox(, 6, [0, 0, 6, 0])
+        MW.compactStrategies := MW.compactLibrary.Add(Select(, 1, (sel, i) => MW.ChooseVisible(i)), 1)
+        MW.compactSearch := MW.compactLibrary.Add(Field("", "Search strategies", {fixedW: 152, onChange: searchChanged}))
+        MW.compactLibrary.Add(MW.ImportButton(importAction))
         MW.ultraNav := Select(["Run", "Record", "Party", "Tools", "Settings", "Discord"], 1
             , (sel, i) => MW.SelectPage(MW.NAV_PAGES[i]))
 
@@ -73,11 +80,9 @@ class MW {
         side := VBox(, 10, [14, 16, 11, 12])
         titleRow := HBox(, 6)
         titleRow.Add(Label(_T("Strategies")), 1)
-        add := Button("", (*) => MW.ImportStrategy(), "", "plus")
-        add.fixedW := 30, add.tip := "Import a strategy file"
-        titleRow.Add(add)
+        titleRow.Add(MW.ImportButton(importAction))
         side.Add(titleRow)
-        MW.search := side.Add(Field("", "Search strategies", {onChange: (*) => MW.FilterLibrary()}))
+        MW.search := side.Add(Field("", "Search strategies", {onChange: searchChanged}))
         MW.list := side.Add(StrategyList((i) => MW.ChooseVisible(i)), 1)
         MW.sidebar := side
 
@@ -85,6 +90,8 @@ class MW {
         bar := HBox(, 6, [0, 0, 6, 0])
         MW.outputBtn := bar.Add(Button(_T("Output") "   " _T("Ready."), (*) => MW.ToggleOutput(), "output"), 1)
         MW.outputBtn.fixedH := 32
+        MW.featureFindBtn := bar.Add(Button(_T("Find features"), (*) => MW.ShowFeatureFinder()))
+        MW.featureFindBtn.tip := "Find an option by name and jump to its control."
         MW.exportBtn := bar.Add(Button(_T("Export log"), (*) => MW.ExportOutput()))
         MW.exportBtn.tip := "Save the visible Output history as a text file. Review it before sharing."
         MW.outputBar := bar
@@ -93,7 +100,7 @@ class MW {
         MW.grip := status.Add(ResizeGrip())
         MW.statusBar := status
 
-        MW.layout := MainLayout(header, MW.ultraNav, MW.compactStrategies, side, bar, status)
+        MW.layout := MainLayout(header, MW.ultraNav, MW.compactLibrary, side, bar, status)
         MW.surface := Surface(g, MW.layout)
         MW.surface.background := (sf) => Backdrop.PaintFor(sf, 0, 0)
         MW.surface.overlay := (sf) => MW.booting ? BootStage.Paint(sf) : 0
@@ -566,6 +573,8 @@ class MW {
         MW.bindingStatus := rc.Add(MW.Caption("Valid shortcuts save when you leave a field. Start, Stop and emergency stop stay F1, F2 and F8."))
         rc.Add(Button(_T("Apply shortcuts"), (*) => MW.SaveRecordBindings()))
         MW.moreFrame.Add(Button(_T("Import older settings"), (*) => MW.ImportOlderSettings()))
+        MW.exportProfileBtn := MW.moreFrame.Add(Button(_T("Export settings profile (.ump)"), (*) => MW.ExportSettingsProfile()))
+        MW.exportProfileBtn.tip := "Save supported settings without links, accounts or strategy paths."
         MW.moreFrame.Add(Button(_T("Export logic source"), (*) => MW.ExportLogic()))
         MW.moreFrame.Add(Button(_T("Third-party notices"), (*) => MW.OpenNotices()))
         MW.moreFrame.Add(Button(_T("Terms & conditions ↗"), (*) => Run(FirstUse.TERMS_URL)))
@@ -625,7 +634,7 @@ class MW {
             t.visible := !compact && !boot
         MW.compactNav.visible := compact && !ultra && !boot
         MW.ultraNav.visible := ultra && !boot
-        MW.compactStrategies.visible := compact && !boot
+        MW.compactLibrary.visible := compact && !boot
         MW.sidebar.visible := !compact && !boot
         MW.headerTitle.visible := boot
         MW.startBtn.visible := !boot, MW.stopBtn.visible := !boot
@@ -712,11 +721,113 @@ class MW {
             MW.FadePage()
     }
 
+    static FeatureCatalog() => [
+        ["Private server", "vip servidor privado", 6, MW.privateLink],
+        ["Auto equip towers", "loadout equipar torres ranuras", 1, MW.equip],
+        ["Repeat after results", "loop run repetir partidas continuidad", 1, MW.repeat],
+        ["Strategy rotation", "alternar estrategias rotacion", 1, MW.rotate],
+        ["Recording", "record shortcut grabar grabacion", 2, MW.recordStart],
+        ["Party", "multiplayer equipo multijugador", 3, MW.partyEnabled],
+        ["Discord remote", "link bot control conectar vincular", 4, MW.officialLinkBtn],
+        ["Discord notifications", "webhook notificaciones aviso", 4, MW.webhookUrl],
+        ["Consumable crates", "tools cajas consumibles", 5, MW.crateButton],
+        ["Dock Roblox", "window layout acoplar ventana", 6, MW.dockRoblox],
+        ["Timescale", "speed velocidad 1.5x 2x tickets", 6, MW.timescale],
+        ["Check for updates", "version updates actualizacion", 6, MW.updateButton],
+        ["Recording shortcuts", "hotkeys teclas atajos", 6, MW.bindingInputs["align"], true],
+        ["Export settings profile (.ump)", "exportar perfil preferencias ump", 6, MW.exportProfileBtn, true]]
+
+    static FeatureFinderAllowed() => !MW.Active && !MW.busy && !MW.booting && !MW.closing
+        && !MW.stopPending && !MW.LaunchBusy()
+
+    static ShowFeatureFinder(show := true) {
+        if !MW.FeatureFinderAllowed()
+            return ""
+        if MW.featureFinder {
+            MW.featureFinder.query.Focus()
+            return MW.featureFinder
+        }
+        g := Gui("+Owner" MW.gui.Hwnd " -MinimizeBox -MaximizeBox", _T("Find features"))
+        g.SetFont("s10", "Segoe UI")
+        g.AddText("w330", _T("Search an option by name, then choose where to go."))
+        query := g.AddEdit("w330 Limit120")
+        list := g.AddListBox("w330 r8")
+        go := g.AddButton("w118 Default", _T("Go to option"))
+        cancel := g.AddButton("x+8 w90", _T("Close"))
+        state := {gui:g, query:query, list:list, go:go, rows:[]}
+        MW.featureFinder := state
+        query.OnEvent("Change", (*) => MW.FilterFeatureFinder(state))
+        list.OnEvent("DoubleClick", (*) => MW.OpenFeatureMatch(state))
+        go.OnEvent("Click", (*) => MW.OpenFeatureMatch(state))
+        cancel.OnEvent("Click", (*) => MW.CloseFeatureFinder(state))
+        g.OnEvent("Escape", (*) => MW.CloseFeatureFinder(state))
+        g.OnEvent("Close", (*) => MW.CloseFeatureFinder(state))
+        MW.FilterFeatureFinder(state)
+        g.Show(show ? "AutoSize" : "Hide AutoSize")
+        if show
+            query.Focus()
+        return state
+    }
+
+    static FoldFeatureText(value) {
+        value := StrLower(value)
+        for pair in [["á","a"], ["é","e"], ["í","i"], ["ó","o"], ["ú","u"], ["ü","u"], ["ñ","n"]]
+            value := StrReplace(value, pair[1], pair[2])
+        return value
+    }
+
+    static FilterFeatureFinder(state) {
+        terms := StrSplit(RegExReplace(Trim(MW.FoldFeatureText(state.query.Value)), "\s+", " "), " ")
+        state.rows := [], labels := []
+        for row in MW.FeatureCatalog() {
+            haystack := MW.FoldFeatureText(_T(row[1]) " " row[1] " " row[2])
+            matches := true
+            for term in terms {
+                if (term != "" && !InStr(haystack, term)) {
+                    matches := false
+                    break
+                }
+            }
+            if matches
+                state.rows.Push(row), labels.Push(_T(row[1]))
+        }
+        state.list.Delete()
+        if labels.Length
+            state.list.Add(labels), state.list.Choose(1)
+        state.go.Enabled := labels.Length > 0
+    }
+
+    static OpenFeatureMatch(state) {
+        index := state.list.Value
+        if (!MW.FeatureFinderAllowed() || index < 1 || index > state.rows.Length)
+            return
+        row := state.rows[index]
+        MW.CloseFeatureFinder(state)
+        MW.SelectPage(row[3])
+        if (row.Length >= 5 && row[5] && !MW.moreFrame.visible) {
+            MW.moreButton.SetChecked(true)
+            MW.ToggleSection(MW.moreButton, MW.moreFrame)
+        }
+        target := row[4]
+        if (target.visible && target.surface) {
+            target.surface.EnsureVisible(target)
+            if target.IsEnabled()
+                MW.SetKeyboardFocus(target)
+        }
+    }
+
+    static CloseFeatureFinder(state) {
+        if MW.featureFinder != state
+            return
+        MW.featureFinder := ""
+        state.gui.Destroy()
+    }
+
     static TabOrder() {
         items := []
         if MW.booting || MW.closing || !MW.page
             return items
-        for widget in [MW.header, MW.ultraNav, MW.compactStrategies, MW.sidebar, MW.pages[MW.page].root, MW.outputBar]
+        for widget in [MW.header, MW.ultraNav, MW.compactLibrary, MW.sidebar, MW.pages[MW.page].root, MW.outputBar]
             widget.CollectFocus(items)
         return items
     }
@@ -930,6 +1041,15 @@ class MW {
     ; ======================================================================
     ; library
     ; ======================================================================
+    static LibrarySearchChanged(widget) {
+        other := widget == MW.search ? MW.compactSearch : MW.search
+        query := widget.Text
+        if (other.Text == query)
+            return
+        other.Text := query
+        MW.FilterLibrary()
+    }
+
     static RefreshLibrary(reload := true, preserveMissing := false) {
         if (reload || !MW.items.Length)
             MW.items := Store.Library()
@@ -951,14 +1071,26 @@ class MW {
     static FilterLibrary(preserveMissing := false) {
         previous := IsObject(MW.current) ? MW.current.path : Store.settings["slot1"]
         term := StrLower(MW.search.Text)
+        counts := Map()
+        counts.CaseSense := false
+        files := Map(), ordinals := Map()
+        files.CaseSense := false, ordinals.CaseSense := false
+        for item in MW.items {
+            counts[item.title] := counts.Get(item.title, 0) + 1
+            SplitPath(item.path, &file)
+            files[file] := files.Get(file, 0) + 1
+            ordinals[item.path] := files[file]
+        }
+        MW.libraryTitleCounts := counts, MW.libraryFileCounts := files, MW.libraryFileOrdinals := ordinals
         MW.visibleItems := []
         selected := 0
         labels := []
         for item in MW.items {
-            if (term != "" && !InStr(StrLower(item.title " " item.map " " item.mode), term))
+            SplitPath(item.path, &file)
+            if (term != "" && !InStr(StrLower(item.title " " item.map " " item.mode " " file), term))
                 continue
             MW.visibleItems.Push(item)
-            labels.Push(item.title " · " item.map)
+            labels.Push(MW.LibraryCaption(item) " · " item.map)
             if (item.path = previous)
                 selected := MW.visibleItems.Length
         }
@@ -985,6 +1117,16 @@ class MW {
         MW.compactStrategies.Choose(i)
         MW.RefreshSlots(i)
         MW.UpdateControls()
+    }
+
+    static LibraryCaption(item) {
+        if (MW.libraryTitleCounts.Get(item.title, 0) < 2)
+            return item.title
+        SplitPath(item.path, &file, &folder)
+        if (MW.libraryFileCounts.Get(file, 0) < 2)
+            return file
+        SplitPath(folder, &source)
+        return MW.libraryFileOrdinals[item.path] ": " source " · " file
     }
 
     static RequiredLoadout(item) {
@@ -1019,7 +1161,7 @@ class MW {
             for it in MW.items
                 if (it.path = path)
                     assigned := it
-            MW.slotNames[slotIndex].SetText(IsObject(assigned) ? assigned.title : _T("Not set"))
+            MW.slotNames[slotIndex].SetText(IsObject(assigned) ? MW.LibraryCaption(assigned) : _T("Not set"))
             MW.slotLoadouts[slotIndex].SetText(IsObject(assigned) ? MW.RequiredLoadout(assigned) : _T("Not set"))
             MW.slotButtons[slotIndex].SetText(_T(IsObject(MW.current) && MW.current.path = path ? "In slot" : "Use selected"))
         }
@@ -1029,7 +1171,7 @@ class MW {
             for slotIndex, slotKey in ["slot1", "slot2"]
                 if (s[slotKey] = it.path)
                     slots .= (slots = "" ? "" : ", ") slotIndex
-            rows.Push({item: it, slots: slots})
+            rows.Push({item: it, slots: slots, caption: MW.LibraryCaption(it)})
             if (IsObject(MW.current) && it.path = MW.current.path)
                 sel := i
         }
@@ -1055,15 +1197,17 @@ class MW {
         MW.UpdateControls()
     }
 
-    static Reason(item) {
+    static Reason(item, useCache := true) {
         key := item.path
-        if MW.reasonCache.Has(key)
+        if (useCache && MW.reasonCache.Has(key))
             return MW.reasonCache[key]
         reason := ""
         try Strategy.Requirement(item)
         catch as e
             reason := e.Message
-        return MW.reasonCache[key] := reason
+        if useCache
+            MW.reasonCache[key] := reason
+        return reason
     }
 
     static SelectFile(options, start, title, filter) {
@@ -1076,6 +1220,12 @@ class MW {
             if !MW.closing
                 MW.gui.Opt((Store.settings["topmost"] ? "+" : "-") "AlwaysOnTop")
         }
+    }
+
+    static ImportButton(callback) {
+        widget := Button("", callback, "", "plus")
+        widget.fixedW := 30, widget.tip := "Import a strategy file"
+        return widget
     }
 
     static ImportStrategy() {
@@ -1289,6 +1439,20 @@ class MW {
         MW.Log("Imported " result.imported " settings; skipped " result.skipped " unsupported entries.")
     }
 
+    static ExportSettingsProfile() {
+        path := MW.SelectFile("S", "UltimateMacro-Settings.ump", _T("Export settings profile"), "Macro profiles (*.ump)")
+        if (path = "")
+            return
+        if !RegExMatch(path, "i)\.ump$")
+            path .= ".ump"
+        try LegacyProfile.Export(path, Store.settings)
+        catch {
+            MW.Log("Settings could not be exported. Choose a new .ump file in a writable folder.")
+            return
+        }
+        MW.Log("Settings profile exported.")
+    }
+
     static ExportLogic() {
         path := MW.SelectFile("S16", "UltimateMacro-" App.VERSION "-Logic.zip", _T("Export logic source"), "ZIP archive (*.zip)")
         if (path = "")
@@ -1412,6 +1576,7 @@ class MW {
         idle := !MW.Active && !MW.busy && !MW.closing && !MW.stopPending
         enabled := idle && !MW.LaunchBusy() && MW.engineReady && !MW.booting
         s := Store.settings
+        MW.featureFindBtn.Enable(MW.FeatureFinderAllowed())
         MW.timescale.Enable(MW.RunSettingsEditable())
         privateEditable := enabled && !Engine.ToolsRunning()
         MW.privateLink.Enable(privateEditable)
@@ -1431,7 +1596,10 @@ class MW {
             blocked := MW.Reason(MW.current)
         if PrivateServer.unreadable
             blocked := MW.PrivateServerStatus()
-        MW.startBtn.Enable(enabled && IsObject(MW.current) && MW.page = 1 && blocked = "")
+        slotsReady := !s["rotation"] || (s["slot1"] != "" && s["slot2"] != "")
+        ; Cached status is advisory. StartRun checks the inspected text before
+        ; sending any input, including if a previously rejected file changed.
+        MW.startBtn.Enable(enabled && IsObject(MW.current) && MW.page = 1 && slotsReady && !PrivateServer.unreadable)
         MW.startBtn.tip := blocked != "" ? blocked : "Start the selected strategy; F1 in Roblox."
         MW.stopBtn.Enable((MW.Active || MW.busy || MW.stopPending || MW.launcherWaiting || Engine.ToolsRunning()) && !MW.closing)
         notes := ""
@@ -1538,12 +1706,12 @@ class MW {
                 item := first
                 slot2 := second.text
                 opts.rotation := {amount: s["rotationAmount"], unit: s["rotationUnit"]}
-                if ((reason := MW.Reason(second)) != "") {
+                if ((reason := MW.Reason(second, false)) != "") {
                     MW.Log(reason)
                     return
                 }
             }
-            if ((reason := MW.Reason(item)) != "") {
+            if ((reason := MW.Reason(item, false)) != "") {
                 MW.Log(reason)
                 return
             }
@@ -2425,6 +2593,8 @@ class MW {
                 return
         }
         MW.closing := true
+        if MW.featureFinder
+            MW.CloseFeatureFinder(MW.featureFinder)
         MW.statusLabel.SetText(_T("Stopping engine…"))
         try Store.SaveForm(MW.RecordFormSnapshot())
         GameRecovery.Cancel()

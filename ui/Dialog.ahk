@@ -139,9 +139,39 @@ class FirstUse {
 class LegacyProfile {
     static FLAGS := Map("alwaysontop", "topmost", "autoequip", "autoEquip", "autoclosechat", "autoCloseChat")
     static KEYS := Map("cancelplacement", "cancelKey", "raisethedead", "raiseDeadKey", "chain", "chainKey", "caravan", "caravanKey"
-        , "beat", "beatKey", "hologram", "hologramKey", "repo", "repositionKey")
+        , "beat", "beatKey", "hologram", "hologramKey", "repo", "repositionKey", "enforcervankey", "enforcerVanKey")
     static RECORD := Map("aligncamerakey", "align", "placetowerkey", "place", "upgradetowerkey", "upgrade", "selltowerkey", "sell"
         , "holokey", "clone", "changetargetskey", "targets", "changedjtrackkey", "dj")
+
+    static Export(path, current) {
+        if !RegExMatch(path, "i)\.ump$")
+            throw ValueError("Choose a .ump destination")
+        amount := current["rotationAmount"], unit := current["rotationUnit"]
+        if !IsInteger(amount) || amount < 1 || amount > 999 || (unit !== "Runs" && unit !== "Minutes")
+            throw ValueError("Invalid rotation interval")
+        runtime := Store.ValidRuntime(current["runtime"])
+        selectedBindings := Map()
+        for legacyKey, action in LegacyProfile.RECORD
+            selectedBindings[action] := current["recordBindings"][action]
+        bindings := Store.ValidBindings(selectedBindings, runtime)
+        ; The interval is portable. The enabled rotation and its slots stay local.
+        sections := Map("Options", Map("SwapAmount", Integer(amount), "SwapUnit", unit, "UpgradeDelay", runtime["upgradeDelayMs"])
+            , "Hotkeys", Map(), "RecordingHotkeys", Map())
+        for row in Engine.Schema() {
+            section := row[1], key := row[2], lookup := StrLower(key)
+            if (section = "Options" && LegacyProfile.FLAGS.Has(lookup))
+                sections[section][key] := current[LegacyProfile.FLAGS[lookup]] ? 1 : 0
+            else if (section = "Hotkeys" && LegacyProfile.KEYS.Has(lookup))
+                sections[section][key] := runtime[LegacyProfile.KEYS[lookup]]
+            else if (section = "RecordingHotkeys" && LegacyProfile.RECORD.Has(lookup))
+                sections[section][key] := Store.AhkHotkey(bindings[LegacyProfile.RECORD[lookup]])
+        }
+        ; The game does not send this key, but the launcher includes it in
+        ; its hotkey conflict validation. Preserve it with the other keys.
+        sections["Hotkeys"]["EnforcerVanKey"] := runtime["enforcerVanKey"]
+        doc := Map("formatVersion", 1, "application", "Ultimate Macro", "settings", sections)
+        AtomicWrite(path, JSON.stringify(doc), "UTF-8-RAW", false)
+    }
 
     static Hotkey(value) {
         value := Trim(value)

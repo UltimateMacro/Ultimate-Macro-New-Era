@@ -154,19 +154,20 @@ class Gfx {
         return result
     }
 
-    ; Qt ElideRight: keep the longest prefix that fits, then "…".
-    static Elide(text, font, width) {
+    ; Keep the longest prefix or filename suffix that fits.
+    static Elide(text, font, width, keepEnd := false) {
         if (Gfx.Measure(text, font)[1] <= width + 1)
             return text
-        lo := 0, hi := StrLen(text)
+        lo := 0, len := StrLen(text), hi := len
         while (lo < hi) {
             mid := (lo + hi + 1) // 2
-            if (Gfx.Measure(RTrim(SubStr(text, 1, mid)) "…", font)[1] <= width + 1)
+            candidate := keepEnd ? "…" LTrim(SubStr(text, len - mid + 1)) : RTrim(SubStr(text, 1, mid)) "…"
+            if (Gfx.Measure(candidate, font)[1] <= width + 1)
                 lo := mid
             else
                 hi := mid - 1
         }
-        return lo ? RTrim(SubStr(text, 1, lo)) "…" : "…"
+        return !lo ? "…" : keepEnd ? "…" LTrim(SubStr(text, len - lo + 1)) : RTrim(SubStr(text, 1, lo)) "…"
     }
 
     static LineH(font) {
