@@ -80,9 +80,14 @@ above is unchanged except for these recorder patches (build `1.3.3a-um14.26-ahk1
 - "Record upgrade clicks" / "Record sell clicks" toggle the legacy click
   detection; sell clicks require a positive Sell-button image match.
 
-Native files copied verbatim from the 1.3.3a release: `lib/ImageSearch/*.dll`,
-`submacros/AutoHotkey64.exe` (AutoHotkey v2.0.12) and its byte-identical copy
-`submacros/UM14Tools64.exe` used only for the crate utility.
+Native files copied verbatim from the 1.3.3a release: `lib/ImageSearch/*.dll`.
+`submacros/AutoHotkey64.exe` is the unmodified x64 interpreter from the
+[official AutoHotkey v2.0.31 release](https://github.com/AutoHotkey/AutoHotkey/releases/tag/v2.0.31)
+([corresponding source](https://github.com/AutoHotkey/AutoHotkey/tree/v2.0.31)).
+`submacros/UM14Tools64.exe` is a byte-identical copy used only for the crate
+utility, whose process lifetime is separate from the gameplay engine.
+The official portable archive SHA-256 is
+`CA1A595ACA4528755D8D4CD7FED23D497A37BD9A0B6892072612D68DEE1BD00A`.
 
 ## AHK gameplay compatibility pass (build `1.3.3a-um14.26-ahk2`)
 
@@ -102,3 +107,13 @@ Native files copied verbatim from the 1.3.3a release: `lib/ImageSearch/*.dll`,
   only for a confirmed disconnect or a verified result when rejoining.
 - A21: hold and verify high-impact clicks, wait for the previous tower panel
   to close, and add bounded UI wait and pre-join tuning.
+
+## AHK 1.4.0.41 (build `1.3.3a-um14.27-ahk3`)
+
+- A22: verify login claim, Survival mode captions and in-match Ready against the selected Roblox client. Stop at an unverified map-override or purchase prompt instead of sending further input.
+
+## AHK 1.4.0.41 startup compatibility (build `1.3.3a-um14.28-ahk3`)
+
+- A23: recognize the TDS Update Log and the compact Login Rewards dialog before starting a match. Retry only the same verified control once.
+- A24: verify the visible map search field and typed query, then require TDS to confirm the requested map before match setup continues.
+- A25: ignore strategy comments before inspecting any operation, and group upgrades only when their path and flags agree.

@@ -174,8 +174,6 @@ global Slots := [
     ScaleX(1120) ", " ScaleY(960)
 ]
 
-global readyX := 0
-global readyY := 0
 
 global ChainKey, BeatKey, CaravanKey, CancelPlacementKey, TimeScaleMode, UseTimeScale, TimeScaleMultiplier
 ChainKey := IniRead(SettingsFile, "Hotkeys", "Chain", "C")
@@ -4161,16 +4159,13 @@ LoadStrategyFile(file) {
 
     inSteps := false
     Loop Read, file {
-        line := Trim(A_LoopReadLine)
-        if (line ~= "i)^\[Settings\]") { 
-            inSteps := false
+        line := UM14_RecordedStepLine(A_LoopReadLine)
+        if RegExMatch(line,"^\[.*\]$") {
+            inSteps := RegExMatch(line,"i)^\[\s*Steps\s*\]$") != 0
+            continue
         }
-        if (line ~= "i)^\[Steps\]")    { 
-            inSteps := true
-        }
-        if (inSteps && line != "") {
+        if (inSteps && line != "" && !RegExMatch(line,"i)^-{5,}(?:\s*\(\s*(?:Alignment|Steps)\s*\))?$"))
             RecordedSteps.Push(line)
-        }
     }
 
     
@@ -4276,9 +4271,7 @@ RunStrategy(stratFile := "", skipRestart := false) {
         JoinGame()
     }
 
-    if (readyX = 0 && readyY = 0) {
-        waitReady()
-    }
+    waitReady()
 
     if (!IsRestarting) {
         CheckTheMapF()
@@ -4296,7 +4289,7 @@ RunStrategy(stratFile := "", skipRestart := false) {
 }
 
 PlayStrategy() {
-    global canUseAbility, MultiplayerEnabled, StateFile
+    global canUseAbility, MultiplayerEnabled, StateFile, LastOpenedTowerID
 
     UM14_BeginMatchRun()
     IniWrite(A_TickCount, StateFile, "State", "TimeWhenStartedPlaying")
@@ -4309,27 +4302,11 @@ PlayStrategy() {
     i := 1
     while (i <= RecordedSteps.Length) {
         step := RecordedSteps[i]
-        isMacroStep := RegExMatch(step, "i)^(Click|Send|Sleep)\s*\(")
-
-        if RegExMatch(step, "i)UpgradeTower\s*\(\s*([^,]+?)\s*(?:,\s*(false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)", &m) {
-            currentID    := Trim(m[1])
-            countUpgrades := (m[3] != "") ? Integer(m[3]) : 1
-            currentPath   := (m[4] != "") ? Integer(m[4]) : 0
-            currentpathLevel := (m[5] != "") ? Integer(m[5]) : 4
-
-            lookAhead := i + 1
-            while (lookAhead <= RecordedSteps.Length) {
-                nextStep := RecordedSteps[lookAhead]
-                if RegExMatch(nextStep, "i)UpgradeTower\s*\(\s*" currentID "\s*(?:,\s*(?:false|true)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?(?:,\s*(\d+)\s*)?\s*\)", &mN) {
-                    countUpgrades += (mN[1] != "") ? Integer(mN[1]) : 1
-                    lookAhead++
-                } else {
-                    break
-                }
-            }
-
-            success := UpgradeTower(currentID, false, countUpgrades, currentPath, currentpathLevel)
-            i := success ? lookAhead : i + 1
+        batch := UM14_UpgradeBatch(RecordedSteps,i)
+        if IsObject(batch) {
+            skipOpen := batch.skip && LastOpenedTowerID == batch.id
+            success := UpgradeTower(batch.id,skipOpen,batch.count,batch.path,batch.level)
+            i := success ? batch.next : i+1
         } else if RegExMatch(step, "i)SetDJTrack\s*\(\s*([^\s,)]+)\s*\)", &t) {
             SetDJTrack(t[1])
             i++
@@ -4361,8 +4338,7 @@ ExecuteStep(step) {
     global Commander, unfocusX, unfocusY
     if UM14_ExecuteInputStep(step)
         return
-    step := RegExReplace(step, "\s*;.*$", "")
-    step := Trim(step)
+    step := UM14_RecordedStepLine(step)
     if (step = "")
         return
     if RegExMatch(step, "i)SpawnTower\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d)\s*,\s*(.*?)\s*\)", &m) {
@@ -5241,6 +5217,7 @@ JoinGame() {
         res := UM14_LobbyPlay()
         if IsObject(res) {
             ActivateRoblox()
+            closeChat()
             if (CollectPlaytimeRewards = "1" || CollectPlaytimeRewards = 1) {
                 claimPlaytimeRewards()
             }
@@ -5827,103 +5804,17 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
         }
 
         UM14_RequireReadyFocus()
+        overrideIdentity := UM14_ConnectionSnapshot()
+        if !IsObject(overrideIdentity)
+            UM14_LobbyFailure("map override game client")
         SendEvent("{sc012 down}") 
         Sleep(1000)
         SendEvent("{sc012 up}")
         Sleep(500)
 
-        foundsearchbar := false
-        getRobloxPos(&x, &y, &w, &h)
-        Loop 2 {
-            if (!LegacyMode) {
-                res := AdvancedImageSearch("Resources/searchbar.png", Round(w*0.1),0,Round(w*0.6),h,0.5,1.5)
+        overrideConfirmed := UM14_ChooseOverrideMap(overrideIdentity,gamemap)
 
-                if (res.status = "success" && res.score >= 0.6)  { 
-                    Click(res.x, res.y)
-                    foundsearchbar := true 
-                    break
-                } 
-            } else {
-                res := {x: ScaleX(810), y: ScaleY(218)}
-                click(Res.x, res.y)
-                foundsearchbar := true 
-                break
-            }
-
-            Sleep(500)
-        }
-
-        if (!foundsearchbar) {
-            UM14_LobbyFailure("map-override search field; your account may not have map override access")
-            return 
-        }        
-
-        Sleep(100)
-        UM14_SearchText(gamemap)
-        overrideStarted := A_TickCount
-        Loop {
-            UM14_RequireReadyFocus()
-            getRobloxPos(,, &w, &h)
-            if (!UM14_Viewport(w,h) || A_TickCount-overrideStarted >= 30000)
-                UM14_LobbyFailure("map-override confirmation within 30 seconds")
-            Sleep(300)
-            if (InArray(SpecialMaps, gamemap)) {
-                SelectionICON := AdvancedImageSearch("Resources/Maps/" gamemap "_Selection.png", Round(w*0.1),0,Round(w*0.7),h,0.5,1.5)
-            
-                if (SelectionICON.score >= 0.65)  { 
-                    Click(SelectionICON.x, SelectionICON.y)
-                } else {
-                    Click(res.x - ScaleX(90), res.y + 80)
-                }
-            } else {
-                Click(res.x - ScaleX(90), res.y + 80)
-            }
-            Sleep(400)
-
-            changedMap := false
-            alrinRotation := false
-            Loop 2 {
-                if PixelSearch(&gx, &gy, Round(w*0.2), Round(h*0.24), Round(w*0.7), Round(h*0.3), 0x00EC00, 3) {
-                    LogToConsole("Successfully changed the map to " gamemap,true,false)
-                    changedMap := true
-                    break
-                }
-
-                Sleep(200)
-            }
-
-            if (changedMap) {
-                break
-            }
-
-            if (ReadMessage(["already", "current", "rotation"])) {
-                LogToConsole(gamemap " is already in the current rotation. Clicking veto..", true)
-                resVeto := AdvancedImageSearch("Resources\Veto.png", 0, 0, w, h,0.5,1.5)
-                if (resVeto.status == "success" && resVeto.score > 0.65) {
-                    MouseMove(resVeto.x, resVeto.y)
-                    Sleep(30)
-                    MouseClick
-                } else {
-                    UM14_LobbyFailure("map veto control")
-                }
-                Sleep(300)
-                Send("{" SC_E " down}")
-                Sleep(760)
-                Send("{" SC_E " up}")
-
-                alrinRotation := false
-                Sleep(400)
-                continue
-            }
-
-            if (!changedMap) {
-                UM14_LobbyFailure("map change to " gamemap "; check map-override access and the game message")
-            } else {
-                break
-            }
-        }
-
-        if (modifiers != "")
+        if (modifiers != "" && overrideConfirmed)
             ApplyModifiers()
 
         Sleep(200)
@@ -5970,6 +5861,18 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
             }
         }
 
+        if !overrideConfirmed {
+            LogToConsole("Checking the active map vote board for " gamemap ".")
+            if !UM14_MapVoteBoard(overrideIdentity,e_pr,gamemap)
+                UM14_LobbyFailure("the exact map name at the vote board; no vote or strategy placements were sent")
+            LogToConsole("Confirmed the active vote board for " gamemap ".")
+            if (modifiers != "") {
+                ApplyModifiers()
+                if !UM14_MapVoteBoard(overrideIdentity,e_pr,gamemap)
+                    UM14_LobbyFailure("the exact map name after setting modifiers")
+            }
+        }
+        UM14_RequireReadyFocus()
         SendEvent("{sc012 down}") 
         Sleep(800)
         SendEvent("{sc012 up}")
@@ -5977,7 +5880,73 @@ SelectMap(readyX := ScaleX(963), readyY := ScaleY(838)) {
     Sleep(100)
 
     Click(readyX, readyY)
-    waitReady()
+}
+
+UM14_ChooseOverrideMap(identity, name) {
+    Loop 2 {
+        pass := A_Index, field := false, evidence := "context"
+        Loop 4 {
+            field := UM14_MapOverrideSearch(identity,&evidence)
+            if (IsObject(field) && UM14_HeldClick(identity,field.x,field.y,"Map override search",180,
+                () => UM14_ButtonStillAt(field,UM14_MapOverrideSearch(identity))))
+                break
+            field := false
+            Sleep(350)
+        }
+        if !IsObject(field) {
+            LogToConsole("Map search check: " evidence)
+            UM14_LobbyFailure("the visible map-override search field; verify that the map picker is open")
+        }
+        Sleep(150)
+        UM14_RejectMapPurchase(identity)
+        if !UM14_EnterNewMapQuery(identity,name)
+            UM14_LobbyFailure("a stable game client during map search")
+        parkX := Round(identity.w*.5), parkY := Max(0,field.y-24)
+        UM14_RequireInputPoint(identity,parkX,parkY,"Read map search query")
+        MouseMove(parkX,parkY,0)
+        Sleep(200)
+        card := UM14_MapOverrideCard(identity,field,name,&evidence,1)
+        ; One exact read locates the candidate without pressing it. Require
+        ; the exact hovered title or a second query read before any press.
+        titleVerified := false, beforeGreen := false
+        if (!IsObject(card) || !UM14_HeldClick(identity,card.x,card.y,"Filtered map card",160,
+            () => UM14_MapCardBeforePress(identity,card,field,name,&evidence,&titleVerified,&beforeGreen))) {
+            LogToConsole("Map query check: " evidence)
+            UM14_LobbyFailure("the filtered map query for " name "; no map card was clicked")
+        }
+
+        receipt := UM14_MapOverrideReceipt(identity,name,field,titleVerified,beforeGreen,4100,&evidence)
+        if (receipt = "changed") {
+            LogToConsole("Confirmed map override to " name ".")
+            return true
+        }
+        picker := "not-checked"
+        ; The exact query or the hovered title was verified before pressing.
+        ; With no receipt, movement to read the board does not vote.
+        if (receipt = "" && UM14_MapPickerClosed(identity,field,name,&picker)) {
+            UM14_RejectMapPurchase(identity)
+            LogToConsole("The requested tile was pressed and the picker closed. Checking the active vote board before voting.")
+            return false
+        }
+        if (receipt != "rotation" || pass != 1) {
+            LogToConsole("Map receipt check: " (receipt ? receipt : evidence " picker=" picker))
+            UM14_LobbyFailure("confirmation that TDS changed the map to " name "; no gameplay input was started")
+        }
+        LogToConsole(name " is in the current rotation; retrying the verified veto once.")
+        region := UM14_StartupRegion(identity,.54,.55,.88,.93)
+        veto := UM14_MapVoteHeading(identity) ? UM14_MenuImagePair(identity,region,"Veto.png",.70) : false
+        if (!IsObject(veto) || !UM14_HeldClick(identity,veto.x,veto.y,"Map veto",160,
+            () => UM14_MapVoteHeading(identity) && UM14_ButtonStillAt(veto,UM14_MenuImagePair(identity,region,"Veto.png",.70))))
+            UM14_LobbyFailure("map veto control")
+        Sleep(500)
+        prompt := UM14_MapOverridePrompt()
+        if (!IsObject(prompt) || !UM14_ConnectionSame(identity))
+            UM14_LobbyFailure("the reopened map-override prompt after veto")
+        SendEvent("{sc012 down}")
+        try Sleep(800)
+        finally SendEvent("{sc012 up}")
+        Sleep(450)
+    }
 }
 
 CheckTheMapF() {
@@ -6059,33 +6028,10 @@ ApplyModifiers() {
 }
 
 ClickReady() {
-    global readyX, readyY
-
-    Loop 40 {
-        UM14_RequireReadyFocus()
-        MouseMove(readyX, readyY)
-        Sleep 50
-        UM14_RequireReadyFocus()
-        MouseClick()
-        Sleep 200
-
-        getRobloxPos(,,&w,&h)
-        readyc := AdvancedImageSearch("Resources/ready_gs.png",Round(w * 0.25), Round(h * 0.08), Round(w * 0.5), Round(h * 0.34))
-        if !(readyc.score > 0.7) {
-            LogToConsole("Ready prompt is no longer detected; continuing.")
-            return true
-        } else {
-            LogToConsole("Failed to press the ready button, retrying...")
-            if PixelSearch(&fx, &fy, Round(w*0.4),Round(h*0.05), Round(w*0.7), Round(h*0.35), 0x2BEB00, 2) {
-                readyX := fx
-                readyY := fy
-                continue
-            } else {
-                Sleep(100)
-            }
-        }
-    }
-    UM14_Fatal("Ready button still detected after 40 attempts. Automation stopped; check the game UI before retrying.")
+    identity := waitReady()
+    if !UM14_ClickMatchReady(identity,identity.ready)
+        UM14_LobbyFailure("in-match Ready transition; no further input was sent")
+    LogToConsole("In-match Ready accepted.")
 }
 
 UM14_RequireReadyFocus() {
@@ -6096,7 +6042,7 @@ UM14_RequireReadyFocus() {
 }
 
 waitReady() {
-    global readyX, readyY, MultiplayerEnabled, PlayerRole
+    global MultiplayerEnabled, PlayerRole
     start := A_TickCount
     wt := ((MultiplayerEnabled && PlayerRole = "Member") ? 90000 : 40000) + UM14_ExtraUiWait()
     KillSubmacros()
@@ -6104,15 +6050,12 @@ waitReady() {
         UM14_RequireReadyFocus()
         if (A_TickCount - start >= wt)
             UM14_LobbyFailure("in-match Ready button")
-        getRobloxPos(,, &w, &h)
-        if (!UM14_Viewport(w, h))
-            UM14_LobbyFailure("game client while waiting for Ready")
-        if PixelSearch(&fx, &fy, Round(w*0.4),Round(h*0.05), Round(w*0.7), Round(h*0.35), 0x2BEB00, 2) {
-            readyX := fx
-            readyY := fy
-            break
+        identity := UM14_ConnectionSnapshot()
+        if (IsObject(identity) && IsObject(button := UM14_ReadyButton(identity))) {
+            identity.ready := button
+            return identity
         }
-        Sleep(50)
+        Sleep(250)
     }
 }
 
@@ -6242,6 +6185,16 @@ SpawnTower(X, Y, slotNumber, towerID) {
         identity := UM14_ConnectionSnapshot()
         if !IsObject(identity)
             UM14_Fatal("Roblox changed before tower placement.")
+        counter := UM14_PlacementCounter(identity)
+        ; A neighboring registered tower could own the hover tooltip.
+        ; In that case accept only the original panel-based confirmation.
+        margin := Max(6,Round(identity.h*.022))
+        for id, prior in Towers {
+            if (Abs(prior.x-X) <= margin && Abs(prior.y-Y) <= margin) {
+                counter := false
+                break
+            }
+        }
         
         if UseNumbersForHotbar {
             Send("{" slotNumber "}")
@@ -6256,14 +6209,12 @@ SpawnTower(X, Y, slotNumber, towerID) {
         UM14_RequireInputPoint(identity, X, Y)
         MouseClick()
         Sleep(100)
-        SendEvent("{" CancelPlacementKey "}")
-
-        placedSuccessfully := waitForTowerUI(&resV2)
+        placedSuccessfully := UM14_ConfirmPlacementPanel(identity,CancelPlacementKey,X,Y,counter,&panelOpen)
 
         if (placedSuccessfully) {
             Towers[towerID] := {x: X, y: TowerY, slot: Integer(slotNumber), level: 0, path: 0, pathLevel: 0, target: "First Enemy"}
             LogToConsole("Tower " towerID " placed successfully")
-            LastOpenedTowerID := towerID
+            LastOpenedTowerID := panelOpen ? towerID : ""
             break
         } else {
             LogToConsole("Tower " towerID " placement failed, retrying...")
@@ -6564,12 +6515,6 @@ CheckPopups(*) {
     static clickedNotNow := false
 
     getRobloxPos(,,&w,&h)
-
-    res := AdvancedImageSearch("Resources/Claim.png", Round(w * 0.25), Round(h * 0.4), Round(w * 0.5), Round(h * 0.5))
-    if (res.status = "success" && res.score >= 0.65) {
-        LogToConsole("Claimed daily reward.")
-        Click(res.x, res.y)
-    }
 
     res := AdvancedImageSearch("Resources/cancel_rejoin.png", Round(w * 0.15), Round(h * 0.4), Round(w * 0.7), Round(h * 0.4))
     if (res.status = "success" && res.score >= 0.65) {
@@ -7381,13 +7326,12 @@ HasGlobal(varName) {
 
 closeChat() {
     global AutoCloseChat
-    static reminded := false
-    if (!AutoCloseChat || reminded)
+    if (!AutoCloseChat || !IsObject(identity := UM14_ConnectionSnapshot()))
         return
-    ; The old white-pixel test now overlaps other Roblox topbar controls.
-    ; Keep the preference, but send no click until a chat close is identifiable.
-    reminded := true
-    LogToConsole("Close Roblox chat manually if it covers the game. The retired topbar click is disabled.")
+    if UM14_CloseRobloxChat(identity,&evidence)
+        LogToConsole("Closed Roblox chat.")
+    else if (evidence != "")
+        UM14_Emit("log",Map("text","Roblox chat was left unchanged: " evidence "."))
 }
 
 

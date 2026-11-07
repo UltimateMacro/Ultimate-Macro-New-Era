@@ -3,7 +3,7 @@
 | Component | Where | License / notice |
 | --- | --- | --- |
 | Ultimate Macro 1.3.3a engine by Darksen, with the 1.4 safety patches | `engine\` | GNU GPLv3 (`GPL-3.0.txt`). Changes are listed in `engine\ENGINE-NOTICE.md`. |
-| AutoHotkey v2.0.12 interpreter (`AutoHotkey64.exe`, `UM14Tools64.exe`) | `engine\submacros\` | GNU GPLv2 (`GPL-2.0.txt`), https://www.autohotkey.com |
+| AutoHotkey v2.0.31 interpreter (`AutoHotkey64.exe`, `UM14Tools64.exe`) | `engine\submacros\` | GNU GPLv2 (`GPL-2.0.txt`); [release and corresponding source](https://github.com/AutoHotkey/AutoHotkey/releases/tag/v2.0.31) |
 | Gdip_All (AHK v2 port by buliasz, original by tic) | `engine\lib\`, `app\lib\` | Distributed with the 1.3.3a release; see the file header. |
 | JSON.ahk by thqby / HotKeyIt | `engine\lib\`, `app\lib\` | See the file header. |
 | OCR.ahk by Descolada | `engine\lib\` | See the file header. |

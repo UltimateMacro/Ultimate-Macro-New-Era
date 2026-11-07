@@ -15,6 +15,13 @@ class UiProbe {
 }
 try {
     Store.settings := Store.Defaults()
+    Need(InStr(MW.RecordingGuide({active:false,draft:false}),"Record as you play before starting"),
+        "Idle recording explains normal play opt-in")
+    Need(InStr(MW.RecordingGuide({active:true,aligned:false}),Store.settings["recordBindings"]["align"]),
+        "Before capture, show the current camera alignment shortcut")
+    Need(InStr(MW.RecordingGuide({active:true,aligned:true,passive:true}),"Play normally")
+        && InStr(MW.RecordingGuide({active:true,aligned:true,passive:false}),"Regular clicks alone"),
+        "Active capture guidance distinguishes supported inputs from shortcut recording")
     timing := Store.DEFAULT_RUNTIME.Clone()
     timing.Delete("extraUiWait"), timing.Delete("preJoinDelay"), timing.Delete("keyDelayMs")
     timing := Store.ValidRuntime(timing)

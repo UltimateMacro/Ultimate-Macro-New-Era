@@ -112,7 +112,7 @@ UM14_Emit(verb, args := "") {
 
 UM14_Hello(resumed) {
     global UM14
-    UM14_Emit("hello", Map("pid", DllCall("GetCurrentProcessId"), "hwnd", A_ScriptHwnd, "build", "1.3.3a-um14.26-ahk3", "resumed", resumed ? 1 : 0))
+    UM14_Emit("hello", Map("pid", DllCall("GetCurrentProcessId"), "hwnd", A_ScriptHwnd, "build", "1.3.3a-um14.28-ahk3", "resumed", resumed ? 1 : 0))
     UM14.helloSent := true
     early := UM14.early
     UM14.early := []

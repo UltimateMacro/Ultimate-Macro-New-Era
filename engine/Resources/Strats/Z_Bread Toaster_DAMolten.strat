@@ -6,7 +6,7 @@ income=~8000 coins/h, ~3000 XP/h
 time=20 minutes
 
 [Settings]
-map=Dead ahead
+map=Dead Ahead
 difficulty=Molten
 requiredTowers=Operator, DJ, Juggernaut, Golden Crook Boss, Spotlight Tech
 modifiers=Glass,Limitation,Committed,Flying,Hidden,Exploding
