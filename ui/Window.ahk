@@ -1318,7 +1318,7 @@ class MW {
     ; ======================================================================
     static Active => MW.run.active || MW.rec.active
 
-    static LaunchBusy() => MW.launcherWaiting || GameRecovery.Busy || Docking.Busy || MW.updateReviewing
+    static LaunchBusy() => MW.launcherWaiting || GameRecovery.Busy || Docking.Busy || MW.updateReviewing || AutoResize.busy
 
     static CheckEngine(startup := false) {
         missing := []
@@ -1494,6 +1494,11 @@ class MW {
             }
             target := shortcut ? MW.ShortcutGame() : 0
             if (shortcut && !target)
+                return
+            state := AutoResize.Apply(Roblox.Game())
+            if AutoResize.notes.Has(state)
+                MW.Log(AutoResize.notes[state])
+            if MW.closing
                 return
             if (shortcut && MW.CoversGame(target)) {
                 MW.gui.Minimize()

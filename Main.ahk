@@ -35,6 +35,7 @@ A_MaxHotkeysPerInterval := 9999
 #Include app\PrivateServer.ahk
 #Include app\Roblox.ahk
 #Include app\Docking.ahk
+#Include app\AutoResize.ahk
 #Include app\Discord.ahk
 #Include app\Passive.ahk
 

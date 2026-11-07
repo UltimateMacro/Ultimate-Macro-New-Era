@@ -11,6 +11,8 @@
 - Add optional extra UI wait, pre-join delay, and key delay in Advanced settings.
 - Let file and update dialogs appear without the main window pinned above them.
 - Signed update installation still requires approval and does not restart the macro.
+- Resize Roblox to 1680 x 945 and move it to the top left corner when a run
+  starts, using the ULT Autoresizer by hesgly. Docked and fullscreen games are left alone.
 
 ## 1.4.0.39
 
