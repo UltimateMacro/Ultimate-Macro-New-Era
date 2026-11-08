@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="605" viewBox="0 0 760 605" role="img" aria-labelledby="title desc">
 <title id="title">Ultimate Macro community statistics</title>
-<desc id="desc">48,511 GitHub release downloads (The New Era + last known Darksen count), 9,109 approximate Discord members, 17 stars on this GitHub repository.</desc>
+<desc id="desc">48,578 GitHub release downloads (The New Era + last known Darksen count), 9,180 approximate Discord members, 17 stars on this GitHub repository.</desc>
 <defs>
   <linearGradient id="downloads" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#101720"/><stop offset=".62" stop-color="#142132"/><stop offset="1" stop-color="#1A344C"/></linearGradient>
   <linearGradient id="community" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#111721"/><stop offset=".62" stop-color="#1B1E35"/><stop offset="1" stop-color="#2B2746"/></linearGradient>
@@ -11,10 +11,10 @@
 <rect x="2" y="412" width="756" height="190" rx="20" fill="url(#stars)" stroke="#675735" stroke-width="2"/>
 <g font-family="Arial, Helvetica, sans-serif">
   <text x="38" y="58" font-size="30" font-weight="600" fill="#A9C7E7">Downloads</text>
-  <text x="37" y="133" font-size="78" font-weight="700" letter-spacing="-2" fill="#F2F7FF">48,511</text>
+  <text x="37" y="133" font-size="78" font-weight="700" letter-spacing="-2" fill="#F2F7FF">48,578</text>
   <text x="40" y="166" font-size="21" fill="#B1C0D2">The New Era + last known Darksen count</text>
   <text x="38" y="263" font-size="30" font-weight="600" fill="#C4B5FD">Community of</text>
-  <text x="37" y="338" font-size="78" font-weight="700" letter-spacing="-2" fill="#F8F6FF">9,109</text>
+  <text x="37" y="338" font-size="78" font-weight="700" letter-spacing="-2" fill="#F8F6FF">9,180</text>
   <text x="40" y="371" font-size="21" fill="#BFC0D6">Discord members</text>
   <text x="38" y="468" font-size="30" font-weight="600" fill="#F5CD69">GitHub stars</text>
   <text x="37" y="543" font-size="78" font-weight="700" letter-spacing="-2" fill="#FFFAEB">17</text>
