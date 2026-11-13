@@ -456,6 +456,17 @@ class MW {
         u.Add(MW.Caption("Installation keeps your current folder and never restarts the app automatically."))
         u.Add(Button("Open update folder", (*) => MW.OpenUpdateFolder()))
 
+        d := root.Add(Card("Connect to Dashboard"))
+        d.Add(MW.Caption("Enter the one-time code from the Ultimate Macro website. Pairing does not control macro runs."))
+        MW.dashboardCode := d.Add(Field("", "Dashboard code (XXXX-XXXX)", {password: true, maxLength: 24}))
+        actions := HBox(, 6)
+        MW.dashboardConnect := actions.Add(Button(_T("Connect"), (*) => MW.ConnectDashboard()), 1)
+        MW.dashboardDisconnect := actions.Add(Button(_T("Disconnect"), (*) => Dashboard.Disconnect()), 1)
+        d.Add(actions)
+        MW.dashboardStatus := d.Add(MW.Caption(Dashboard.message))
+        Dashboard.onChange := () => MW.RefreshDashboard()
+        MW.RefreshDashboard()
+
         l := root.Add(Card("LANGUAGE"))
         MW.language := l.Add(Select())
         for item in Locale.Available()
@@ -484,6 +495,8 @@ class MW {
         MW.reduceMotion := w.Add(Toggle(_T("Reduce animations"), !s["motion"], (t, v) => (Store.settings["motion"] := !v, MW.Persist())))
 
         gp := root.Add(Card("GAMEPLAY"))
+        MW.autoCloseChat := gp.Add(Toggle(_T("Auto close Roblox chat"), s["autoCloseChat"], (t,v) => MW.SaveAutoCloseChat(v)))
+        MW.autoCloseChat.tip := "Close open Roblox chat during setup. This setting applies on the next run."
         tr := HBox(, 6)
         tr.Add(Label(_T("Timescale"), "subtitle"), 1)
         MW.timescale := tr.Add(Select(["OFF", "1.5x", "2x"], 1, (*) => MW.SaveTimescale()))
@@ -557,6 +570,23 @@ class MW {
         MW.moreFrame.Add(Button(_T("Third-party notices"), (*) => MW.OpenNotices()))
         MW.moreFrame.Add(Button(_T("Terms & conditions ↗"), (*) => Run(FirstUse.TERMS_URL)))
         MW.moreFrame.Add(Button(_T("Privacy policy ↗"), (*) => Run(FirstUse.PRIVACY_URL)))
+    }
+
+    static ConnectDashboard() {
+        if !Dashboard.CanConnect
+            return
+        code := MW.dashboardCode.Text
+        MW.dashboardCode.Clear()
+        if MW.dashboardCode.ctrl
+            try SendMessage(0xCD, 0, 0, MW.dashboardCode.ctrl) ; clear native undo buffer
+        Dashboard.Connect(code)
+    }
+
+    static RefreshDashboard() {
+        MW.dashboardCode.Enable(Dashboard.CanConnect)
+        MW.dashboardConnect.Enable(Dashboard.CanConnect)
+        MW.dashboardDisconnect.Enable(Dashboard.CanDisconnect)
+        MW.dashboardStatus.SetText(_T(Dashboard.message))
     }
 
     static ToggleSection(button, section) {
@@ -851,6 +881,8 @@ class MW {
             return
         }
         MW.updateReviewing := manual
+        updateSurface := manual && MW.pages[MW.page].surface == MW.updateButton.surface ? MW.updateButton.surface : false
+        updateScroll := IsObject(updateSurface) ? updateSurface.scrollY : 0
         MW.updateButton.Enable(false)
         if manual
             MW.updateStatus.SetText("Checking the signed AHK update channel…")
@@ -861,8 +893,14 @@ class MW {
             status := UpdateHelper.Check(manual)
         } finally {
             MW.updateReviewing := false
-            if (manual && !MW.closing)
+            if (manual && !MW.closing) {
                 MW.gui.Opt((Store.settings["topmost"] ? "+" : "-") "AlwaysOnTop")
+                if (IsObject(updateSurface) && MW.pages[MW.page].surface == updateSurface) {
+                    updateSurface.ScrollTo(updateScroll)
+                    if WinActive("ahk_id " MW.gui.Hwnd)
+                        DllCall("SetFocus","Ptr",updateSurface.hwnd)
+                }
+            }
             MW.UpdateControls()
         }
         if (manual || Store.settings["updatePrompts"]) {
@@ -1118,6 +1156,21 @@ class MW {
         MW.Persist()
     }
 
+    static SaveAutoCloseChat(value) {
+        previous := Store.settings["autoCloseChat"]
+        if !MW.RunSettingsEditable() {
+            MW.autoCloseChat.SetChecked(previous)
+            return
+        }
+        Store.settings["autoCloseChat"] := value
+        try Store.Save()
+        catch {
+            Store.settings["autoCloseChat"] := previous
+            MW.autoCloseChat.SetChecked(previous)
+            MW.Log("Auto close Roblox chat was not saved. Check the settings folder.")
+        }
+    }
+
     static SaveRuntime() {
         v := Map()
         for k, f in MW.runtimeInputs
@@ -1219,6 +1272,7 @@ class MW {
         }
         c := result.candidate
         MW.topmost.SetChecked(c["topmost"]), MW.rotate.SetChecked(c["rotation"]), MW.equip.SetChecked(c["autoEquip"])
+        MW.autoCloseChat.SetChecked(c["autoCloseChat"])
         MW.repeat.SetChecked(c["repeat"]), MW.rotationAmount.Value := c["rotationAmount"], MW.rotationUnit.ChooseValue(c["rotationUnit"])
         MW.upgradeDelay.Value := c["runtime"]["upgradeDelayMs"]
         for k, f in MW.runtimeDelays
@@ -1394,7 +1448,7 @@ class MW {
 
         r := MW.rec
         req := MW.RecordingRequirement()
-        MW.recordGuidance.SetText(req != "" ? _T(req) : _T("Loadout valid. Check the map and mode below."))
+        MW.recordGuidance.SetText(req != "" ? _T(req) : MW.RecordingGuide(r))
         MW.recordStart.tip := req != "" ? req : "Start recording in the selected Roblox window."
         canStart := enabled && !r.draft && req = ""
         MW.recordStart.Enable(canStart)
@@ -1446,6 +1500,7 @@ class MW {
         MW.dockApply.Show(s["dockRoblox"] && !Docking.active)
 
         runEditable := enabled && MW.RunSettingsEditable()
+        MW.autoCloseChat.Enable(runEditable)
         MW.rotate.Enable(runEditable)
         MW.equip.Enable(runEditable && !MW.rotate.checked)
         MW.repeat.Enable(runEditable && !MW.rotate.checked)
@@ -1458,7 +1513,7 @@ class MW {
     ; ======================================================================
     static RunOptions(withParty := true) {
         s := Store.settings
-        return {autoEquip: s["autoEquip"], repeat: s["repeat"], timeScale: s["timeScaleMode"], legacy: s["legacyOptions"]
+        return {autoEquip: s["autoEquip"], autoCloseChat: s["autoCloseChat"], repeat: s["repeat"], timeScale: s["timeScaleMode"], legacy: s["legacyOptions"]
             , runtime: s["runtime"], bindings: s["recordBindings"], party: withParty ? MW.PartyProfile() : "", rotation: ""}
     }
 
@@ -1739,6 +1794,19 @@ class MW {
     ; ======================================================================
     ; recording (engine recorder + launcher draft, recording.py semantics)
     ; ======================================================================
+    static RecordingGuide(r) {
+        keys := Store.settings["recordBindings"]
+        if !r.active
+            return r.draft ? _T("Review your recording before saving it.")
+                : _T("Check the map and mode. To capture normal clicks and keys, turn on Record as you play before starting.")
+        if !r.aligned
+            return _T("Waiting for camera alignment. Join the match, then press") " " keys["align"] "."
+        if r.passive
+            return _T("Capturing supported inputs in Roblox. Play normally, then press F2 or F8 to keep the draft.")
+        return _T("Shortcut recording: use Ctrl+1–5 to choose a slot, then press") " " keys["place"] " "
+            . _T("to record a placement. Regular clicks alone do not record placements.")
+    }
+
     static RecordingMetadata() {
         mods := []
         for k, c in MW.recordModifiers
@@ -1903,7 +1971,10 @@ class MW {
         }
         if (MW.rec.text = "") {
             MW.rec.draft := false
-            MW.Log("Recording stopped with no actions; there is nothing to save.")
+            keys := Store.settings["recordBindings"]
+            MW.Log(!MW.rec.aligned ? "Nothing was recorded. Join the match, then align with " keys["align"] " before taking actions."
+                : !MW.rec.passive ? "Nothing was recorded. Use " keys["place"] " for placements, or enable Record as you play before starting."
+                : "No supported inputs were captured. After aligning, play in the same Roblox window without resizing it.")
         } else {
             MW.rec.draft := true, MW.rec.phase := "Draft"
             if MW.rec.pendingSave {
@@ -2029,17 +2100,18 @@ class MW {
                         MW.gui.Restore()
                         MW.dockRestoreMax := true
                     }
+                    ; The poll timer may settle the asynchronous move before
+                    ; Attach returns. Announce first so we don't hide success.
+                    MW.Log("Waiting for Windows to apply the window layout.")
                     result := Docking.Attach(game, MW.gui.Hwnd)
-                    if (result = "pending")
-                        MW.Log("Waiting for Windows to apply the window layout.")
-                    else
+                    if (result != "pending")
                         MW.DockResult(result)
                 }
             } else {
-                result := Docking.Detach()
-                if (result = "pending")
+                if Docking.active
                     MW.Log("Waiting for Windows to restore the original layout.")
-                else
+                result := Docking.Detach()
+                if (result != "pending")
                     MW.DockRestoreFinished(result)
             }
         } catch as e {

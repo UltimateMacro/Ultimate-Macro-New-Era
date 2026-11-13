@@ -15,18 +15,48 @@ class UpdateHelper {
         if !FileExist(helper)
             return 5
         UpdateHelper.checking := true
-        locked := 0
+        locked := 0, reveal := false, pid := 0
         try {
             locked := UpdateHelper.LockHelper(helper)
             if (!locked || UpdateHelper.HashLocked(locked) != UpdateHelper.helperSHA256)
                 return 12
-            return RunWait('"' helper '" "' App.UPDATE_VERSION '" ' (review ? "review" : "stage"), A_ScriptDir, "Hide")
+            if review {
+                owner := MW.gui.Hwnd
+                ; RunWait sets the PID before waiting. Only a manual check can
+                ; make this timer, and it never sends a click or key to the helper.
+                reveal := () => UpdateHelper.RevealReview(pid,helper,owner,reveal)
+                SetTimer(reveal,180)
+            }
+            return RunWait('"' helper '" "' App.UPDATE_VERSION '" ' (review ? "review" : "stage"),
+                A_ScriptDir,review ? "" : "Hide",&pid)
         } catch {
             return 10
         } finally {
+            if IsObject(reveal)
+                SetTimer(reveal,0)
+            reveal := false
             if locked
                 DllCall("CloseHandle", "Ptr", locked)
             UpdateHelper.checking := false
+        }
+    }
+
+    static RevealReview(pid, helper, owner, timer) {
+        if (!IsInteger(pid) || pid <= 0)
+            return
+        for hwnd in WinGetList("ahk_class #32770 ahk_pid " pid) {
+            target := "ahk_id " hwnd
+            try {
+                if (WinGetTitle(target) != "Ultimate Macro — verified update"
+                    || StrLower(WinGetProcessPath(target)) != StrLower(helper))
+                    continue
+                SetTimer(timer,0)
+                if WinActive("ahk_id " owner)
+                    WinActivate(target)
+                else if !WinActive(target)
+                    DllCall("FlashWindow", "Ptr", hwnd, "Int", true)
+                return
+            }
         }
     }
 

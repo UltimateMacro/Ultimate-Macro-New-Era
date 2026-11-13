@@ -68,7 +68,7 @@ class Store {
     }
 
     static Defaults() {
-        s := Map("topmost", true, "autoEquip", true, "repeat", true, "motion", true, "dockRoblox", false, "policyRevision", ""
+        s := Map("topmost", true, "autoEquip", true, "autoCloseChat", true, "repeat", true, "motion", true, "dockRoblox", false, "policyRevision", ""
             , "halloween", false, "halloweenSounds", true, "appearanceRevision", 5, "language", "en", "languageChosen", false
             , "updatePrompts", true, "themeBackground", true, "windowOpacity", 96
             , "slot1", "", "slot2", "", "rotation", false, "rotationAmount", 1, "rotationUnit", "Runs", "timeScaleMode", "OFF"
@@ -101,7 +101,7 @@ class Store {
         }
         if value.Has("languageChosen")
             s["languageChosen"] := Store.IsBool(value["languageChosen"]) ? !!value["languageChosen"] : false
-        for key in ["topmost", "autoEquip", "repeat", "motion", "dockRoblox", "halloween", "halloweenSounds", "updatePrompts", "themeBackground", "rotation"] {
+        for key in ["topmost", "autoEquip", "autoCloseChat", "repeat", "motion", "dockRoblox", "halloween", "halloweenSounds", "updatePrompts", "themeBackground", "rotation"] {
             if !value.Has(key)
                 continue
             if Store.IsBool(value[key])
@@ -306,7 +306,7 @@ class Store {
 
     ; Booleans stay JSON booleans so the Python app could still read the profile.
     static ForJson(m) {
-        static bools := ["topmost", "autoEquip", "repeat", "motion", "dockRoblox", "halloween", "halloweenSounds", "languageChosen"
+        static bools := ["topmost", "autoEquip", "autoCloseChat", "repeat", "motion", "dockRoblox", "halloween", "halloweenSounds", "languageChosen"
             , "updatePrompts", "themeBackground", "rotation", "scrollModeList", "adsAllowed"]
         out := Map()
         for k, v in m {

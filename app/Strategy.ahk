@@ -295,9 +295,16 @@ class Strategy {
                 if !InArray(Strategy.LEGACY_MODIFIERS, n)
                     throw ValueError("This strategy requires modifiers that the current engine cannot select and verify.")
         }
-        for s in parsed.steps
+        for s in parsed.steps {
             if (s.op = "UseConsumable")
                 throw ValueError("This strategy uses consumables that the current engine cannot select and verify.")
+            if InArray(["ActivateEnforcerVan","EnforcerReposition"],s.op)
+                throw ValueError("The AutoHotkey engine cannot replay " s.op " (line " s.line ").")
+            if (s.op = "CloneTower" && s.args.Length > 4)
+                throw ValueError("This engine cannot assign a custom ID to a cloned tower (line " s.line ").")
+            if (s.op = "SpawnTower" && s.args[3] > 5)
+                throw ValueError("This strategy uses a tower slot outside the five-slot hotbar (line " s.line ").")
+        }
         return ""
     }
 

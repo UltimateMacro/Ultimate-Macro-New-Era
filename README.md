@@ -117,6 +117,12 @@ switch to public TDS to compensate. Choose **Forget link** to return to
 public launches. Windows protects the saved link on this account, and
 Ultimate Macro does not include it in profiles or Output exports.
 
+### Connect to the dashboard
+
+In **Settings → Connect to Dashboard**, enter the one-time code from the Ultimate Macro website, then select **Connect**. The app shows Connected after the website accepts its first heartbeat. Closing the app stops the heartbeat but remembers the link; **Disconnect** removes it after the website confirms. Pairing does not control macro runs.
+
+The release uses `https://ultmacro.xyz`. For local development only, create the ignored file `app/DashboardDevelopment.local.ahk` with `DashboardDevelopmentOrigin := "http://127.0.0.1:4174"` or a dedicated HTTPS origin, then relaunch. Development and release credentials use separate, origin-bound Windows DPAPI storage. Neither the pairing code nor the device token goes into profiles or logs.
+
 ## Is Ultimate Macro safe?
 
 **We want users to be able to check, not just take our word for it.**
