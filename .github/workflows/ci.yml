@@ -24,6 +24,8 @@ jobs:
         run: node tests/Run-UI-Smoke.mjs
       - name: Check legacy chat-close behavior
         run: node tests/Run-ChatClose-QA.mjs
+      - name: Check original two-strategy rotation with inert game ports
+        run: node tests/Run-UI-Smoke.mjs --rotation
       - name: Check run-options labels and repeat decisions beyond twenty matches
         run: node tests/Run-RunOptions-QA.mjs
       - name: Check recording shortcut regression

@@ -28,7 +28,15 @@ const expected = {
 for(const [name, digest] of Object.entries(expected)) {
   const actual = functions.get(name.toLowerCase());
   assert(actual, name);
-  const gameplay = actual.replace(/^\s*Dashboard(?:Match\.Started|Activity\.(?:SessionStarted|Succeeded))\([^\n]*\)\n/gm,'');
+  let gameplay = actual.replace(/^\s*Dashboard(?:Match\.Started|Activity\.(?:SessionStarted|Succeeded))\([^\n]*\)\n/gm,'');
+  if (name === 'RunStrategy') {
+    // Exactly two additive adapters; retain the pinned 1.3.3.10 body verbatim.
+    const decision = '    ; Rotation adapter: the original 1.3.3a boundary decision, before restarting.\n    rotated := StrategyRotationBeforeRun()\n    if (rotated < 0)\n        return\n\n';
+    const entry = '    ; A slot change must re-equip and join its own map, never restart the old map.\n    if (rotated)\n        StrategyRotationJoinGame()\n    else\n';
+    assert.equal(gameplay.split(decision).length, 2);
+    assert.equal(gameplay.split(entry).length, 2);
+    gameplay = gameplay.replace(decision, '').replace(entry, '');
+  }
   assert.equal(createHash('sha256').update(gameplay).digest('hex'),digest,'Changed legacy gameplay: '+name);
 }
 let chat = functions.get('closechat');

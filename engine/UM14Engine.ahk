@@ -64,6 +64,7 @@ if (A_PtrSize == 4) {
 #Include %A_ScriptDir%\app\Lifecycle.ahk
 #Include %A_ScriptDir%\app\Updater.ahk
 #Include %A_ScriptDir%\app\ShotClient.ahk
+#Include %A_ScriptDir%\app\StrategyRotation.ahk
 
 ver := "1.3.3.10"
 
@@ -134,6 +135,7 @@ global UseNumbersForHotbar := IniRead(SettingsFile, "Options", "UseNumbers", 1)
 global UseHForUpgrade := IniRead(SettingsFile, "Options", "UseHotkeyForUpgrade", 1)
 global CollectPlaytimeRewards:= IniRead(SettingsFile, "Options", "CollectPlaytimeRewards", "1")
 global Strategy1Path := IniRead(SettingsFile, "Options", "Strategy1", "")
+InitializeStrategyRotation()
 global MultiplayerEnabled := 0
 
 global DefaultMouseSpeed := IniRead(SettingsFile, "Options", "DefaultMouseSpeed", "2")
@@ -346,10 +348,15 @@ autoRun := IniRead(StateFile, "State", "Running",   0)
 autoStrat := IniRead(StateFile, "State", "Strategy",  "")
 savedStartTime := IniRead(StateFile, "State", "StartTime", 0)
 
+if (autoRun = 1 && !StrategyRotationValid()) {
+    IniWrite(0, StateFile, "State", "Running")
+    autoRun := 0
+}
+
 if (savedStartTime != 0)
     AutorunStartTime := Integer(savedStartTime)
 
-if (autoRun = 1 && autoStrat != "" && FileExist(autoStrat)) {
+if (autoRun = 1 && autoStrat != "" && FileExist(autoStrat) && StrategyRotationValid()) {
     LoadStrategyFile(autoStrat)
     RunningStrategy := true
     ActivateRoblox()
@@ -453,6 +460,8 @@ MW.Bind(Tab1_Btn2, "Click", ClearStrat1)
 
 HoverEffect.Push(Tab1_Btn1) 
 HoverEffect.Push(Tab1_Btn2) 
+
+CreateStrategyRotationControls()
 
 MainGui.SetFont("s9 w400 cFFFFFF")
 global AutoEquipCtrl := MainGui.Add("Checkbox", "x30 y153 vAutoEquip Checked" AutoEquip, "Auto Equip Towers")
@@ -1496,6 +1505,10 @@ StartStrategy(*) {
     IniWrite(v.Strategy1, SettingsFile, "Options", "Strategy1")
 
     stratFile := Trim(v.Strategy1)
+    if !StrategyRotationValid() {
+        ModernMsgBox("Warning", "Choose two existing strategy files and a positive whole number of Runs or Minutes for strategy rotation.", "OK", "WARNING")
+        return
+    }
     if (stratFile == "" || !FileExist(stratFile)) {
         ModernMsgBox("Warning", "No valid strategy file selected!", "OK", "WARNING")
         return
@@ -1553,6 +1566,7 @@ StartStrategy(*) {
     }
 
     DashboardActivity.RunStarted()
+    ResetStrategyRotation(true)
     RunStrategy("", true)
 }
 
@@ -1591,6 +1605,7 @@ StopStrategy(*) {
         IniDelete(StateFile, "State", "Timescale")
         IniDelete(StateFile, "State", "TimeWhenStartedPlaying")
         IniDelete(StateFile, "State", "Equipped")
+        ResetStrategyRotation()
         DashboardActivity.RunStopped()
         RunningStrategy := false
         SafeReload()
@@ -2985,6 +3000,11 @@ RunStrategy(stratFile := "", skipRestart := false) {
     If (!skiprestart)
     	isDisconnected()
 
+    ; Rotation adapter: the original 1.3.3a boundary decision, before restarting.
+    rotated := StrategyRotationBeforeRun()
+    if (rotated < 0)
+        return
+
     KillSubmacros()
     startWatchdog()
 
@@ -3006,6 +3026,10 @@ RunStrategy(stratFile := "", skipRestart := false) {
         AutorunStartTime := checkStart
     }
 
+    ; A slot change must re-equip and join its own map, never restart the old map.
+    if (rotated)
+        StrategyRotationJoinGame()
+    else
     if (!skipRestart) {
         CheckRestart()
     } else {

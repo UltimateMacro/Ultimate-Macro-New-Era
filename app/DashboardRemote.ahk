@@ -367,6 +367,7 @@ class DashboardRemote {
         global RunningStrategy, Recording, MacroRecording, RestartLock, Strategy1Path, StateFile
         if (action = "start") {
             if (RunningStrategy || Recording || MacroRecording || RestartLock || !FileExist(Strategy1Path)
+                || !StrategyRotationValid()
                 || IniRead(StateFile, "State", "IsFirstLaunch", "1") = "1")
                 return false
             DashboardRemote.runAction := "start"

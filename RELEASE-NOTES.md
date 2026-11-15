@@ -1,4 +1,18 @@
-# Ultimate Macro 1.4.1.4
+# Ultimate Macro 1.4.1.5
+
+## Two-strategy rotation — build 1.4.1.5
+
+* Restored the original 1.3.3a two-slot Runs/Minutes rotation in the 1.4 Run
+  tab, with original auto-equip, between-match switching and saved progress.
+* Kept the modified 1.3.3.10 gameplay core, recorder, chat-close setting,
+  dashboard/UltBot, tray mode and signed v2 updater. New adapters only connect
+  the restored rotation to the existing run boundary and lobby re-entry.
+* Added hidden rotation tests, file/interval validation, active-slot status,
+  and explicit-stop priority. No live-game testing is claimed.
+* Refreshed website link previews to the actual current UI. Discord may keep
+  its already-posted previews cached.
+
+See [the complete changelog](CHANGELOG-1.4.1.5.md).
 
 ## Run-options clarification — build 1.4.1.4
 

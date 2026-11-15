@@ -109,17 +109,23 @@ class Dashboard {
     }
 
     static Snapshot() {
-        global RunningStrategy, Strategy1Path, gamemap, difficulty
+        global RunningStrategy, Strategy1Path, Strategy2Path, RotateStrategies, CurrentRotationIndex, gamemap, difficulty
         health := DashboardHealth.Read()
-        selectedPath := Trim(Strategy1Path)
+        activeSlot := RunningStrategy && RotateStrategies ? CurrentRotationIndex : 1
+        selectedPath := Trim(activeSlot = 2 ? Strategy2Path : Strategy1Path)
         selectedName := ""
         if (selectedPath != "" && FileExist(selectedPath) && !InStr(FileExist(selectedPath), "D")) {
             SplitPath(selectedPath, , , , &selectedName)
             selectedName := Dashboard.SafeLabel(IniRead(selectedPath, "Settings", "title", selectedName), 80)
         }
         slots := []
-        if (selectedName != "")
-            slots.Push(Map("slot", 1, "name", selectedName))
+        for slot, path in [Strategy1Path, Strategy2Path] {
+            if (Trim(path) = "" || !FileExist(path) || InStr(FileExist(path), "D"))
+                continue
+            SplitPath(path, , , , &name)
+            name := Dashboard.SafeLabel(IniRead(path, "Settings", "title", name), 80)
+            slots.Push(Map("slot", slot, "name", name))
+        }
 
         available := [], seen := Map()
         Loop Files, A_ScriptDir "\Strategies\*.strat", "F" {
@@ -142,7 +148,7 @@ class Dashboard {
             capabilities.Push("device_health_v1", "process_close")
         return Map("runState", RunningStrategy ? "running" : "stopped"
             , "activeStrategy", selectedName != "" ? selectedName : JSON.null
-            , "activeSlot", 1, "rotationEnabled", JSON.false
+            , "activeSlot", activeSlot, "rotationEnabled", RotateStrategies ? JSON.true : JSON.false
             , "stopAfterMatch", DashboardRemote.stopAfterMatch ? JSON.true : JSON.false
             , "cooldown", DashboardRemote.CooldownSnapshot()
             , "map", Dashboard.SafeLabel(gamemap, 64), "mode", Dashboard.SafeLabel(difficulty, 32)

@@ -1,4 +1,11 @@
-# Ultimate Macro 1.4.1.4
+# Ultimate Macro 1.4.1.5
+
+Strategy cycling is back: **Run → Strategy cycling → Strategy rotation**.
+Choose a second strategy and swap after a chosen number of **Runs** or
+**Minutes**. The original 1.3.3a two-slot rotation alternates between matches
+and enables auto-equip. It is off by default. The supplied modified 1.3.3.10
+had removed cycling; its remaining gameplay core is preserved.
+See [the cycling changelog](CHANGELOG-1.4.1.5.md).
 
 The 5–20 value under Run options is **map-list scroll steps**, not a match
 limit. There is no fixed 20-match cap. The interface now explains the field;

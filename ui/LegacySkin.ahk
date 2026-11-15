@@ -243,6 +243,20 @@ class MW {
         row := c.Add(HBox(, 8))
         MW.Action(row, Tab1_Btn1)
         MW.Action(row, Tab1_Btn2)
+        c := root.Add(Card("Strategy cycling · original 1.3.3a"))
+        MW.Toggle(c, RotateStrategiesCtrl)
+        c.Add(Label("Alternate strategy 1 and strategy 2 between matches. Auto-equip is required and enabled automatically.", "caption", true))
+        c.Add(Label("Strategy 2", "caption"))
+        MW.Field(c, Strategy2Ctrl)
+        row := c.Add(HBox(, 8))
+        MW.Action(row, Tab1_Btn3, "Browse strategy 2")
+        MW.Action(row, Tab1_Btn4, "Clear strategy 2")
+        row := c.Add(HBox(, 8))
+        row.Add(Label("Swap after"), 1)
+        field := MW.Field(row, SwapAmountCtrl)
+        field.fixedW := 84
+        sel := MW.RecorderSelect(row, SwapUnitCtrl)
+        sel.fixedW := 100
         c := root.Add(Card("Run options"))
         MW.repeatHelp := c.Add(Label("No fixed match-count limit. Use F2 or dashboard stop controls to stop a run.", "caption", true))
         MW.Toggle(c, AutoEquipCtrl)
@@ -567,6 +581,7 @@ class MW {
     static SynchronizeView(force) {
         if !MW.LayoutReady()
             return
+        UpdateStrategyRotationControls()
         Tab2_Btn1.Enabled := !Recording && !RunningStrategy
         Tab2_Btn2.Enabled := Recording
         MW.recordStatus.SetText(Recording ? "Recording · " RecordedSteps.Length " strategy steps" (MacroRecording ? " · raw inputs ON" : "") : "Not recording.")

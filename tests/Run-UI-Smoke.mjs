@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, join } from 'node:path';
@@ -9,6 +10,8 @@ const source = join(here, '..');
 const recorderMode = process.argv.includes('--recorder');
 const residentMode = process.argv.includes('--resident');
 const shortcutMode = process.argv.includes('--shortcuts');
+const rotationMode = process.argv.includes('--rotation');
+const previewOutput = process.argv.includes('--preview') ? process.argv[process.argv.indexOf('--preview') + 1] : '';
 const read = path => readFileSync(path, 'utf8').replaceAll('\r\n', '\n');
 const once = (source, from, to) => {
   assert.equal(source.split(from).length, 2, 'Missing unique UI fixture anchor: ' + from);
@@ -30,6 +33,27 @@ try {
   main = once(main, '~F1:: StartStrategy(0, 0)\n~F2:: StopStrategy(0, 0)', '');
   main = once(main, '\nStartStrategy(*) {', '\nStartStrategy(*) => QaUnexpectedRun()\nUnusedLegacyStart(*) {');
   main = once(main, '\nStopStrategy(*) {', '\nStopStrategy(*) => QaUnexpectedRun()\nUnusedLegacyStop(*) {');
+  if (rotationMode) {
+    const path = join(fixture, 'app', 'StrategyRotation.ahk');
+    let rotation = read(path);
+    const legacySwitch = rotation.match(/^SwitchToNextStrategy\([^]*?^\}/m)[0].replace(/[ \t]+$/gm, '');
+    assert.equal(createHash('sha256').update(legacySwitch).digest('hex'), '9e2484780ea59a628357bc5ef9510a1eabca5b2929a1217977879b564316be49', 'Original 1.3.3a switch function changed');
+    const decision = rotation.match(/    switched := false[^]*?    IniWrite\(CurrentRunCount, StateFile, "State", "CurrentRunCount"\)/)[0]
+      .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
+    assert.equal(createHash('sha256').update(decision).digest('hex'), '497643d989c5d85d81b7c57137f75225f92affac80292eccdf7d6e8f91c6728d', 'Original 1.3.3a boundary/count logic changed');
+    for (const port of ['GetRobloxHWND','ActivateRoblox','getRobloxPos','AdvancedImageSearch','CloseRoblox','RunRoblox','EquipTowers','JoinGame','SendToWebhookInstant','Sleep'])
+      rotation = rotation.replace(new RegExp('\\b' + port + '\\b', 'g'), 'QaRotation' + port);
+    writeFileSync(path, rotation);
+    main = once(main, 'MW.Open(false)\nQaUiTest()', 'MW.Open(false)\nQaRotationTest()');
+    main += '\n#Include Rotation-QA.ahk\n';
+    writeFileSync(join(fixture, 'Rotation-QA.ahk'), read(join(here, 'Rotation-QA.ahk')));
+  }
+  if (previewOutput) {
+    assert(!rotationMode && !recorderMode && !residentMode && !shortcutMode);
+    main = once(main, 'MW.Open(false)\nQaUiTest()', 'MW.Open(false)\nQaPreview(' + JSON.stringify(previewOutput.replaceAll('\\','/')) + ')\nQaUiTest()');
+    main += '\n#Include Preview-QA.ahk\n';
+    writeFileSync(join(fixture, 'Preview-QA.ahk'), read(join(here, 'Preview-QA.ahk')));
+  }
   if (shortcutMode) {
     main = once(main, 'MW.Open(false)\nQaUiTest()', 'QaShortcutSeed()\nMW.Open(false)\nQaShortcutTest()');
     main += '\n#Include Shortcut-QA.ahk\n';
@@ -179,12 +203,12 @@ QaUiTest() {
   writeFileSync(join(fixture, 'Main-UI-QA.ahk'), '\ufeff' + main);
   const result = spawnSync(join(fixture, 'submacros', 'AutoHotkey64.exe'), ['/ErrorStdOut', 'Main-UI-QA.ahk'], { cwd: fixture, windowsHide: true, encoding: 'utf8', timeout: residentMode ? 60000 : 25000 });
   const output = (result.stdout || '') + (result.stderr || '');
-  const suite = recorderMode ? 'Recorder' : residentMode ? 'Resident' : shortcutMode ? 'Shortcut' : 'UI';
+  const suite = rotationMode ? 'Rotation' : recorderMode ? 'Recorder' : residentMode ? 'Resident' : shortcutMode ? 'Shortcut' : 'UI';
   writeFileSync(join(here, suite + '-QA.log'), output);
   process.stdout.write(output);
   assert.equal(result.status, 0, result.error?.message || 'Hidden UI smoke failed');
-  assert.match(output, recorderMode ? /SUCCESS: \d+ recorder round-trip assertions/ : residentMode ? /SUCCESS: \d+ resident lifecycle assertions/ : shortcutMode ? /SUCCESS: \d+ shortcut regression assertions/ : /PASS: hidden complete UI startup/);
-  writeFileSync(join(here, suite + '-QA-results.json'), JSON.stringify({ passed: true, testedAt: new Date().toISOString(), assertions: recorderMode || residentMode || shortcutMode ? Number(output.match(/SUCCESS: (\d+)/)[1]) : undefined, sizes: 4, pages: 7, recordTab: true, noGameInput: true, noHttp: true }, null, 2));
+  assert.match(output, rotationMode ? /SUCCESS: \d+ rotation regression assertions/ : recorderMode ? /SUCCESS: \d+ recorder round-trip assertions/ : residentMode ? /SUCCESS: \d+ resident lifecycle assertions/ : shortcutMode ? /SUCCESS: \d+ shortcut regression assertions/ : /PASS: hidden complete UI startup/);
+  writeFileSync(join(here, suite + '-QA-results.json'), JSON.stringify({ passed: true, testedAt: new Date().toISOString(), assertions: rotationMode || recorderMode || residentMode || shortcutMode ? Number(output.match(/SUCCESS: (\d+)/)[1]) : undefined, sizes: 4, pages: 7, recordTab: true, noGameInput: true, noHttp: true }, null, 2));
 } finally {
   assert.equal(dirname(realpathSync(fixture)), parent);
   assert(basename(fixture).startsWith('ultmacro-ui-qa-'));

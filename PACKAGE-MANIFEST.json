@@ -1,6 +1,6 @@
 {
-  "version": "1.4.1.4",
-  "updateVersion": "1.4.1.4",
+  "version": "1.4.1.5",
+  "updateVersion": "1.4.1.5",
   "files": [
     {
       "path": ".gitignore",
@@ -9,8 +9,8 @@
     },
     {
       "path": "app/Dashboard.ahk",
-      "bytes": 13423,
-      "sha256": "e4751fdd31e817be30c464a74fc2802e886ba0afbb1f11db986b950e463c6d2e"
+      "bytes": 13904,
+      "sha256": "0bf41a7e828946381503dacbde27f16952851410d28563c063e745613b82cb5b"
     },
     {
       "path": "app/DashboardActivity.ahk",
@@ -34,8 +34,8 @@
     },
     {
       "path": "app/DashboardRemote.ahk",
-      "bytes": 25809,
-      "sha256": "5f490342dbc59231e6f74a60460c79987689c19b03d8460c72f49278e181c415"
+      "bytes": 25854,
+      "sha256": "7e2cc0f283369545481f529fe3c4849b6b6c3d19c9216a4795fc2d76a05ed5fb"
     },
     {
       "path": "app/LegacyConnections.ahk",
@@ -78,6 +78,11 @@
       "sha256": "5306378e7f1aa1de35701ec19c5eaae74ebf1a1181e16bd2b31f7c344760e3fe"
     },
     {
+      "path": "app/StrategyRotation.ahk",
+      "bytes": 8562,
+      "sha256": "884ae12376be2c2f8c58deec89ae9294f1c631d9d3ca1b5c1aedf2cc613a407c"
+    },
+    {
       "path": "app/UltBot.ahk",
       "bytes": 15534,
       "sha256": "ed54691ac0eab34005756fbb1209e07f4d1ef0485de844be63a59992c17476f7"
@@ -98,6 +103,11 @@
       "sha256": "2cc6074137d801c7c268adc80311b303239ea6e2ff87b8edc9c15fe09f381cc6"
     },
     {
+      "path": "CHANGELOG-1.4.1.5.md",
+      "bytes": 1787,
+      "sha256": "4d550432aaedde7fe865f15884dfb5ed5c8844c7d4ebf8f9576fbe261bde0005"
+    },
+    {
       "path": "CHANGELOG-1.4.1.md",
       "bytes": 3258,
       "sha256": "2dc401c5d82311c768d82d643572920564090642d07c0b863adf1a3a568090ea"
@@ -114,8 +124,8 @@
     },
     {
       "path": "engine/UM14Engine.ahk",
-      "bytes": 218784,
-      "sha256": "c8e91221ab312a2c833f0b34e54e4e871ece17f910144f4e3958d63bfd78d958"
+      "bytes": 219618,
+      "sha256": "844aa43ea545b481bdaf710ddf662aef0e13e187cdd8ff153d76b8e41e73606e"
     },
     {
       "path": "icon.ico",
@@ -195,17 +205,17 @@
     {
       "path": "Main.ahk",
       "bytes": 335,
-      "sha256": "985c0aa5f2ec57fd1ea9efd0eb278d5702009818b86382df7eb72a1d54c3d05f"
+      "sha256": "0e5f275d65439457f6082eeff4d224265edb9c24f4e47c7fec01de3162ec94a1"
     },
     {
       "path": "README.md",
-      "bytes": 8330,
-      "sha256": "83a7377e6b974bf2713308f9c7b3ab1b73d832b5d294a6a7d140be3e890aa69b"
+      "bytes": 8749,
+      "sha256": "50d21dc08a1d49e2701b0040456e3cb38d3c7001655c9145dbb3d7cafc3bc1c3"
     },
     {
       "path": "RELEASE-NOTES.md",
-      "bytes": 8135,
-      "sha256": "a8a410955c4fc37f7358b9110b92f7ff6333c7ea1e0fa26df0176c4d04b62cad"
+      "bytes": 8868,
+      "sha256": "06ada95ab94b25818e6fd1166130eaf68e7801a23fa92f27a81202b0ffee4e3d"
     },
     {
       "path": "Resources/1.png",
@@ -799,8 +809,8 @@
     },
     {
       "path": "ui/LegacySkin.ahk",
-      "bytes": 40175,
-      "sha256": "741734f6176224592058b635b2c411d17a1b82d7b47e195a8017669b2cc0d8f3"
+      "bytes": 40916,
+      "sha256": "3ef1b42105e29848e5ce27ed3be774db137e968f4385b8c0652b1a26711d2023"
     },
     {
       "path": "ui/normal.wav",
