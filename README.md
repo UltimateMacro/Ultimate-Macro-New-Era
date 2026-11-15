@@ -1,188 +1,142 @@
-<p align="center">
-  <img src=".github/assets/readme-hero.svg" width="100%" alt="Ultimate Macro — automation for Roblox Tower Defense Simulator">
-</p>
+# Ultimate Macro 1.4.1
 
-<p align="center">
-  <a href="https://ultmacro.xyz/download"><strong>Download</strong></a>
-  &nbsp;&nbsp;·&nbsp;&nbsp; <a href="#getting-started">Get started</a>
-  &nbsp;&nbsp;·&nbsp;&nbsp; <a href="https://ultmacro.xyz/wiki/">Wiki</a>
-  &nbsp;&nbsp;·&nbsp;&nbsp; <a href="https://discord.gg/ultmacro">Discord</a>
-</p>
+The supplied modified **1.3.3.10 gameplay engine** with the Ultimate Macro
+1.4 interface, optional UltBot/dashboard connections, and verified ZIP updates.
 
-<p align="center">
-  <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/actions/workflows/ci.yml"><img src="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
-  <a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases"><img src="https://img.shields.io/github/v/release/UltimateMacro/Ultimate-Macro-New-Era?include_prereleases&label=release&color=orange" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-orange" alt="GPL-3.0 license" title="GPL-3.0 license"></a>
-  <a href="https://discord.gg/ultmacro"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2Fultmacro%3Fwith_counts%3Dtrue&query=%24.approximate_presence_count&label=chat&suffix=%20online&color=brightgreen" alt="Discord members online"></a>
-</p>
+Extract the entire ZIP to a new folder, then open **Start Ultimate Macro.cmd**.
+This uses the included official 64-bit AutoHotkey runtime without changing
+your installed AutoHotkey. Don't run the macro from inside the ZIP.
 
-<p align="center">
-  <img src=".github/assets/community-stats.svg" width="760" alt="GitHub downloads from Darksen and The New Era, Discord community members, and GitHub stars">
-</p>
+## Background mode and tray
 
-<p align="center"><strong>Version 1.4</strong> &nbsp;·&nbsp; <strong><a href="LICENSE-1.4.txt">Source available</a></strong> &nbsp;·&nbsp; <strong><a href="https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases">Official releases</a></strong> &nbsp;·&nbsp; <strong><a href="#the-team">Community-maintained</a></strong></p>
+Closing the main window now keeps Ultimate Macro running in the system tray;
+it does not stop a run or disconnect dashboard/UltBot. Use **Open Ultimate
+Macro** (or double-click its tray icon) to reopen it. Use **Exit Ultimate
+Macro** to fully quit. The painted UI and its timers/buffers are released
+while closed; original settings, recording controls and selected strategy
+survive reopening. An explicit exit clears legacy run-resume state.
 
-## What is Ultimate Macro?
+An authenticated remote Start acknowledges the informational required-towers
+prompt after three seconds. Local starts keep the original 60-second timeout;
+first-run setup and all normal run/recording guards are unchanged. Remote
+Start still requires the existing permissions. Pairing now allows longer
+network timeouts and explains unreachable/HTTP-error responses more clearly.
 
-**Ultimate Macro** is a free-to-use, source-available Windows tool for automating **Roblox Tower Defense Simulator (TDS)**. You can record or import a strategy, then let the macro handle repeatable gameplay actions such as tower placement, upgrades, abilities, and movement between matches.
+Stop other TDS macros before starting this one. Starting a strategy can
+relaunch Roblox, and its hotkeys control the game. This is not a Roblox exploit;
+the macro uses local mouse/keyboard automation and the original recognition
+libraries. Read the original setup instructions and configure TDS first.
 
-The project was originally created by [Darksen](https://github.com/DarksenDev/tds-macro) and is now community-maintained. We focus on making TDS farming more convenient while keeping the software accessible and open to inspection.
+## Retained engine and tools
 
-### What can it do?
+Strategy playback, auto-equip, game navigation, timescale handling, abilities,
+modifiers, playtime rewards, webhooks and timing defaults retain the
+supplied 1.3.3.10 routines. The original spin and consumable tools remain in
+Tools, with a corrected startup folder. Original defaults and the shared
+`%APPDATA%\Ultimate_Macro` settings/resume paths remain in use.
 
-**Strategy playback**  
-Replay tower placements, upgrades, sells, abilities, and repositioning.
+The lifecycle, update, and presentation adapters are intentional exceptions:
+the watchdog is now stopped by its owned process handle; unrelated scripts
+are not closed by name; and the old upstream overwrite updater is retired.
+Automatic chat closing remains on at the original equip/map/camera checkpoints;
+its two horizontal positions have the specifically requested 140→80 hotfix,
+and it acts only while Roblox is in the foreground.
+See RELEASE-NOTES.md for the exact scope and outstanding testing.
 
-**Repeated farming**  
-Run strategies with rotation, auto-skip, and reconnect support.
+## Record
 
-**Strategy tools**  
-Find community `.strat` files, manage profiles, and edit strategies in Strategy Lab.
+The modified 1.3.3.10 distribution has no working recorder. With the owner's
+approval, this build restores the original **1.3.3a recorder** in a separate
+Record tab while keeping 1.3.3.10 replay. Choose map, mode, towers/modifiers and
+options, then Start recording after joining your match. F places a tower with
+the original slot/ID prompts; upgrade clicks and original action shortcuts are
+retained. Ctrl+Shift+E toggles raw inputs; Ctrl+Z undoes; F2 stops and offers to
+save. Saved `.strat` files are selected for replay automatically.
 
-**Game setup**  
-Optional Auto Equip, Roblox settings, party and VIP-server support.
+Recording shortcuts are editable on the Record page. Inputs from other apps
+are discarded. Saving is atomic, and selling preserves preceding spawn/upgrade
+steps instead of deleting history required by replay. Recordings are stored in
+`%APPDATA%\Ultimate_Macro\Recordings`. The original recorder recommends 1080p;
+its warning and strategy format are preserved. Live TDS testing is still needed.
 
-**Monitoring**  
-Optional Discord controls, screenshots, webhooks, and logs.
+The shortcut boxes show readable names such as Ctrl+F rather than internal
+scan codes. Type a combination such as Ctrl+P, then press Enter or leave the
+box to save. Unchanged imported bindings retain their exact stored codes.
+Empty, invalid, reserved and conflicting edits revert to the previous binding.
 
-Features can vary by build and TDS update. Check the [release notes](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases) and [Wiki](https://ultmacro.xyz/wiki/) for the latest compatibility information.
+## Discord → ULT Bot remote control
 
-## Getting started
+1. In the Ultimate Macro Discord, run `/remote link` or `/remote setup`.
+2. Paste the private ULT1 code in the app's Discord tab and accept the local
+   status/stop consent checkbox. Don't post your code in a channel.
+3. Try `/remote status` first. `/remote devices` shows the linked PC.
+4. Remote Start and requested Roblox screenshots each require their own
+   additional local opt-in. Complete first-run prompts and choose a strategy
+   locally before using `/remote start`.
+5. `/remote stop` uses the original stop/reload handler, then reconnects.
+6. Use Disconnect or `/remote unlink` to revoke the connection.
 
-### 1. Check the requirements
+Requested screenshots require a single foreground RobloxPlayerBeta game
+window. Other games, desktop pixels, and background windows are not captured.
+If Roblox cannot provide a valid image, the request returns an error instead
+of falling back to a desktop screenshot.
 
-**Required**
+UltBot's account, role and prerelease checks remain server-side. This version
+may require tester access until the public release is registered.
 
-- Windows 10 or 11 with Roblox and Tower Defense Simulator
-- [AutoHotkey v2](https://www.autohotkey.com/v2/) (64-bit preferred)
-- The complete, extracted Ultimate Macro ZIP
+## Settings → Connect to Dashboard
 
-**Recommended settings**
+Enter the website's XXXX-XXXX pairing code. A successful heartbeat makes the
+desktop appear connected; temporary failures show Offline and retry. The
+paired dashboard can show run activity, verified results/rewards and current
+CPU/GPU/RAM/process health. Authenticated website actions support Start, Stop,
+Stop after match, cooldowns, strategy selection/editing/library installs, and
+closing an explicitly selected current app. It is independent of UltBot.
 
-- **1920 × 1080** resolution and **100%** Windows scaling
-- **60 FPS** in Roblox
-- **Large** TDS UI Scale
-- **Screen Shake: Off** and **Prefer Vertical Upgrades: On**
+Temperature cooldowns require live CPU sensors from LibreHardwareMonitor
+(local data.json on port 8085, or compatible monitor WMI). Missing/stale sensors
+are not treated as a cool CPU. Pause/resume and a second strategy slot are not
+supported by the retained single-strategy runtime and return a clear error.
+Disconnect revokes the link and clears queued dashboard telemetry/cooldowns;
+ordinary app exit retains the encrypted link for relaunch.
 
-The macro includes resolution-aware detection, but the recommended display and in-game settings are the most predictable starting point. A Mac, phone, or browser cannot run the Windows macro directly.
+Both links are optional, HTTPS-only in release builds, and off until paired.
+Windows DPAPI encrypts saved credentials for your Windows user. One-time codes
+are cleared after submission and are not saved to settings or logs.
 
-### 2. Download and install
+## Verified updates
 
-1. Download from **[ultmacro.xyz/download](https://ultmacro.xyz/download)** or the official **[GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases)** page. Avoid reuploads from strangers.
-2. Extract the entire ZIP to a normal folder, such as **Documents\Ultimate Macro**. Keep its `app`, `ui`, `engine`, and `assets` folders alongside `Main.ahk`.
-3. Install **[AutoHotkey v2](https://www.autohotkey.com/v2/)** if needed. The macro's source requires version 2, not version 1.
-4. Open the extracted folder and double-click **`Main.ahk`** (shown as **Main** if extensions are hidden). If Windows asks which program to use, select your AutoHotkey v2 installation.
+Quiet downloads are optional and off by default. When enabled, the app checks
+at launch and every 30 minutes. Check / review update also works manually.
+The helper checks the signed manifest, expiry, ZIP size and SHA-256, and safe
+archive paths. Installation always requires approval.
 
-**Important:** don't run `Main.ahk` from inside the ZIP. The macro needs its bundled files to work.
+Every approved update creates a clean version folder in
+`%LOCALAPPDATA%\UltimateMacro14AHK\VerifiedUpdatesV2`. New files are included,
+replacements contain the new bytes, and files omitted from the new release
+aren't carried into that folder. The old installation and user data stay
+untouched for rollback. Nothing is killed, launched, or restarted by updating.
 
-### 3. Prepare your first session
+Keep custom strategies in a separate folder or retain the previous version
+folder; the selected strategy setting can continue to reference that file.
+Updates do not delete arbitrary personal files or silently merge installations.
 
-1. Start Roblox and join **Tower Defense Simulator**.
-2. Match the recommended in-game settings above. Keep the Roblox window available to the macro.
-3. Open Ultimate Macro, choose a compatible strategy from your files or the community browser, and check its required towers, map, and mode.
-4. Equip the required loadout yourself, or use Auto Equip if supported by the strategy and build.
-5. Start playback using the macro's controls. Watch the first run to make sure map selection, tower placement, and upgrades behave as expected.
+The old private signing key was lost. This build uses a new protected signing
+identity on a separate v2 channel. Older versions need one manual install to
+trust it; no signature bypass or automatic trust replacement exists. See
+`updater/UPDATE-TRUST-V2.md`. Updates use only the separate v2 signed feed;
+the old feeds are not repinned or redirected around signature verification.
 
-Strategies are not universal. They can depend on a particular game update, loadout, difficulty, and map. A strategy failing does not automatically mean your installation is broken.
+## Timing and compatibility
 
-### Strategy details and timing
+If 2x misses placements, try 1.5x. Raise mouse/key delays gradually if clicks
+are missed. These engine behaviors have not been rewritten in this release.
+Read SECURITY.md before claiming that any antivirus warning is harmless.
 
-- Select any imported or bundled strategy on **Run** to see its map, difficulty,
-  required slots, and modifiers. These describe the file; they do not certify
-  that the strategy works with the current TDS update.
-- In a required loadout, name a Golden tower explicitly, for example
-  `Golden Minigunner` or `G Minigunner`. Auto Equip only equips towers you own.
-- Open **Settings → Advanced settings → Gameplay tuning** for key delay,
-  upgrade delay, extra time to recognize the game UI, or a pause before joining
-  a match. These settings apply when starting the next run.
-- For Suicide Gem / Jugg + Crook EXP, use maximized Roblox with docking off
-  until the docked placement has been verified. Watch the first run.
+## Credits and source
 
-### Link Discord remote controls
-
-Open **Discord → Link this PC** and follow the pairing prompts. The official
-relay does not need port forwarding or a Windows Firewall exception. Do not
-share pairing codes, invite links, or bot tokens in support chats.
-
-### Join a private server (1.4.0.39 and later)
-
-In **Settings → Private server**, paste the invite you copied from your TDS
-private server and choose **Save link → Join private server**. Wait for the
-private TDS lobby before pressing **Start**. Saving the link alone doesn't
-move a Roblox client that's already open.
-
-New launches and reconnects use the saved invite. If joining fails, check
-that the invite still works for your Roblox account; the macro does not
-switch to public TDS to compensate. Choose **Forget link** to return to
-public launches. Windows protects the saved link on this account, and
-Ultimate Macro does not include it in profiles or Output exports.
-
-## Is Ultimate Macro safe?
-
-**We want users to be able to check, not just take our word for it.**
-
-Ultimate Macro's current source is **available for inspection and private modification under a restricted license**. You can inspect the [main script](Main.ahk), the [supporting code](app/), the [interface](ui/), the [engine](engine/), and the [original project](https://github.com/DarksenDev/tds-macro). Historical GPL releases and third-party components retain their licenses. It is built with AutoHotkey, a Windows scripting language often used for legitimate keyboard, mouse, and interface automation.
-
-**Open source does not guarantee that every downloaded file is harmless.** There is no meaningful way to promise that any software is “100% virus-free” simply from its README. Download official builds, keep Windows security protections enabled, and check a file if a security product flags it.
-
-### Why might Windows or antivirus software flag it?
-
-- **Input automation:** The macro sends mouse clicks and key presses and inspects the game's interface. Security tools can regard automation behavior as suspicious.
-- **AutoHotkey-based files:** Some scanners flag AutoHotkey programs or compiled scripts, including legitimate ones. The [AutoHotkey documentation](https://docs.autohotkey.com/download/safe.htm) discusses false positives.
-- **New or unsigned builds:** Microsoft Defender SmartScreen may warn about downloads without an established publisher or file reputation, particularly after updates. [Microsoft explains how this works.](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)
-
-A warning **is not proof of malware**, but it also **is not proof of a false positive**. Treat the exact warning and file as something to investigate.
-
-### What should I do if I see a security warning?
-
-1. **Check the source:** Confirm you downloaded from our official website or this repository's [releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
-2. **Check the file:** Scan it with Windows Security. If a release includes a SHA-256 checksum, compare it with the file you downloaded.
-3. **Read the detection:** An “unrecognized app” SmartScreen warning is different from an antivirus detection naming specific malware.
-4. **Ask before proceeding:** If anything seems wrong, stop and report the filename, version, and exact warning in our [Discord](https://discord.gg/ultmacro) or [issues](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/issues).
-
-**Do not disable Microsoft Defender, turn off SmartScreen globally, or blindly whitelist the whole macro folder.** If a detection is suspected to be incorrect, have the file reviewed by the security vendor.
-
-### What information does the macro use?
-
-Ultimate Macro performs gameplay automation on your Windows computer. Some **optional** features, including Discord integration, webhooks, screenshots, and exported logs, can transmit or expose session information when configured. Review those settings before turning them on, and never post private webhook URLs, bot tokens, or unredacted logs publicly.
-
-## Troubleshooting
-
-**Nothing opens?** Check that AutoHotkey v2 is installed and you're running the extracted `Main.ahk`.
-
-**Missing files?** Re-extract the complete official ZIP. Don't move `Main.ahk` by itself.
-
-**Wrong map, mode, or tower actions?** Check that your strategy matches the latest TDS update, loadout, UI Scale, and display settings.
-
-**Disconnects or crashes?** Check your connection, macro logs, and the latest release notes.
-
-**Windows security warning?** Follow the [security checklist above](#what-should-i-do-if-i-see-a-security-warning) rather than disabling protection.
-
-For longer guides and known issues, visit the **[Ultimate Macro Wiki](https://ultmacro.xyz/wiki/)**. To get help, join **[our Discord](https://discord.gg/ultmacro)** and include the macro version, what happened, what you expected, and relevant logs or screenshots with private information removed.
-
-## The team
-
-Behind every release is a team building, testing, and improving Ultimate Macro.
-
-<p align="center">
-  <img src=".github/assets/readme-team.svg" width="760" alt="Leadership: thermyn and pizzaroles24. Development: jackappleteam, banana.dev, itzshovel and hesgly.">
-</p>
-
-Thanks to everyone sharing strategies, reporting bugs, and helping new members in our [Discord community](https://discord.gg/ultmacro).
-
-### Original creator
-
-**[Darksen](https://github.com/DarksenDev/tds-macro)** created Ultimate Macro. The New Era continues his original project. The download total includes GitHub releases from both repositories.
-
-[Original repository](https://github.com/DarksenDev/tds-macro) · [Support Darksen](https://www.donationalerts.com/r/darksen1)
-
-## Source availability & community
-
-- **Current first-party license:** [Ultimate Macro Personal-Use Source-Available License](LICENSE-1.4.txt): personal use, inspection and private edits/forks allowed; resale and public redistribution restricted, subject to the GitHub platform exception. Not an OSI open-source license.
-- **Earlier releases and dependencies:** existing licenses remain in force; [historical GPL text](LICENSE). This change does not revoke previous GPL permissions or relicense third-party components.
-- **Source code:** [This repository](https://github.com/UltimateMacro/Ultimate-Macro-New-Era).
-- **Updates:** [GitHub releases](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases).
-- **Documentation:** [Wiki](https://ultmacro.xyz/wiki/).
-- **Help:** [Discord](https://discord.gg/ultmacro) · [Report an issue](https://github.com/UltimateMacro/Ultimate-Macro-New-Era/issues).
-
-**Disclaimer:** Ultimate Macro is an independent community project, not affiliated with or endorsed by Roblox Corporation or Paradoxum Games. Automation may violate game or platform rules and can carry account-related risks. Use it responsibly.
+Ultimate Macro by **Darksen**; modified 1.3.3.10 by **IlMlN**; 1.4 interface
+and contributors retain their original credits. The supplied legacy README
+is preserved unchanged in docs/LEGACY-README.md. Presentation/source licensing
+and the official AutoHotkey license are included. No personal credentials or
+release signing keys belong in this ZIP.

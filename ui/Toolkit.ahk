@@ -18,18 +18,24 @@ class Surface {
         this.rendering := false, this.deferredSize := "", this.layouting := false
         this.background := "", this.overlay := "", this.originX := 0, this.originY := 0
         this.dragScroll := false, this.dragStart := 0, this.dragScroll0 := 0
-        this.tipWidget := "", this.tipShown := false
+        this.tipWidget := "", this.tipShown := false, this.disposed := false
         this.renderFn := ObjBindMethod(this, "DoRender")
         this.layoutFn := ObjBindMethod(this, "Relayout")
         this.tipFn := ObjBindMethod(this, "ShowTip")
+        this.hideTipFn := ObjBindMethod(this, "HideTip")
         Surface.all[this.hwnd] := this
         root.Attach(this)
     }
 
     Destroy() {
+        if this.disposed
+            return
+        this.disposed := true
         SetTimer(this.renderFn, 0)
         SetTimer(this.layoutFn, 0)
         SetTimer(this.tipFn, 0)
+        SetTimer(this.hideTipFn, 0)
+        this.HideTip()
         this.pending := this.layoutPending := false
         if Surface.all.Has(this.hwnd)
             Surface.all.Delete(this.hwnd)
@@ -46,6 +52,15 @@ class Surface {
     }
 
     Resize(pw, ph) {
+        prior := A_IsCritical
+        Critical("On")
+        try this.ResizeView(pw, ph)
+        finally Critical(prior ? prior : "Off")
+    }
+
+    ResizeView(pw, ph) {
+        if this.disposed
+            return
         pw := Max(1, pw), ph := Max(1, ph)
         if this.rendering {
             this.deferredSize := [pw,ph]
@@ -86,7 +101,7 @@ class Surface {
     }
 
     Invalidate() {
-        if !this.pending {
+        if (!this.disposed && !this.pending) {
             this.pending := true
             SetTimer(this.renderFn, -1)
         }
@@ -124,13 +139,24 @@ class Surface {
     }
 
     RequestLayout() {
-        if !this.layoutPending {
+        if (!this.disposed && !this.layoutPending) {
             this.layoutPending := true
             SetTimer(this.layoutFn, -1)
         }
     }
 
     Relayout(*) {
+        ; A tray-close timer must not destroy native fields midway through an
+        ; already-running layout callback. Serialize only this local UI work.
+        prior := A_IsCritical
+        Critical("On")
+        try this.LayoutView()
+        finally Critical(prior ? prior : "Off")
+    }
+
+    LayoutView() {
+        if this.disposed
+            return
         if this.layouting {
             this.RequestLayout()
             return
@@ -158,6 +184,15 @@ class Surface {
     }
 
     ScrollTo(y) {
+        prior := A_IsCritical
+        Critical("On")
+        try return this.ScrollView(y)
+        finally Critical(prior ? prior : "Off")
+    }
+
+    ScrollView(y) {
+        if this.disposed
+            return false
         if this.layouting
             return false
         y := Max(0, Min(y, this.contentH - this.lh))
@@ -295,13 +330,14 @@ class Surface {
     }
 
     ShowTip(*) {
+        if this.disposed
+            return
         w := this.tipWidget
         if (!w || w !== this.hover || w.tip = "")
             return
         ToolTip(Locale.Tr(w.tip))
         this.tipShown := true
-        SetTimer(this.tipFn.Bind(), 0)
-        SetTimer(() => this.HideTip(), -6000)
+        SetTimer(this.hideTipFn, -6000)
     }
 
     HideTip() {
@@ -831,6 +867,11 @@ class UiTween {
         }
         start := A_TickCount
         step() {
+            if (control.surface && control.surface.disposed) {
+                SetTimer(step, 0)
+                control.%timer% := ""
+                return
+            }
             t := !Store.settings["motion"] || !control.visible ? 1 : Min(1, (A_TickCount - start) / ms)
             control.%prop% := origin + (target - origin) * (1 - (1 - t)**3)
             control.Invalidate()
@@ -1091,7 +1132,7 @@ class Field extends W {
             return
         g := surface.gui
         g.SetFont("s10 norm c" Theme.Hex("text"), "Segoe UI")
-        opt := "x0 y0 w20 h20 -E0x200 -Border +0x80 Hidden Background" Theme.Hex("field")
+        opt := "x0 y0 w20 h20 -Multi -Wrap -E0x200 -Border +0x80 Hidden Background" Theme.Hex("field")
         if this.password
             opt .= " Password"
         if this.number

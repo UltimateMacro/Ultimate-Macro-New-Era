@@ -1,6 +1,7 @@
-﻿# runtime output / local junk
+*.ini
 *.log
-*.bak
+*.zip
+
 Thumbs.db
-desktop.ini
+Desktop.ini
 .vscode/

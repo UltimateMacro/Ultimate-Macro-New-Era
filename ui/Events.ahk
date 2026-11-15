@@ -53,8 +53,10 @@ UI_EnterSizeMove(wParam, lParam, msg, hwnd) {
 }
 
 UI_ExitSizeMove(wParam, lParam, msg, hwnd) {
-    if (MW.gui && hwnd = MW.gui.Hwnd)
+    if (MW.gui && hwnd = MW.gui.Hwnd) {
+        MW.FlushResize()
         Backdrop.EndSizing()
+    }
 }
 
 UI_EraseBkgnd(wParam, lParam, msg, hwnd) {

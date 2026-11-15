@@ -1,5 +1,11 @@
 # 1.3.3.10 comparison
 
+For the released **1.4.1 / build 1.4.1.2**, see [the current release notes](RELEASE-1.4.1.md)
+and [packaged runtime instructions](README.md). It uses the supplied modified
+1.3.3.10 gameplay/replay engine and restored 1.3.3a recorder. The comparison
+below is retained as a historical description of the retired 1.4.0 runtime;
+its independent-profile and disabled-chat-click statements do not describe 1.4.1.
+
 The supplied TDS-Modified-Macro reference identifies itself as 1.3.3.10 in
 `Main.ahk`. This comparison is from the two source trees, not a live benchmark.
 

@@ -10,27 +10,23 @@ permissions:
 
 jobs:
   ahk-validate:
-    name: AutoHotkey syntax check
+    name: AutoHotkey validation and hidden regressions
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Validate Main.ahk and engine
-        shell: pwsh
-        run: |
-          $ahk = (Resolve-Path engine/submacros/AutoHotkey64.exe).Path
-          foreach ($script in @('Main.ahk', 'engine/UM14Engine.ahk', 'engine/submacros/um14_guard.ahk')) {
-            $p = Start-Process $ahk -ArgumentList '/ErrorStdOut', '/validate', $script -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput stdout.txt -RedirectStandardError stderr.txt
-            if ($p.ExitCode -ne 0) { Get-Content stdout.txt, stderr.txt; throw "$script failed validation" }
-            Write-Host "$script OK"
-          }
-      - name: Run lobby and profile regressions
-        shell: pwsh
-        run: |
-          $ahk = (Resolve-Path engine/submacros/AutoHotkey64.exe).Path
-          foreach ($script in @('TestLegacyProfile.ahk', 'TestModeSelection.ahk', 'TestReleaseUi.ahk', 'TestInventoryQuery.ahk', 'TestTimescale.ahk', 'TestWorldGeometry.ahk', 'TestPrivateServer.ahk', 'TestUiRendering.ahk')) {
-            $p = Start-Process $ahk -ArgumentList '/ErrorStdOut', $script -WindowStyle Hidden -PassThru -RedirectStandardOutput stdout.txt -RedirectStandardError stderr.txt
-            if (!$p.WaitForExit(15000)) { Stop-Process -Id $p.Id; throw "$script timed out" }
-            Get-Content stdout.txt, stderr.txt
-            if ($p.ExitCode -ne 0) { throw "$script failed" }
-          }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate runtime and updater safety tests
+        run: node .github/scripts/validate_runtime.mjs
+      - name: Check hidden layouts and pairing controls
+        run: node tests/Run-UI-Smoke.mjs
+      - name: Check recording shortcut regression
+        run: node tests/Run-UI-Smoke.mjs --shortcuts
+      - name: Check recorder round trip with mocked game input
+        run: node tests/Run-UI-Smoke.mjs --recorder
+      - name: Check tray close/reopen and resize lifecycle
+        run: node tests/Run-UI-Smoke.mjs --resident
+      - name: Check bounded local health sampler
+        run: node tests/Run-Health-QA.mjs

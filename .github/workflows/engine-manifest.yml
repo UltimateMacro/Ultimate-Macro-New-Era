@@ -1,16 +1,34 @@
-name: Engine manifest
+name: Release package manifest
 
 on:
   pull_request:
     paths:
       - "engine/**"
-      - ".github/scripts/verify_engine_manifest.py"
+      - "app/**"
+      - "ui/**"
+      - "lib/**"
+      - "submacros/**"
+      - "Resources/**"
+      - "Strategies/**"
+      - "updater/**"
+      - "Main.ahk"
+      - "PACKAGE-MANIFEST.json"
+      - ".github/scripts/verify_package_manifest.py"
       - ".github/workflows/engine-manifest.yml"
   push:
     branches: [main]
     paths:
       - "engine/**"
-      - ".github/scripts/verify_engine_manifest.py"
+      - "app/**"
+      - "ui/**"
+      - "lib/**"
+      - "submacros/**"
+      - "Resources/**"
+      - "Strategies/**"
+      - "updater/**"
+      - "Main.ahk"
+      - "PACKAGE-MANIFEST.json"
+      - ".github/scripts/verify_package_manifest.py"
       - ".github/workflows/engine-manifest.yml"
   workflow_dispatch:
 
@@ -23,10 +41,10 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify engine file hashes
+    name: Verify tested package file hashes
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - name: Check engine-manifest.json
-        run: python3 .github/scripts/verify_engine_manifest.py
+      - name: Check PACKAGE-MANIFEST.json
+        run: python3 .github/scripts/verify_package_manifest.py

@@ -2,6 +2,7 @@
 
 class Backdrop {
     static image := 0, imgW := 0, imgH := 0
+    static builtAt := 0, windowStyle := "", builds := 0
 
     static Load(path) {
         Backdrop.Dispose()
@@ -27,6 +28,14 @@ class Backdrop {
         }
         ww := MW.surface.pw, wh := MW.surface.ph
         opacity := (255 - Theme.C("overlay")) / 255
+        style := base "|" opacity
+        if (Backdrop.fast && Backdrop.cache.Has("window") && Backdrop.windowStyle = style && A_TickCount-Backdrop.builtAt < 67) {
+            old := Backdrop.cache["window"], s := Gfx.S
+            DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", Gfx.G, "Int", 3)
+            try Gfx.ImageRegion(old.bmp, -offX/s, -offY/s, ww/s, wh/s, 0, 0, old.w, old.h)
+            finally DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", Gfx.G, "Int", 7)
+            return
+        }
         bmp := Backdrop.Cached("window", ww "x" wh "|" base "|" opacity, ww, wh
             , (lw, lh) => Backdrop.ComposeWindow(ww, wh, base, opacity))
         if !bmp {
@@ -38,6 +47,8 @@ class Backdrop {
     }
 
     static ComposeWindow(ww, wh, base, opacity, offX := 0, offY := 0) {
+        Backdrop.builtAt := A_TickCount, Backdrop.windowStyle := base "|" opacity
+        Backdrop.builds++
         s := Gfx.S
         scale := Max(ww / Backdrop.imgW, wh / Backdrop.imgH)
         dw := Backdrop.imgW * scale, dh := Backdrop.imgH * scale
@@ -125,6 +136,7 @@ class Backdrop {
         Backdrop.cache.Clear()
         Gfx.Disposable(Backdrop.image)
         Backdrop.image := Backdrop.imgW := Backdrop.imgH := 0
+        Backdrop.builtAt := 0, Backdrop.windowStyle := ""
     }
 
     static BeginSizing() {
@@ -137,14 +149,16 @@ class Backdrop {
         for name, c in Backdrop.cache
             if !c.sharp
                 stale.Push(name)
-        if !stale.Length
-            return
         for name in stale
             Backdrop.Drop(name)
+        ; A short drag may have reused a sharp bitmap of the previous size.
+        ; Always replace it once, at the final dimensions.
+        Backdrop.Drop("window")
         if MW.surface
             MW.surface.Invalidate()
-        if (MW.page && MW.pages.Length >= MW.page)
-            MW.pages[MW.page].surface.Invalidate()
+        pane := MW.PageAt(MW.page)
+        if pane
+            pane.surface.Invalidate()
     }
 }
 

@@ -1,5 +1,15 @@
 # AutoHotkey edition
 
+## 1.4.1 (build 1.4.1.2)
+
+- Use the supplied modified 1.3.3.10 replay/gameplay engine in the 1.4 interface.
+- Restore the 1.3.3a Record tab, original recording actions and F2 stop/save.
+- Fix readable recording shortcuts, single-line fields and alias-aware conflicts.
+- Combine dashboard/UltBot linking, result/health reporting and guarded controls.
+- Add tray background mode and fix repeated close/reopen/resize cleanup.
+- Keep the protected v2 updater, approved separate-folder installs and scoped helpers.
+- Older signing-key builds require a manual install once. See RELEASE-1.4.1.md.
+
 ## 1.4.0.40
 
 - Wait for a recognizable TDS screen rather than relaunching a healthy client
