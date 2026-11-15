@@ -389,7 +389,7 @@ class MW {
             row.items[-1].stretch := 1
             MW.Action(row, spec[2])
         }
-        for model in [UseNumbersForHotbarCtrl, CollectPlaytimeRewardsCtrl, AlwaysOnTopCtrl]
+        for model in [AutoCloseChatCtrl, UseNumbersForHotbarCtrl, CollectPlaytimeRewardsCtrl, AlwaysOnTopCtrl]
             MW.Toggle(c, model)
         c := root.Add(Card("Timing"))
         c.Add(Label("If 2x misses placements, try 1.5x. If clicks are missed, raise mouse or key delay gradually.", "caption", true))

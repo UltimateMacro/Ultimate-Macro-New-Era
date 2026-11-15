@@ -1,4 +1,18 @@
-# Ultimate Macro 1.4.1
+# Ultimate Macro 1.4.1.3
+
+## Chat-close hotfix — build 1.4.1.3
+
+* Restored the exact chat-button detection/click body from the owner's supplied
+  modified 1.3.3.10 (140px, not the changed 80px). The foreground-app guard stays.
+* Added a visible, persistent, default-on automatic chat-close setting.
+* Pinned regression checks verify 12 original gameplay functions; dashboard
+  notifications are the only additions in the three instrumented routines.
+* Background tests exercise open/closed chat, disabled behavior, refusal to
+  click other apps, setting persistence and hidden seven-tab layouts. They do
+  not prove every live strategy works or repair outdated community strategies.
+* Recorder, dashboard, UltBot, tray and signed-update behavior is retained.
+
+The earlier release notes below are historical, not current publication status.
 
 ## Recording shortcut hotfix — signed updater build 1.4.1.2
 

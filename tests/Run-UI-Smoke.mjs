@@ -125,6 +125,26 @@ QaUiTest() {
         if MW.tabs[2].text != "Record" || !MW.recordStart.IsEnabled() || MW.recordStop.IsEnabled()
             throw Error("Record tab or idle recording controls missing")
         MW.SelectPage(4, false)
+        if AutoCloseChat != 1 || AutoCloseChatCtrl.Value != 1
+            throw Error("Automatic chat close is not on by default")
+        foundChat := false
+        for mirror in MW.mirrors {
+            if mirror.model = AutoCloseChatCtrl {
+                foundChat := true
+                if !mirror.view.checked
+                    throw Error("Chat-close setting is not visibly enabled")
+            }
+        }
+        if !foundChat
+            throw Error("Settings is missing the chat-close toggle")
+        AutoCloseChatCtrl.Value := 0
+        EnableAutoCloseChat()
+        if AutoCloseChat != 0 || IniRead(SettingsFile, "Options", "AutoCloseChat", -1) != 0
+            throw Error("Disabled chat-close preference did not save")
+        AutoCloseChatCtrl.Value := 1
+        EnableAutoCloseChat()
+        if AutoCloseChat != 1 || IniRead(SettingsFile, "Options", "AutoCloseChat", -1) != 1
+            throw Error("Enabled chat-close preference did not save")
         if !MW.dashboardCode.password || MW.dashboardLink.IsEnabled() != Dashboard.CanConnect || MW.dashboardUnlink.IsEnabled()
             throw Error("Dashboard settings control state is wrong")
         MW.dashboardCode.Text := "bad"

@@ -122,6 +122,7 @@ GetDiscordMention(rawId) {
 global UseRestartBtn := IniRead(SettingsFile, "Options", "UseRestartBtn", "0")
 global UsePlayAgainBtn := IniRead(SettingsFile, "Options", "UsePlayAgainBtn", "1")
 global AutoEquip := IniRead(SettingsFile, "Options", "AutoEquip", 0)
+global AutoCloseChat := IniRead(SettingsFile, "Options", "AutoCloseChat", 1)
 global ScrollDownForMap := IniRead(SettingsFile, "Options", "ScrollDownForMap", 1)
 global ScrollDownAmount := Integer(IniRead(SettingsFile, "Options", "ScrollDownAmount", 5))
 if (ScrollDownAmount < 5)
@@ -704,6 +705,10 @@ MW.Bind(UseNumbersForHotbarCtrl, "Click", (*) => SaveAllSettingsQuiet())
 global CollectPlaytimeRewardsCtrl := MainGui.Add("Checkbox", "x520 y150 Hidden", "Collect playtime rewards")
 CollectPlaytimeRewardsCtrl.Value := (CollectPlaytimeRewards = "1" || CollectPlaytimeRewards = 1)
 MW.Bind(CollectPlaytimeRewardsCtrl, "Click", (*) => SaveAllSettingsQuiet())
+
+global AutoCloseChatCtrl := MainGui.Add("Checkbox", "x30 y300 Hidden", "Automatically close Roblox chat")
+AutoCloseChatCtrl.Value := (AutoCloseChat = "1" || AutoCloseChat = 1)
+MW.Bind(AutoCloseChatCtrl, "Click", EnableAutoCloseChat)
 
 MainGui.SetFont("s9 w400 cAAAAAA", "Segoe UI")
 global Tab1_Lbl4 := MainGui.Add("Text", "x520 y176 w85 h20 Hidden BackgroundTrans", "Upgrade Delay:")
@@ -1406,6 +1411,12 @@ EnableAutoEquip(*) {
     v := MainGui.Submit(false)
     AutoEquip := v.AutoEquip
     IniWrite(AutoEquip, SettingsFile, "Options", "AutoEquip")
+}
+
+EnableAutoCloseChat(*) {
+    global AutoCloseChatCtrl, AutoCloseChat, SettingsFile
+    AutoCloseChat := AutoCloseChatCtrl.Value
+    IniWrite(AutoCloseChat, SettingsFile, "Options", "AutoCloseChat")
 }
 
 EnableScrollDownForMap(*) {
@@ -5728,17 +5739,20 @@ HasGlobal(varName) {
 }
 
 closeChat() {
+    global AutoCloseChat
+    if (!AutoCloseChat)
+        return
     hwnd := GetRobloxHWND()
     if (!hwnd || !WinActive("ahk_id " DllCall("GetAncestor", "Ptr", hwnd, "UInt", 2, "Ptr")))
         return
     getRobloxPos(&pX, &pY, &w, &h)
-    chatColor := PixelGetColor(pX + 80, pY + 29, "RGB")
+    chatColor := PixelGetColor(pX + 140, pY + 29, "RGB")
     r1 := (chatColor >> 16) & 0xFF, g1 := (chatColor >> 8) & 0xFF, b1 := chatColor & 0xFF
     r2 := 0xF4, g2 := 0xF5, b2 := 0xF8
     diff := Sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2)
     if (diff < 12) {
         MouseGetPos(&cx, &cy)
-        MouseMove(pX + 80, pY + 35, 2)
+        MouseMove(pX + 140, pY + 35, 2)
         Sleep(100)
         Click()
         Sleep(100)

@@ -1,4 +1,8 @@
-# Ultimate Macro 1.4.1
+# Ultimate Macro 1.4.1.3
+
+Chat-close hotfix: **Automatically close Roblox chat** is visible in Settings
+and on by default. Chat detection/clicks use the supplied 1.3.3.10 position.
+See [the hotfix changelog](CHANGELOG-1.4.1.3.md).
 
 The supplied modified **1.3.3.10 gameplay engine** with the Ultimate Macro
 1.4 interface, optional UltBot/dashboard connections, and verified ZIP updates.
