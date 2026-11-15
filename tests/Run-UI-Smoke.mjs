@@ -113,6 +113,18 @@ QaUiTest() {
     try {
         if !MW.gui || !MW.ready
             throw Error("Hidden UI did not finish constructing")
+        if MW.mapScrollLabel.text != "Map-list scroll steps"
+            || !InStr(MW.mapScrollHelp.text, "This does not limit matches.")
+            || !InStr(MW.repeatHelp.text, "No fixed match-count limit.")
+            throw Error("Run options still imply a match-count field")
+        ScrollDownAmountCtrl.Text := "99"
+        OnScrollDownAmountChange()
+        if ScrollDownAmount != 20 || IniRead(SettingsFile, "Options", "ScrollDownAmount", -1) != 20
+            throw Error("Original bounded map-scroll preference did not persist")
+        ScrollDownAmountCtrl.Text := "7"
+        OnScrollDownAmountChange()
+        if ScrollDownAmount != 7 || IniRead(SettingsFile, "Options", "ScrollDownAmount", -1) != 7
+            throw Error("Valid map-scroll preference did not persist")
         for size in [[1100, 800], [720, 540], [1366, 768], [900, 680]] {
             MW.OnSize(0, size[1], size[2])
             Sleep(75)

@@ -1,4 +1,9 @@
-# Ultimate Macro 1.4.1.3
+# Ultimate Macro 1.4.1.4
+
+The 5–20 value under Run options is **map-list scroll steps**, not a match
+limit. There is no fixed 20-match cap. The interface now explains the field;
+the existing gameplay and replay logic are unchanged. See
+[the clarification changelog](CHANGELOG-1.4.1.4.md).
 
 Chat-close hotfix: **Automatically close Roblox chat** is visible in Settings
 and on by default. Chat detection/clicks use the supplied 1.3.3.10 position.

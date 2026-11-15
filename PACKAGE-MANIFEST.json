@@ -1,6 +1,6 @@
 {
-  "version": "1.4.1.3",
-  "updateVersion": "1.4.1.3",
+  "version": "1.4.1.4",
+  "updateVersion": "1.4.1.4",
   "files": [
     {
       "path": ".gitignore",
@@ -91,6 +91,11 @@
       "path": "CHANGELOG-1.4.1.3.md",
       "bytes": 1170,
       "sha256": "520163a37ae8246d9df9260cdcbff1fe0188e6624a9865e0567837bc5abdc152"
+    },
+    {
+      "path": "CHANGELOG-1.4.1.4.md",
+      "bytes": 1031,
+      "sha256": "2cc6074137d801c7c268adc80311b303239ea6e2ff87b8edc9c15fe09f381cc6"
     },
     {
       "path": "CHANGELOG-1.4.1.md",
@@ -190,17 +195,17 @@
     {
       "path": "Main.ahk",
       "bytes": 335,
-      "sha256": "3cc392eb35ffc539efbbbf92c9b638c1c9e643746d472002835d76734be90e3a"
+      "sha256": "985c0aa5f2ec57fd1ea9efd0eb278d5702009818b86382df7eb72a1d54c3d05f"
     },
     {
       "path": "README.md",
-      "bytes": 8064,
-      "sha256": "c8bf6fdbd32a599bb431de3dbd853a44f1d8b3bd22666e5e8a1cda32738bdea6"
+      "bytes": 8330,
+      "sha256": "83a7377e6b974bf2713308f9c7b3ab1b73d832b5d294a6a7d140be3e890aa69b"
     },
     {
       "path": "RELEASE-NOTES.md",
-      "bytes": 7221,
-      "sha256": "635d0897a0ca6cc17ffb7bd52aa2a13f6024b296166820ed0565b3dbca09e5d8"
+      "bytes": 8135,
+      "sha256": "a8a410955c4fc37f7358b9110b92f7ff6333c7ea1e0fa26df0176c4d04b62cad"
     },
     {
       "path": "Resources/1.png",
@@ -794,8 +799,8 @@
     },
     {
       "path": "ui/LegacySkin.ahk",
-      "bytes": 39793,
-      "sha256": "6ff3ec688d7737752811dfe1e15d84469baa0a19ddce5566875d5f8d39511457"
+      "bytes": 40175,
+      "sha256": "741734f6176224592058b635b2c411d17a1b82d7b47e195a8017669b2cc0d8f3"
     },
     {
       "path": "ui/normal.wav",

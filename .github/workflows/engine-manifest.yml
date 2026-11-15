@@ -14,6 +14,7 @@ on:
       - "Main.ahk"
       - "PACKAGE-MANIFEST.json"
       - ".github/scripts/verify_package_manifest.py"
+      - ".github/scripts/test_verify_package_manifest.py"
       - ".github/workflows/engine-manifest.yml"
   push:
     branches: [main]
@@ -29,6 +30,7 @@ on:
       - "Main.ahk"
       - "PACKAGE-MANIFEST.json"
       - ".github/scripts/verify_package_manifest.py"
+      - ".github/scripts/test_verify_package_manifest.py"
       - ".github/workflows/engine-manifest.yml"
   workflow_dispatch:
 
@@ -46,5 +48,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+      - name: Check version and hash rejection regressions
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Check PACKAGE-MANIFEST.json
         run: python3 .github/scripts/verify_package_manifest.py

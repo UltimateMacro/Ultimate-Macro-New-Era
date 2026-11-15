@@ -1,4 +1,19 @@
-# Ultimate Macro 1.4.1.3
+# Ultimate Macro 1.4.1.4
+
+## Run-options clarification — build 1.4.1.4
+
+* The reported 20 is the original map-list wheel-scroll setting, not a match
+  count. Renamed the field to **Map-list scroll steps** and added an explicit
+  explanation that it does not limit matches.
+* Added a visible reminder that there is no fixed match-count limit and that
+  F2 or dashboard stop controls stop a run. Explicit stop/cooldown behavior stays.
+* Kept the gameplay engine, watchdog, recorder and dashboard modules unchanged
+  from 1.4.1.3. No scroll limit was raised and no repeat logic was rewritten.
+* Added an inert regression through more than 20 match-end/relaunch decisions
+  and retained the hidden-layout, recorder, shortcut and updater tests.
+* Fixed the release checker to compare the manifest with the actual launcher
+  versions instead of rejecting every version after 1.4.1.2. Mismatches and
+  changed file hashes still fail the check.
 
 ## Chat-close hotfix — build 1.4.1.3
 

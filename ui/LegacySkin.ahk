@@ -14,6 +14,7 @@ class Dialog {
 }
 
 class MW {
+    static repeatHelp := "", mapScrollLabel := "", mapScrollHelp := ""
     static gui := "", surface := "", layout := "", pages := [], page := 1
     static events := Map(), exposed := Map(), mirrors := [], sections := []
     static tabs := [], logo := 0, keyboardFocus := "", outputVisible := false
@@ -243,15 +244,17 @@ class MW {
         MW.Action(row, Tab1_Btn1)
         MW.Action(row, Tab1_Btn2)
         c := root.Add(Card("Run options"))
+        MW.repeatHelp := c.Add(Label("No fixed match-count limit. Use F2 or dashboard stop controls to stop a run.", "caption", true))
         MW.Toggle(c, AutoEquipCtrl)
         MW.Toggle(c, ScrollDownForMapCtrl)
         row := c.Add(HBox(, 8))
-        row.Add(Label("Scroll amount"), 1)
+        MW.mapScrollLabel := row.Add(Label("Map-list scroll steps"), 1)
         spin := MW.Spin(row, ScrollDownAmountUpDown, 5, 20)
         spin.fixedW := 84
         MW.Expose(ScrollDownAmountCtrl)
         spin.onChange := ObjBindMethod(MW, "Edit", ScrollDownAmountCtrl)
         spin.callback := ObjBindMethod(MW, "ScrollAmountArrow")
+        MW.mapScrollHelp := c.Add(Label("5–20 mouse-wheel steps when opening the map/mode list. This does not limit matches.", "caption", true))
         row := c.Add(HBox(, 8))
         row.Add(Label("Timescale"), 1)
         sel := row.Add(Select(["OFF", "1.5x", "2x"], TimeScaleModeCtrl.Value, ObjBindMethod(MW, "Choose", TimeScaleModeCtrl)))

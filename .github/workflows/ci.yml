@@ -22,6 +22,10 @@ jobs:
         run: node .github/scripts/validate_runtime.mjs
       - name: Check hidden layouts and pairing controls
         run: node tests/Run-UI-Smoke.mjs
+      - name: Check legacy chat-close behavior
+        run: node tests/Run-ChatClose-QA.mjs
+      - name: Check run-options labels and repeat decisions beyond twenty matches
+        run: node tests/Run-RunOptions-QA.mjs
       - name: Check recording shortcut regression
         run: node tests/Run-UI-Smoke.mjs --shortcuts
       - name: Check recorder round trip with mocked game input
