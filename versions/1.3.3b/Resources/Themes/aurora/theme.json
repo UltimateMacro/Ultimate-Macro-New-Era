@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "aurora",
+  "name": "Aurora",
+  "author": "Ultimate Macro",
+  "description": "Deep teal surfaces with calm green highlights.",
+  "category": "Professional",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "background": "091719",
+    "border": "2D494A",
+    "hover": "244144",
+    "accent": "8BD5AE",
+    "muted": "A9C4B9",
+    "secondary": "102124",
+    "error": "FF827F",
+    "surface": "172C2E",
+    "input": "102224",
+    "text": "EDF7F2",
+    "inputText": "ECF6F1",
+    "button": "193033",
+    "selected": "245044",
+    "chrome": "061113"
+  },
+  "wording": {},
+  "wallpapers": {
+    "global": {
+      "blur": 1,
+      "opacity": 0.52,
+      "asset": "aurora.png",
+      "dim": 0.42,
+      "fit": "cover"
+    }
+  }
+}

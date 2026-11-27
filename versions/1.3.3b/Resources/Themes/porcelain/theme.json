@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "porcelain",
+  "name": "Porcelain",
+  "author": "Ultimate Macro",
+  "description": "Soft neutral light surfaces with clear blue focus states.",
+  "category": "Professional",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "background": "F4F5F7",
+    "border": "C8D0DA",
+    "hover": "E7EDF4",
+    "accent": "2764B5",
+    "muted": "505E70",
+    "secondary": "E9ECF1",
+    "error": "B42330",
+    "surface": "FFFFFF",
+    "input": "FFFFFF",
+    "text": "182230",
+    "inputText": "182230",
+    "button": "FFFFFF",
+    "selected": "D7E5F8",
+    "chrome": "E5E9EF"
+  },
+  "wording": {},
+  "wallpapers": {}
+}

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "ultimate-bank",
+  "name": "Ultimate Bank",
+  "author": "Ultimate Macro",
+  "description": "A dark green and cream financial theme with gold details.",
+  "category": "Special",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "selected": "41462F",
+    "inputText": "F1F0E7",
+    "error": "FF817A",
+    "text": "F3F0E3",
+    "muted": "B9C1B5",
+    "hover": "2E4034",
+    "chrome": "0A100C",
+    "button": "223128",
+    "secondary": "17231B",
+    "background": "101713",
+    "surface": "202D24",
+    "accent": "D5B86D",
+    "input": "18241C",
+    "border": "405448"
+  },
+  "wording": {
+    "default": {
+      "farming.earnings": "Portfolio",
+      "tab.farming": "Operations"
+    }
+  },
+  "wallpapers": {},
+  "easterEgg": {
+    "message": "Your portfolio is up 0.00%. Probably.",
+    "clicks": 8
+  }
+}

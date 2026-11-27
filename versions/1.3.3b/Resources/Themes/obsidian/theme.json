@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "obsidian",
+  "name": "Obsidian",
+  "author": "Ultimate Macro",
+  "description": "Graphite surfaces with restrained warm gold accents.",
+  "category": "Professional",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "background": "141516",
+    "border": "3B3B38",
+    "hover": "303234",
+    "accent": "D7B66E",
+    "muted": "B5B1A6",
+    "secondary": "1B1D1F",
+    "error": "FF7C78",
+    "surface": "242628",
+    "input": "1C1E20",
+    "text": "F3F0E8",
+    "inputText": "F0EEE8",
+    "button": "252628",
+    "selected": "4A3B22",
+    "chrome": "101112"
+  },
+  "wording": {},
+  "wallpapers": {}
+}

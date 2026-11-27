@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "brainrot-edition",
+  "name": "Brainrot Edition",
+  "author": "Ultimate Macro",
+  "description": "A loud meme palette with readable controls.",
+  "category": "Meme",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "selected": "343B43",
+    "inputText": "F2F0FF",
+    "error": "FF7A8A",
+    "text": "F5F3FF",
+    "muted": "B8B4CA",
+    "hover": "34344C",
+    "chrome": "0A0A12",
+    "button": "24243A",
+    "secondary": "191927",
+    "background": "101018",
+    "surface": "232335",
+    "accent": "79E66B",
+    "input": "171722",
+    "border": "45455D"
+  },
+  "wording": {
+    "default": {
+      "tab.record": "Lore Recorder"
+    }
+  },
+  "wallpapers": {
+    "Tab2": {
+      "fit": "cover",
+      "opacity": 0.28,
+      "blur": 0,
+      "asset": "Bombardiro-Crocodillo.jpg",
+      "dim": 0.65
+    },
+    "Tab1": {
+      "fit": "contain",
+      "opacity": 0.32,
+      "blur": 0,
+      "asset": "Tung-Tung-Tung-Sahur.png",
+      "dim": 0.6
+    },
+    "Farming": {
+      "fit": "cover",
+      "opacity": 0.32,
+      "blur": 0,
+      "asset": "Brr-Brr-Patapim.jpg",
+      "dim": 0.6
+    },
+    "Tab7": {
+      "fit": "cover",
+      "opacity": 0.28,
+      "blur": 0,
+      "asset": "Ballerina-Cappuccina.png",
+      "dim": 0.65
+    }
+  },
+  "easterEgg": {
+    "message": "TUNG TUNG TUNG... the macro has achieved brainrot.",
+    "clicks": 6
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "windows-xp",
+  "name": "Windows XP",
+  "author": "Ultimate Macro",
+  "description": "Classic blue, cream, and gray desktop colors.",
+  "category": "Nostalgic",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "selected": "B7D2F2",
+    "inputText": "202020",
+    "error": "A32020",
+    "text": "1D1D1D",
+    "muted": "4C4C4C",
+    "hover": "D3E3F4",
+    "chrome": "245EDB",
+    "button": "E6E5DC",
+    "secondary": "DAD9D1",
+    "background": "E9E8DF",
+    "surface": "F3F2EB",
+    "accent": "1456C0",
+    "input": "FFFFFF",
+    "border": "808080"
+  },
+  "wording": {},
+  "wallpapers": {}
+}

@@ -1,0 +1,56 @@
+[Info]
+title=Dead Ahead Militant
+income=3,240 Coins/h at 1x · 6,480 Coins/h at 2x
+desc=Dead Ahead · Easy. Uses Militant. Earnings were reported with Timescale. Modifiers were not tested.
+
+[Settings]
+map=Dead Ahead
+difficulty=Easy
+requiredTowers=Militant
+modifiers=
+autoChain=OFF
+autoCaravan=OFF
+autoDropTheBeat=OFF
+autoSkip=OFF
+abilitySpam=OFF
+moveEnabled=0
+moveDirection=
+moveDuration=
+
+[DO NOT EDIT]
+width=1920
+height=1057
+
+[Steps]
+SpawnTower(820, 430, 1, Militant1)
+UpgradeTower(Militant1)
+SpawnTower(1080, 424, 1, Militant2)
+UpgradeTower(Militant2)
+SpawnTower(1054, 561, 1, Militant3)
+UpgradeTower(Militant3)
+SpawnTower(835, 528, 1, Militant4)
+UpgradeTower(Militant4)
+UpgradeTower(Militant4)
+UpgradeTower(Militant3)
+SpawnTower(806, 610, 1, Militant5)
+UpgradeTower(Militant5)
+SpawnTower(1103, 811, 1, Militant6)
+UpgradeTower(Militant6)
+SpawnTower(853, 814, 1, Militant7)
+UpgradeTower(Militant7)
+UpgradeTower(Militant1)
+UpgradeTower(Militant2)
+UpgradeTower(Militant5)
+UpgradeTower(Militant6)
+UpgradeTower(Militant7)
+UpgradeTower(Militant4)
+UpgradeTower(Militant3)
+UpgradeTower(Militant5)
+UpgradeTower(Militant1)
+UpgradeTower(Militant2)
+UpgradeTower(Militant6)
+UpgradeTower(Militant7)
+UpgradeTower(Militant3)
+UpgradeTower(Militant4)
+UpgradeTower(Militant5)
+UpgradeTower(Militant7)

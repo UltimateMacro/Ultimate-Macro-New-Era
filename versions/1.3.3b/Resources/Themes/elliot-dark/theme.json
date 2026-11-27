@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "elliot-dark",
+  "name": "Elliot Dark",
+  "author": "ElliotT",
+  "description": "Near-black Discord-inspired surfaces with a private Settings image easter egg.",
+  "category": "Community",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "background": "050608",
+    "secondary": "090B10",
+    "surface": "10131B",
+    "chrome": "020305",
+    "button": "121620",
+    "hover": "1D2433",
+    "border": "292F3D",
+    "accent": "5969E8",
+    "text": "F1F2F5",
+    "muted": "A0A6B4",
+    "input": "090B10",
+    "inputText": "ECEEF3",
+    "selected": "252D47",
+    "error": "FF7F87"
+  },
+  "wording": {},
+  "wallpapers": {
+    "Tab5": {
+      "blur": 0,
+      "opacity": 0.36,
+      "vertical": "bottom",
+      "fit": "contain",
+      "dim": 0.35,
+      "asset": "discord-mark.png",
+      "horizontal": "right"
+    }
+  },
+  "easterEgg": {
+    "openTab": "Tab5",
+    "message": "Elliot was here."
+  },
+  "requiredAssets": [
+    "Assets/discord-mark.png"
+  ]
+}

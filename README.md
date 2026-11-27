@@ -156,3 +156,7 @@ and contributors retain their original credits. The supplied legacy README
 is preserved unchanged in docs/LEGACY-README.md. Presentation/source licensing
 and the official AutoHotkey license are included. No personal credentials or
 release signing keys belong in this ZIP.
+
+## Archived source
+
+- [Ultimate Macro 1.3.3b source](versions/1.3.3b/)

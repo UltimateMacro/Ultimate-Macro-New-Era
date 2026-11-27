@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "midnight",
+  "name": "Midnight",
+  "author": "Ultimate Macro",
+  "description": "Deep navy surfaces with quiet blue accents.",
+  "category": "Professional",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "background": "0B111B",
+    "secondary": "111B29",
+    "surface": "172438",
+    "chrome": "070C13",
+    "button": "18263A",
+    "hover": "223650",
+    "border": "2B3A4F",
+    "accent": "76A9F5",
+    "text": "F0F4FA",
+    "muted": "A5B2C4",
+    "input": "101B29",
+    "inputText": "E8EFF8",
+    "selected": "263D5B",
+    "error": "FF737D"
+  },
+  "wording": {},
+  "wallpapers": {}
+}

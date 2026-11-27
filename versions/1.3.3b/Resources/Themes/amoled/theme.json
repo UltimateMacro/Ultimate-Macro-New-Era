@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "amoled",
+  "name": "AMOLED",
+  "author": "Ultimate Macro",
+  "description": "Pure black surfaces with quiet teal accents.",
+  "category": "Professional",
+  "themeVersion": "1.0.0",
+  "macroCompatibility": "1.3.3+",
+  "colors": {
+    "background": "000000",
+    "border": "303030",
+    "hover": "202020",
+    "accent": "72D9C6",
+    "muted": "A9A9A9",
+    "secondary": "080808",
+    "error": "FF7777",
+    "surface": "111111",
+    "input": "080808",
+    "text": "F5F5F5",
+    "inputText": "EEEEEE",
+    "button": "151515",
+    "selected": "17352F",
+    "chrome": "000000"
+  },
+  "wording": {},
+  "wallpapers": {}
+}

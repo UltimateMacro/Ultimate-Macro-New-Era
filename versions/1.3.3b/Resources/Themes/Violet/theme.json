@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "violet",
+  "name": "Violet Shift",
+  "author": "Ultimate Macro",
+  "colors": {
+    "background": "161224",
+    "secondary": "1C1730",
+    "chrome": "110E1B",
+    "surface": "25203A",
+    "button": "2E2546",
+    "accent": "CBB3FF",
+    "text": "FAF7FF",
+    "muted": "C3B9D1",
+    "border": "5F5278",
+    "hover": "362953",
+    "input": "211932",
+    "inputText": "FAF7FF",
+    "selected": "56407C",
+    "error": "FFADBA"
+  },
+  "wording": {
+    "default": { "tab.farming": "Grind Lab" },
+    "es-ES": { "tab.farming": "Cultivo" }
+  },
+  "easterEgg": { "clicks": 5, "message": "The grind continues." }
+}

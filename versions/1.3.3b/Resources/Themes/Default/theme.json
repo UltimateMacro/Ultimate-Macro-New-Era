@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "default",
+  "name": "Default",
+  "author": "Ultimate Macro",
+  "description": "Uses the application's original native control and GDI+ styles."
+}
