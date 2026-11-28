@@ -3,13 +3,13 @@ name: Locales
 on:
   pull_request:
     paths:
-      - "assets/locales/**"
+      - "Resources/Languages/**"
       - ".github/scripts/validate_locales.py"
       - ".github/workflows/locales.yml"
   push:
     branches: [main]
     paths:
-      - "assets/locales/**"
+      - "Resources/Languages/**"
       - ".github/scripts/validate_locales.py"
       - ".github/workflows/locales.yml"
   workflow_dispatch:
@@ -28,5 +28,5 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - name: Check assets/locales/*.json
+      - name: Check Resources/Languages/*.json
         run: python3 .github/scripts/validate_locales.py
