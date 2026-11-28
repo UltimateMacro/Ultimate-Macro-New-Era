@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ahk-validate:
+    name: AutoHotkey validation and hidden regressions
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Validate runtime and updater safety tests
+        run: node .github/scripts/validate_runtime.mjs
+      - name: Check hidden layouts and pairing controls
+        run: node tests/Run-UI-Smoke.mjs
+      - name: Check legacy chat-close behavior
+        run: node tests/Run-ChatClose-QA.mjs
+      - name: Check original two-strategy rotation with inert game ports
+        run: node tests/Run-UI-Smoke.mjs --rotation
+      - name: Check run-options labels and repeat decisions beyond twenty matches
+        run: node tests/Run-RunOptions-QA.mjs
+      - name: Check recording shortcut regression
+        run: node tests/Run-UI-Smoke.mjs --shortcuts
+      - name: Check recorder round trip with mocked game input
+        run: node tests/Run-UI-Smoke.mjs --recorder
+      - name: Check tray close/reopen and resize lifecycle
+        run: node tests/Run-UI-Smoke.mjs --resident
+      - name: Check bounded local health sampler
+        run: node tests/Run-Health-QA.mjs
