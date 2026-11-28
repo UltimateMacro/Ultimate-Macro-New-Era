@@ -48,7 +48,54 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - name: Check version and hash rejection regressions
+      - name: Check that broken packages are caught
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
-      - name: Check PACKAGE-MANIFEST.json
+      - name: Check every included, launched and referenced file exists
         run: python3 .github/scripts/verify_package_manifest.py
+      - name: Verify v1.3.3c source against published archive
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 81
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import io
+          from pathlib import PurePosixPath
+          import subprocess
+          import urllib.request
+          import zipfile
+          
+          url = "https://github.com/UltimateMacro/Ultimate-Macro-New-Era/releases/download/v1.3.3c/Ultimate-Macro-v1.3.3c.zip"
+          expected = "7ae95f65980285139119382cf7ba7a8df93641d15a244c689a812d984e710554"
+          with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent":"UM-release-verification"}), timeout=60) as response:
+              payload = response.read(60 * 1024 * 1024)
+          actual = hashlib.sha256(payload).hexdigest()
+          assert actual == expected, f"Official archive digest mismatch: {actual}"
+          print("Verified official ZIP SHA-256:", actual, flush=True)
+          roots = {"Main.ahk", "icon.ico", "lib", "Resources", "submacros"}
+          with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+              files = [item for item in archive.infolist() if not item.is_dir()]
+              parts = [PurePosixPath(item.filename).parts for item in files]
+              candidates = {p[:-1] for p in parts if p[-1:] == ("Main.ahk",)}
+              assert len(candidates) == 1, f"Expected exactly one Main.ahk root: {candidates}"
+              prefix = next(iter(candidates))
+              release = {}
+              extras = []
+              for item, p in zip(files, parts):
+                  if p[:len(prefix)] != prefix or len(p) <= len(prefix) or p[len(prefix)] not in roots:
+                      extras.append(item.filename)
+                      continue
+                  rel = "/".join(p[len(prefix):])
+                  assert ".." not in p and rel not in release, f"Unsafe/duplicate archive path: {rel}"
+                  release[rel] = hashlib.sha256(archive.read(item)).hexdigest()
+          tracked = subprocess.check_output(["git","ls-files","-z","--",*sorted(roots)]).decode().split("\0")
+          source = {p: hashlib.sha256(subprocess.check_output(["git","show","HEAD:"+p])).hexdigest() for p in tracked if p}
+          missing = sorted(release.keys() - source.keys())
+          extra = sorted(source.keys() - release.keys())
+          different = sorted(p for p in source.keys() & release.keys() if source[p] != release[p])
+          print(f"Runtime files: ZIP={len(release)}, Git={len(source)}, byte-identical={len(source.keys() & release.keys())-len(different)}", flush=True)
+          print("Non-runtime archive entries (not compared):", extras, flush=True)
+          print("Missing from Git:", missing, flush=True)
+          print("Extra in Git:", extra, flush=True)
+          print("Different contents:", different, flush=True)
+          assert not (missing or extra or different), "Source does not exactly match the published runtime files"
+          print("PASS: every runtime file, including executable and DLL bytes, matches the official ZIP", flush=True)
+          PY

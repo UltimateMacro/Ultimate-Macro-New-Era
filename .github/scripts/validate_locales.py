@@ -1,54 +1,81 @@
 #!/usr/bin/env python3
-"""Validate the community locale catalogs in assets/locales/*.json.
+"""Validate the language catalogs in Resources/Languages/*.json.
 
-Each catalog must be valid JSON shaped like:
-  {"schema": 1, "locale": "<file stem>", "nativeName": "...",
-   "translations": {"English phrase": "Translated phrase", ...}}
+TranslationTemplate.json lists every English string. Each locale file must be
+valid JSON shaped like:
+  {"Locale": "<file stem>", "Name": "...",
+   "Strings": {"English phrase": "Translated phrase", ...}}
+
+Empty values are allowed (the macro falls back to English). Keys missing from,
+or not in, the template are reported as warnings so translators can catch up.
 """
 import json
 import sys
 from pathlib import Path
 
-LOCALES = Path("assets/locales")
+LANGUAGES = Path("Resources/Languages")
+TEMPLATE = LANGUAGES / "TranslationTemplate.json"
 
 
-def check(path: Path) -> list[str]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError) as exc:
-        return [f"not valid JSON: {exc}"]
-    if not isinstance(data, dict):
-        return ["top level must be an object"]
+def load(path: Path):
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
-    problems = []
-    if data.get("schema") != 1:
-        problems.append("'schema' must be 1")
-    if data.get("locale") != path.stem:
-        problems.append(f"'locale' must be '{path.stem}' (found {data.get('locale')!r})")
-    if not isinstance(data.get("nativeName"), str) or not data["nativeName"].strip():
-        problems.append("'nativeName' must be a non-empty string")
-    translations = data.get("translations")
-    if not isinstance(translations, dict) or not translations:
-        problems.append("'translations' must be a non-empty object")
-    else:
-        for key, value in translations.items():
-            if not isinstance(value, str):
-                problems.append(f"translation for {key!r} must be a string")
-    return problems
+
+def strings_problems(strings) -> list[str]:
+    if not isinstance(strings, dict) or not strings:
+        return ["'Strings' must be a non-empty object"]
+    return [f"value for {key!r} must be a string" for key, value in strings.items() if not isinstance(value, str)]
 
 
 def main() -> int:
-    paths = sorted(LOCALES.glob("*.json"))
+    try:
+        template = load(TEMPLATE)
+    except (OSError, ValueError) as exc:
+        print(f"::error file={TEMPLATE}::cannot read template: {exc}")
+        return 1
+    problems = strings_problems(template.get("Strings") if isinstance(template, dict) else None)
+    for problem in problems:
+        print(f"::error file={TEMPLATE}::{problem}")
+    if problems:
+        return 1
+    keys = set(template["Strings"])
+
+    paths = sorted(p for p in LANGUAGES.glob("*.json") if p != TEMPLATE)
     if not paths:
-        print(f"::error::no locale files found in {LOCALES}")
+        print(f"::error::no locale files found in {LANGUAGES}")
         return 1
 
     failed = 0
     for path in paths:
-        problems = check(path)
+        try:
+            data = load(path)
+        except (OSError, ValueError) as exc:
+            print(f"::error file={path}::not valid JSON: {exc}")
+            failed += 1
+            continue
+        if not isinstance(data, dict):
+            print(f"::error file={path}::top level must be an object")
+            failed += 1
+            continue
+
+        problems = []
+        if data.get("Locale") != path.stem:
+            problems.append(f"'Locale' must be '{path.stem}' (found {data.get('Locale')!r})")
+        if not isinstance(data.get("Name"), str) or not data["Name"].strip():
+            problems.append("'Name' must be a non-empty string")
+        problems += strings_problems(data.get("Strings"))
         for problem in problems:
             print(f"::error file={path}::{problem}")
         failed += bool(problems)
+
+        if not problems:
+            have = set(data["Strings"])
+            missing, extra = len(keys - have), len(have - keys)
+            if missing:
+                print(f"::warning file={path}::{missing} template string(s) missing (shown in English)")
+            if extra:
+                print(f"::warning file={path}::{extra} string(s) not in TranslationTemplate.json")
+
     if failed:
         print(f"{failed} of {len(paths)} locale file(s) failed validation")
         return 1
