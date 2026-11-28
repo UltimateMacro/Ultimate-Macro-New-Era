@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - name: Check version and hash rejection regressions
+      - name: Check that broken packages are caught
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
-      - name: Check PACKAGE-MANIFEST.json
+      - name: Check every included, launched and referenced file exists
         run: python3 .github/scripts/verify_package_manifest.py
