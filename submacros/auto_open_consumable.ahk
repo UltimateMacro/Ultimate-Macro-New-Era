@@ -1,10 +1,15 @@
 ﻿#Requires AutoHotkey v2.0
 #SingleInstance Force
 
+#Include %A_LineFile%/../../lib/JSON.ahk
+#Include %A_LineFile%/../../lib/Localization.ahk
 #Include %A_LineFile%/../../lib/Roblox.ahk
 #Include %A_LineFile%/../../lib/ImageSearch/ImageSearch.ahk
 
-SetWorkingDir(A_ScriptDir "\..")
+SetWorkingDir("%A_LineFile%/../../")
+
+global SettingsFile := A_AppData "\Ultimate_Macro\Options\Settings.tds"
+LocalizationInit(SettingsFile, A_ScriptDir "\..\Resources\Languages")
 
 global unfocusX := 150, unfocusY := 200
 global isRunning := false
@@ -15,7 +20,7 @@ global aGui := Gui("+LastFound +Border +ToolWindow +AlwaysOnTop")
 aGui.SetFont("s9")
 global text := aGui.Add("Text", "x10 y10 w180 h50 BackgroundTrans", "The tool for auto opening consumable crates.")
 
-global usedtickets_text := aGui.Add("Text", "x10 y50 w180 BackgroundTrans", "Total opened consumable crates: " usedt)
+global usedtickets_text := aGui.Add("Text", "x10 y50 w180 BackgroundTrans", TF("Total opened consumable crates: {count}", Map("count", usedt)))
 
 aGui.SetFont("s11")
 global Start_Btn := aGui.Add("Button", "x10 y75 w85 h25", "Start (F3)")
@@ -24,6 +29,7 @@ global Stop_Btn := aGui.Add("Button", "x105 y75 w85 h25", "Stop (F4)")
 Start_Btn.OnEvent("Click", (*) => StartMacro())
 Stop_Btn.OnEvent("Click", (*) => StopMacro())
 
+LocalizationApplyGui(aGui)
 aGui.Show("w200 h110")
 aGui.OnEvent("Close", (*) => ExitApp())
 
@@ -105,7 +111,7 @@ SpinWheel() {
     }
 
     usedt++
-    usedtickets_text.Value := "Total opened consumable crates: " usedt
+    usedtickets_text.Value := TF("Total opened consumable crates: {count}", Map("count", usedt))
     usedtickets_text.Redraw()
 
     getRobloxPos(,,&w,&h)

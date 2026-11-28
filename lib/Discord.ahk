@@ -1,4 +1,4 @@
-/********************************************
+﻿/********************************************
 * @Author SP
 * @Description Class to interact with Discord
 *********************************************/
@@ -72,7 +72,7 @@ class Discord
 
 	static SendMessageAPI(postdata, contentType:="application/json", channel:="", url:="")
 	{
-		global BotToken := "", ChannelID := ""
+		global BotToken, ChannelID
 
 		if (!channel && ChannelID)
 			channel := ChannelID
@@ -88,32 +88,10 @@ class Discord
 			wr.SetRequestHeader("User-Agent", "DiscordBot (AHK, " A_AhkVersion ")")
 			wr.SetRequestHeader("Authorization", "Bot " BotToken)
 			wr.SetRequestHeader("Content-Type", contentType)
-			wr.SetTimeouts(0, 60000, 120000, 30000)
+			wr.SetTimeouts(3000, 4000, 8000, 8000)
 			wr.Send(postdata)
 			wr.WaitForResponse()
 			return wr.ResponseText
-		}
-	}
-
-	static GetCommands(channel)
-	{
-		global UserID := "", command_buffer := []
-		messages := this.GetRecentMessages(channel)
-		
-		for msg in messages {
-			if (msg["author"]["id"] != UserID) 
-				continue
-
-			content := Trim(msg["content"])
-			if (SubStr(content, 1, 1) != "!")
-				continue
-				
-			command_buffer.Push({
-				content: content,
-				id: msg["id"],
-				url: msg["attachments"].Has(1) ? msg["attachments"][1]["url"] : "",
-				user_id: msg["author"]["id"]
-			})
 		}
 	}
 
@@ -143,24 +121,12 @@ class Discord
 		return wr.ResponseText
 	}
 
-	static GetRecentMessages(channel)
-	{
-		static lastmsg := Map()
-
-		try
-			(messages := JSON.parse(this.GetMessageAPI(lastmsg.Has(channel) ? ("?after=" lastmsg[channel]) : "?limit=1", channel))).Length
-		catch
-			return []
-
-		if (messages.Has(1))
-			lastmsg[channel] := messages[1]["id"]
-
-		return messages
-	}
-
 	static GetMessageAPI(params:="", channel:="")
 	{
 		global BotToken, ChannelID
+        static retryAt := 0
+        if A_TickCount < retryAt
+            return ""
 
 		if !channel
 			channel := ChannelID
@@ -173,8 +139,19 @@ class Discord
 			wr.SetRequestHeader("User-Agent", "DiscordBot (AHK, " A_AhkVersion ")")
 			wr.SetRequestHeader("Authorization", "Bot " BotToken)
 			wr.SetRequestHeader("Content-Type", "application/json")
-			wr.Send()
-			wr.WaitForResponse()
+			wr.SetTimeouts(2000, 2500, 3000, 3000)
+            wr.Send()
+			if !wr.WaitForResponse(4) {
+                wr.Abort()
+                return ""
+            }
+            if wr.Status = 429 {
+                retryAfter := 2
+                try retryAfter := Number(wr.GetResponseHeader("Retry-After"))
+                retryAt := A_TickCount + Max(1000, Ceil(retryAfter * 1000))
+            }
+            if wr.Status != 200
+                return ""
 			return wr.ResponseText
 		}
 	}
@@ -249,3 +226,5 @@ class Discord
 		contentType := "multipart/form-data; boundary=----------------------------" boundary
 	}
 }
+
+
